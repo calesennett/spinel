@@ -106,6 +106,13 @@ puts classify(10)
 puts classify(99)
 puts classify(100)
 
+# === Range#=== (case-when membership) ===
+puts (1..10) === 5      # true
+puts (1..10) === 1      # true
+puts (1..10) === 10     # true
+puts (1..10) === 0      # false
+puts (1..10) === 11     # false
+
 # === step without block param ===
 # `Integer#step` with a do-block that omits its parameter used a
 # synthesized `_i` index that wasn't declared. Two paramless `step`

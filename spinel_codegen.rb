@@ -3060,6 +3060,9 @@ class Compiler
     if mname == "cover?"
       return "bool"
     end
+    if mname == "==="
+      return "bool"
+    end
     if mname == "match?"
       return "bool"
     end
@@ -22438,7 +22441,9 @@ class Compiler
     # so they share the same emission. Exclude_end isn't tracked in the
     # runtime sp_Range struct; non-literal receivers fall back to the
     # inclusive form (matches length/size).
-    if mname == "include?" || mname == "cover?"
+    if mname == "include?" || mname == "cover?" || mname == "==="
+      # Range#=== is the case-when membership operator and behaves like
+      # cover? for numeric ranges (Ruby docs: "tests for membership").
       tmp = new_temp
       emit("  sp_Range " + tmp + " = " + rc + ";")
       arg = compile_arg0(nid)
