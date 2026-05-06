@@ -2221,6 +2221,21 @@ class Compiler
     if t == "RangeNode"
       return "range"
     end
+    if t == "RescueModifierNode"
+      # `expr rescue fallback` — unify the types of the two branches.
+      # The fallback always runs on error, so prefer its type when the
+      # main branch is a noreturn-shaped expression like a bare `raise`
+      # (whose compile_expr returns the int literal `0`).
+      t1 = infer_type(@nd_expression[nid])
+      t2 = infer_type(@nd_else_clause[nid])
+      if t1 == t2
+        return t1
+      end
+      if t2 != "void" && t2 != "nil"
+        return t2
+      end
+      return t1
+    end
     if t == "LocalVariableReadNode"
       vt = find_var_type(@nd_name[nid])
       if vt != ""
@@ -20212,7 +20227,7 @@ class Compiler
     if t == "RescueModifierNode"
       @needs_setjmp = 1
       tmp = new_temp
-      rt = infer_type(@nd_else_clause[nid])
+      rt = infer_type(nid)
       emit("  " + c_type(rt) + " " + tmp + " = " + c_default_val(rt) + ";")
       emit("  sp_exc_top++;")
       emit("  if (setjmp(sp_exc_stack[sp_exc_top-1]) == 0) {")
