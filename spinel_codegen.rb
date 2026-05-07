@@ -4052,6 +4052,19 @@ class Compiler
         if rt == "float_array"
           return "float"
         end
+        # `<X>_ptr_array.first` / `.last` returns an `<X>` (e.g.
+        # `int_array_ptr_array.first` → `int_array`). Without this,
+        # downstream typed-array consumers (notably the slice-assign
+        # `arr[i, n] = banks.first` path in compile_bracket_assign,
+        # which needs `infer_type(arg_ids[2]) == "int_array"` to fire)
+        # see "int" and silently fall through to element-assign,
+        # silently lowering `arr[i, n] = src` to `arr[i] = n`.
+        if is_ptr_array_type(rt) == 1
+          return ptr_array_elem_type(rt)
+        end
+        if rt == "poly_array"
+          return "poly"
+        end
       end
       return "int"
     end
@@ -25830,6 +25843,12 @@ class Compiler
       end
       if mname == "[]"
         return "((" + ct + ")sp_PtrArray_get(" + rc + ", " + compile_arg0_as_int(nid) + "))"
+      end
+      if mname == "first"
+        return "((" + ct + ")sp_PtrArray_get(" + rc + ", 0))"
+      end
+      if mname == "last"
+        return "((" + ct + ")sp_PtrArray_get(" + rc + ", sp_PtrArray_length(" + rc + ") - 1))"
       end
       if mname == "push"
         return "(sp_PtrArray_push(" + rc + ", " + compile_arg0(nid) + "), 0)"
