@@ -2288,6 +2288,9 @@ class Compiler
       return infer_array_elem_type(nid)
     end
     if t == "HashNode"
+      if is_int_array_lowered_hash(nid) == 1
+        return infer_int_keyed_hash_as_array_type(nid)
+      end
       return infer_hash_val_type(nid)
     end
     if t == "RangeNode"
@@ -2576,7 +2579,14 @@ class Compiler
   end
 
   def infer_array_elem_type(nid)
-    elems = parse_id_list(@nd_elements[nid])
+    infer_array_elem_type_from_ids(parse_id_list(@nd_elements[nid]))
+  end
+
+  # Body of infer_array_elem_type, parameterised on the list of value
+  # node ids. Lets a {0=>v0,1=>v1,...} HashNode lowered to an Array
+  # share the same type-inference logic by feeding in [v0, v1, ...]
+  # without needing an actual ArrayNode to host them.
+  def infer_array_elem_type_from_ids(elems)
     if elems.length > 0
       et = infer_type(elems[0])
       if et == "symbol"
@@ -2678,6 +2688,53 @@ class Compiler
       end
     end
     "int_array"
+  end
+
+  # Detects a Hash literal whose keys are the consecutive non-negative
+  # integers 0, 1, ..., N-1 in source order. Such a literal is
+  # semantically equivalent to the Array `[v0, v1, ..., vN-1]` for the
+  # common `H[k]` lookup pattern, so we lower it to an Array
+  # internally — no `int_<X>_hash` runtime type needed. Detection is
+  # AST-shape only (IntegerNode key with literal value `k` at index
+  # `k`); any deviation (gap, duplicate, non-integer key, splat) opts
+  # back into the regular hash codegen.
+  def is_int_array_lowered_hash(nid)
+    if @nd_type[nid] != "HashNode"
+      return 0
+    end
+    elems = parse_id_list(@nd_elements[nid])
+    if elems.length == 0
+      return 0
+    end
+    k = 0
+    while k < elems.length
+      eid = elems[k]
+      if @nd_type[eid] != "AssocNode"
+        return 0
+      end
+      kid = @nd_key[eid]
+      if kid < 0 || @nd_type[kid] != "IntegerNode"
+        return 0
+      end
+      if @nd_value[kid].to_i != k
+        return 0
+      end
+      k = k + 1
+    end
+    1
+  end
+
+  # Returns the array type the lowered HashNode evaluates to. Same
+  # logic as infer_array_elem_type but reads each AssocNode's value.
+  def infer_int_keyed_hash_as_array_type(nid)
+    elems = parse_id_list(@nd_elements[nid])
+    vids = []
+    k = 0
+    while k < elems.length
+      vids.push(@nd_expression[elems[k]])
+      k = k + 1
+    end
+    infer_array_elem_type_from_ids(vids)
   end
 
   def infer_hash_val_type(nid)
@@ -8128,6 +8185,9 @@ class Compiler
       return infer_array_elem_type(nid)
     end
     if t == "HashNode"
+      if is_int_array_lowered_hash(nid) == 1
+        return infer_int_keyed_hash_as_array_type(nid)
+      end
       return infer_hash_val_type(nid)
     end
     if t == "CallNode"
@@ -13325,21 +13385,37 @@ class Compiler
       @needs_gc = 1
     end
     if t == "HashNode"
-      ht = infer_hash_val_type(nid)
-      if ht == "str_str_hash"
-        @needs_str_str_hash = 1
-      elsif ht == "int_str_hash"
-        @needs_int_str_hash = 1
-        @needs_int_array = 1
-      elsif ht == "sym_int_hash"
-        @needs_sym_int_hash = 1
-      elsif ht == "sym_str_hash"
-        @needs_sym_str_hash = 1
+      if is_int_array_lowered_hash(nid) == 1
+        # Lowered to Array — same @needs_* flag set as the
+        # ArrayNode arm above derives from `infer_array_elem_type`.
+        et = infer_int_keyed_hash_as_array_type(nid)
+        if et == "str_array"
+          @needs_str_array = 1
+        elsif et == "poly_array"
+          @needs_rb_value = 1
+        elsif et == "float_array"
+          @needs_float_array = 1
+        else
+          @needs_int_array = 1
+        end
+        @needs_gc = 1
       else
-        @needs_str_int_hash = 1
+        ht = infer_hash_val_type(nid)
+        if ht == "str_str_hash"
+          @needs_str_str_hash = 1
+        elsif ht == "int_str_hash"
+          @needs_int_str_hash = 1
+          @needs_int_array = 1
+        elsif ht == "sym_int_hash"
+          @needs_sym_int_hash = 1
+        elsif ht == "sym_str_hash"
+          @needs_sym_str_hash = 1
+        else
+          @needs_str_int_hash = 1
+        end
+        @needs_gc = 1
+        @needs_str_array = 1
       end
-      @needs_gc = 1
-      @needs_str_array = 1
     end
 
     if t == "GlobalVariableWriteNode"
@@ -28629,7 +28705,16 @@ class Compiler
       @needs_int_array = 1
       return "sp_IntArray_new()"
     end
-    arr_type = infer_array_elem_type(nid)
+    compile_array_literal_from_ids(elems, infer_array_elem_type(nid))
+  end
+
+  # Body of compile_array_literal, parameterised on the list of value
+  # node ids and the resolved array element type. Lets a HashNode
+  # whose keys are 0..N-1 (lowered to Array) reuse the same emission
+  # paths by feeding in the AssocNode rhs ids without needing an
+  # ArrayNode wrapper.
+  def compile_array_literal_from_ids(elems, arr_type)
+    @needs_gc = 1
     if is_tuple_type(arr_type) == 1
       name = tuple_c_name(arr_type)
       tmp = new_temp
@@ -28764,8 +28849,26 @@ class Compiler
     tmp
   end
 
+  # HashNode literal whose keys are 0..N-1 lowered to an Array
+  # literal. Reuses compile_array_literal_from_ids by mapping each
+  # AssocNode to its rhs value id.
+  def compile_int_keyed_hash_as_array(nid)
+    @needs_gc = 1
+    elems = parse_id_list(@nd_elements[nid])
+    vids = []
+    k = 0
+    while k < elems.length
+      vids.push(@nd_expression[elems[k]])
+      k = k + 1
+    end
+    compile_array_literal_from_ids(vids, infer_array_elem_type_from_ids(vids))
+  end
+
   def compile_hash_literal(nid)
     @needs_gc = 1
+    if is_int_array_lowered_hash(nid) == 1
+      return compile_int_keyed_hash_as_array(nid)
+    end
     elems = parse_id_list(@nd_elements[nid])
     if elems.length == 0
       @needs_str_int_hash = 1
