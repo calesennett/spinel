@@ -16685,6 +16685,16 @@ class Compiler
     i = 0
     while i < @cls_names.length
       cname = @cls_names[i]
+      # Issue #314 follow-up: pin @current_class_idx during this
+      # forward-decl emit pass so block_params_csig_for_body's
+      # infer_type calls (on `@ivar` reads inside yield arg
+      # expressions) resolve against this class's ivar table.
+      # Without this, ivars infer to int default and yields like
+      # `yield k, @data[k]` lower to `(mrb_int, mrb_int)` while
+      # the impl emit (which DOES set @current_class_idx) lowers
+      # to `(string, sp_RbVal)` — declaration/definition mismatch.
+      saved_ci_decl = @current_class_idx
+      @current_class_idx = i
       # Constructor
       init_idx = cls_find_method_direct(i, "initialize")
       if @cls_is_value_type[i] == 1
@@ -16743,6 +16753,7 @@ class Compiler
           j = j + 1
         end
       end
+      @current_class_idx = saved_ci_decl
       i = i + 1
     end
     # Hoisted instance_eval block functions: emit prototypes here. v1
@@ -16766,7 +16777,8 @@ class Compiler
   end
 
   def yield_params_suffix(mi)
-    csig = block_params_csig(method_yield_arity(mi))
+    bid = mi >= 0 && mi < @meth_body_ids.length ? @meth_body_ids[mi] : -1
+    csig = block_params_csig_for_body(bid, method_yield_arity(mi))
     pd = method_params_decl(mi)
     if pd == ""
       return "void (*_block)(" + csig + ", void*), void *_benv"
@@ -16776,8 +16788,105 @@ class Compiler
 
   def yield_params_suffix_cls(ci, midx)
     # For class instance methods (always have self first)
-    csig = block_params_csig(cls_method_yield_arity(ci, midx))
+    bid = -1
+    if ci >= 0 && ci < @cls_meth_bodies.length
+      bodies = @cls_meth_bodies[ci].split(";")
+      if midx >= 0 && midx < bodies.length
+        bid = bodies[midx].to_i
+      end
+    end
+    csig = block_params_csig_for_body(bid, cls_method_yield_arity(ci, midx))
     return ", void (*_block)(" + csig + ", void*), void *_benv"
+  end
+
+  # Issue #314 follow-up: build the block fn-pointer C signature
+  # from the yield call sites' inferred arg types. Without this,
+  # block_params_csig emitted `mrb_int, mrb_int, ...` regardless,
+  # so a method that yields (String, sp_RbVal) had the function-
+  # pointer declared `void(*)(mrb_int, mrb_int, void*)` while the
+  # actual yield invocation site emitted `_block(const_char*,
+  # sp_RbVal, _benv)` — gcc errored with `incompatible type for
+  # argument`.
+  #
+  # Called BEFORE the function's scope has been pushed, so
+  # locally-declared vars referenced in yield args (`yield k, v`
+  # where `k`, `v` were assigned from typed expressions) are not
+  # in @scope_names. Run scan_locals on the body and push a
+  # temporary scope so body_yield_arg_types' infer_type calls
+  # resolve those reads. (Re-runs both at forward-decl emit time
+  # and at impl emit time; results converge once @meth_*/@cls_*
+  # tables stabilize through the type-inference fixpoint.)
+  def block_params_csig_for_body(bid, arity)
+    if bid < 0 || arity <= 0
+      return block_params_csig(arity)
+    end
+    types = "".split(",")
+    k = 0
+    while k < arity
+      types.push("")
+      k = k + 1
+    end
+    push_scope
+    lnames = "".split(",")
+    ltypes = "".split(",")
+    scan_locals(bid, lnames, ltypes, "".split(","))
+    j = 0
+    while j < lnames.length
+      declare_var(lnames[j], ltypes[j])
+      j = j + 1
+    end
+    body_yield_arg_types(bid, types)
+    pop_scope
+    parts = "".split(",")
+    k = 0
+    while k < arity
+      t = types[k]
+      if t == "" || t == "int"
+        parts.push("mrb_int")
+      else
+        parts.push(c_type(t))
+      end
+      k = k + 1
+    end
+    parts.join(", ")
+  end
+
+  # Walk `nid` for YieldNode, accumulating the per-position arg
+  # type into `types`. Stops at nested DefNode boundaries (those
+  # introduce a new method scope with its own yield arity).
+  # Mirrors body_max_yield_arity's traversal shape.
+  def body_yield_arg_types(nid, types)
+    if nid < 0
+      return
+    end
+    if @nd_type[nid] == "YieldNode"
+      if @nd_arguments[nid] >= 0
+        args = get_args(@nd_arguments[nid])
+        k = 0
+        while k < args.length
+          if k < types.length
+            at = infer_type(args[k])
+            if types[k] == ""
+              types[k] = at
+            elsif types[k] != at
+              types[k] = unify_call_types(types[k], at, args[k])
+            end
+          end
+          k = k + 1
+        end
+      end
+      return
+    end
+    if @nd_type[nid] == "DefNode"
+      return
+    end
+    cs = []
+    push_child_ids(nid, cs)
+    k = 0
+    while k < cs.length
+      body_yield_arg_types(cs[k], types)
+      k = k + 1
+    end
   end
 
   def cls_method_has_yield(ci, midx)
