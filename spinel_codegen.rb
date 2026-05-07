@@ -30568,6 +30568,28 @@ class Compiler
 
   def compile_if_stmt(nid)
     cond = compile_cond_expr(@nd_predicate[nid])
+    # Static-false fold: a predicate whose static type is `nil`
+    # (e.g. an attr_reader for an ivar only ever assigned `nil`)
+    # collapses to `if (FALSE) { … }`. The body is unreachable, but
+    # its statements still pass through the C compiler — and they
+    # often type-error against ivars/methods whose shapes only make
+    # sense when the predicate is true. Drop the body entirely; emit
+    # the else branch (if any) at the surrounding scope.
+    if cond == "FALSE"
+      sub_sf = @nd_subsequent[nid]
+      if sub_sf >= 0
+        if @nd_type[sub_sf] == "ElseNode"
+          compile_stmts_body(@nd_body[sub_sf])
+        else
+          compile_if_stmt(sub_sf)
+        end
+      end
+      return
+    end
+    if cond == "TRUE"
+      compile_stmts_body(@nd_body[nid])
+      return
+    end
     emit("  if (" + cond + ") {")
     @indent = @indent + 1
     compile_stmts_body(@nd_body[nid])
@@ -30602,6 +30624,20 @@ class Compiler
 
   def compile_unless_stmt(nid)
     cond = compile_cond_expr(@nd_predicate[nid])
+    # Symmetric to compile_if_stmt's static-fold: an `unless` whose
+    # predicate is statically TRUE drops its body, FALSE drops the
+    # else branch.
+    if cond == "TRUE"
+      ec_sf = @nd_else_clause[nid]
+      if ec_sf >= 0
+        compile_stmts_body(@nd_body[ec_sf])
+      end
+      return
+    end
+    if cond == "FALSE"
+      compile_stmts_body(@nd_body[nid])
+      return
+    end
     emit("  if (!(" + cond + ")) {")
     @indent = @indent + 1
     compile_stmts_body(@nd_body[nid])
