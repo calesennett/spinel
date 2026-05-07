@@ -2328,6 +2328,24 @@ class Compiler
       end
       return infer_type(@nd_expression[nid])
     end
+    if t == "IndexOrWriteNode" || t == "IndexAndWriteNode" || t == "IndexOperatorWriteNode"
+      # `recv[k] ||= v` (etc.) as an expression value. The result type
+      # is the recv's element type — same shape as Hash#[] / Array#[]
+      # — so callers like LocalVariableWriteNode can pick the right
+      # local slot type via the same lookup that `recv[k]` would use.
+      iow_recv_t = @nd_receiver[nid]
+      if iow_recv_t >= 0
+        rt_iow_t = infer_type(iow_recv_t)
+        leaf_iow = hash_leaf_type(rt_iow_t)
+        if leaf_iow != ""
+          return leaf_iow
+        end
+        if rt_iow_t == "int_array" || rt_iow_t == "float_array" || rt_iow_t == "str_array" || rt_iow_t == "sym_array"
+          return elem_type_of_array(rt_iow_t)
+        end
+      end
+      return "int"
+    end
     if t == "GlobalVariableReadNode"
       # `alias $copy $orig` -- a $copy read must look up $orig's
       # registered type so the C codegen sees the correct format
@@ -4309,6 +4327,9 @@ class Compiler
         if rt == "str_poly_hash"
           return "poly"
         end
+        if rt == "poly_poly_hash"
+          return "poly"
+        end
         if rt == "argv"
           return "string"
         end
@@ -5055,6 +5076,9 @@ class Compiler
     if t == "sym_poly_hash"
       return 1
     end
+    if t == "poly_poly_hash"
+      return 1
+    end
     if t == "sym_array"
       return 1
     end
@@ -5346,6 +5370,9 @@ class Compiler
     end
     if t == "sym_poly_hash"
       return "sp_SymPolyHash *"
+    end
+    if t == "poly_poly_hash"
+      return "sp_PolyPolyHash *"
     end
     if t == "sym_array"
       # sym_array is an IntArray internally (sp_sym = mrb_int)
@@ -5678,6 +5705,9 @@ class Compiler
     if t == "str_poly_hash" || t == "sym_poly_hash"
       return 1
     end
+    if t == "poly_poly_hash"
+      return 1
+    end
     0
   end
 
@@ -5703,6 +5733,9 @@ class Compiler
     if at == "sym_poly_hash"
       return "SP_BUILTIN_SYM_POLY_HASH"
     end
+    if at == "poly_poly_hash"
+      return "SP_BUILTIN_POLY_POLY_HASH"
+    end
     ""
   end
 
@@ -5713,7 +5746,7 @@ class Compiler
     if recv_type == "str_str_hash" || recv_type == "sym_str_hash" || recv_type == "int_str_hash"
       return "string"
     end
-    if recv_type == "str_poly_hash" || recv_type == "sym_poly_hash"
+    if recv_type == "str_poly_hash" || recv_type == "sym_poly_hash" || recv_type == "poly_poly_hash"
       return "poly"
     end
     ""
@@ -8627,6 +8660,9 @@ class Compiler
     elsif t == "str_poly_hash"
       @needs_str_poly_hash = 1
       @needs_rb_value = 1
+    elsif t == "poly_poly_hash"
+      @needs_poly_poly_hash = 1
+      @needs_rb_value = 1
     end
   end
 
@@ -8754,7 +8790,11 @@ class Compiler
     if str_keys
       return "str_poly_hash"
     end
-    ""
+    # Heterogeneous key types — fall back to poly_poly_hash so each
+    # entry carries its own tag and OBJ-tag eql? dispatches via the
+    # codegen-emitted class hooks (e.g. Method#eql? for the optcarrot
+    # `@peeks[peek] ||= peek` cache).
+    "poly_poly_hash"
   end
 
   def pick_array_class(val_t_set)
@@ -11286,6 +11326,13 @@ class Compiler
         return "int_str_hash"
       end
     end
+    # Non-string / non-symbol / non-int key types: Method, IntArray,
+    # generic obj_X, or already-poly. Use poly_poly_hash so the runtime
+    # uses sp_RbVal-keyed eql? dispatch (Method instances dedup via the
+    # codegen-emitted hash hook, identity for everything else).
+    if kt != ""
+      return "poly_poly_hash"
+    end
     ""
   end
 
@@ -11847,6 +11894,10 @@ class Compiler
                 if iow_promoted == "str_poly_hash" || iow_promoted == "sym_poly_hash"
                   @needs_rb_value = 1
                 end
+                if iow_promoted == "poly_poly_hash"
+                  @needs_poly_poly_hash = 1
+                  @needs_rb_value = 1
+                end
               end
             end
           elsif @nd_type[iow_recv] == "LocalVariableReadNode"
@@ -11857,6 +11908,10 @@ class Compiler
               if iow_promoted != "" && iow_promoted != iow_cur
                 set_var_type(iow_lname, iow_promoted)
                 if iow_promoted == "str_poly_hash" || iow_promoted == "sym_poly_hash"
+                  @needs_rb_value = 1
+                end
+                if iow_promoted == "poly_poly_hash"
+                  @needs_poly_poly_hash = 1
                   @needs_rb_value = 1
                 end
               end
@@ -11935,6 +11990,9 @@ class Compiler
                 elsif promoted == "str_poly_hash"
                   @needs_rb_value = 1
                 elsif promoted == "sym_poly_hash"
+                  @needs_rb_value = 1
+                elsif promoted == "poly_poly_hash"
+                  @needs_poly_poly_hash = 1
                   @needs_rb_value = 1
                 end
               end
@@ -14671,6 +14729,14 @@ class Compiler
     # them in source order; atexit invokes handlers LIFO, matching
     # CRuby's reverse-order END execution.
     emit_post_execution_funcs
+    # poly_poly_hash needs eql?-aware OBJ-tag dispatch. Emit a
+    # cls_id-keyed shim that knows about Method specifically (compares
+    # bound receiver + fn_ptr) and falls through to pointer identity
+    # for everything else. Other user classes follow CRuby's default
+    # `Object#eql?` (`equal?`), so identity is the right behavior;
+    # Method is the only class whose CRuby `#eql?` materially differs
+    # from `#equal?` and matters for the optcarrot @peeks/@pokes dedup.
+    emit_method_eql_dispatch
     # Emit lambda functions before main (they are generated during compilation)
     # We emit them in emit_main after forward declarations
     emit_main
@@ -17889,6 +17955,8 @@ class Compiler
                   iv_ctor = "sp_StrPolyHash_new()"
                 elsif ivt == "sym_poly_hash"
                   iv_ctor = "sp_SymPolyHash_new()"
+                elsif ivt == "poly_poly_hash"
+                  iv_ctor = "sp_PolyPolyHash_new()"
                 end
               end
               if iv_ctor == "" && is_empty_array_literal(expr_id_iv) == 1 && ivt != ""
@@ -19676,6 +19744,27 @@ class Compiler
   end
 
   # ---- Main emission ----
+  def emit_method_eql_dispatch
+    return unless @needs_poly_poly_hash == 1
+    return if find_class_idx("Method") < 0
+    method_cid = find_class_idx("Method").to_s
+    emit_raw("static mrb_int sp_method_obj_hash_dispatch(int cls_id, void *p) {")
+    emit_raw("  if (cls_id == " + method_cid + ") {")
+    emit_raw("    sp_Method *m = (sp_Method *)p;")
+    emit_raw("    return ((mrb_int)(uintptr_t)m->iv_self_obj * 31) ^ (mrb_int)m->iv_fn_ptr;")
+    emit_raw("  }")
+    emit_raw("  return (mrb_int)((uintptr_t)p);")
+    emit_raw("}")
+    emit_raw("static mrb_bool sp_method_obj_eql_dispatch(int cls_id, void *a, void *b) {")
+    emit_raw("  if (cls_id == " + method_cid + ") {")
+    emit_raw("    sp_Method *ma = (sp_Method *)a;")
+    emit_raw("    sp_Method *mb = (sp_Method *)b;")
+    emit_raw("    return ma->iv_self_obj == mb->iv_self_obj && ma->iv_fn_ptr == mb->iv_fn_ptr;")
+    emit_raw("  }")
+    emit_raw("  return FALSE;")
+    emit_raw("}")
+  end
+
   def emit_main
     stmts = get_body_stmts(@root_id)
     emit_raw("typedef struct{const char**data;mrb_int len;}sp_Argv;")
@@ -19688,6 +19777,15 @@ class Compiler
     end
     if @needs_regexp == 1
       emit_raw("  sp_re_init();")
+    end
+    # poly_poly_hash uses sp_obj_hash_hook / sp_obj_eql_hook for cls_id-
+    # aware OBJ-tag dispatch. The hooks default to identity; install
+    # the codegen-emitted Method-aware shim so equivalent
+    # `obj.method(:foo)` instances (fresh allocations, but same iv_self_obj
+    # + iv_fn_ptr) dedup as eql? in @cache[m] ||= m style use.
+    if @needs_poly_poly_hash == 1 && find_class_idx("Method") >= 0
+      emit_raw("  sp_obj_hash_hook = sp_method_obj_hash_dispatch;")
+      emit_raw("  sp_obj_eql_hook = sp_method_obj_eql_dispatch;")
     end
 
     @in_main = 1
@@ -19933,6 +20031,10 @@ class Compiler
           elsif ct_init == "str_poly_hash"
             val = "sp_StrPolyHash_new()"
             @needs_str_poly_hash = 1
+          elsif ct_init == "poly_poly_hash"
+            val = "sp_PolyPolyHash_new()"
+            @needs_poly_poly_hash = 1
+            @needs_rb_value = 1
           end
         elsif is_empty_array_literal(eid_init) == 1
           if ct_init == "float_array"
@@ -20362,6 +20464,26 @@ class Compiler
       vref = fiber_var_ref(@nd_name[nid])
       val = compile_expr(@nd_expression[nid])
       return "(" + vref + " = " + vref + " ? (" + val + ") : " + vref + ")"
+    end
+    if t == "IndexOrWriteNode"
+      # `recv[k] ||= v` used as an expression (`x = recv[k] ||= v`,
+      # method-body return, ternary arm, …). Lower the get-then-set
+      # into a stmt-level emit and return the temp holding the
+      # resulting value. Only the poly_poly_hash receiver shape needs
+      # this expression form so far — typed hashes were always lowered
+      # as stmts for backward compatibility, so falling through to the
+      # default catch-all is fine for them.
+      recv_iow = @nd_receiver[nid]
+      args_iow = @nd_arguments[nid]
+      if recv_iow >= 0 && args_iow >= 0
+        rt_iow = infer_type(recv_iow)
+        if rt_iow == "poly_poly_hash"
+          rc_iow = compile_expr_gc_rooted(recv_iow)
+          arg_ids_iow = get_args(args_iow)
+          tg = compile_poly_poly_index_or_assign_to_temp(nid, rc_iow, arg_ids_iow)
+          return tg
+        end
+      end
     end
     if t == "ConstantReadNode"
       if @nd_name[nid] == "ARGV"
@@ -25454,6 +25576,36 @@ class Compiler
         return "sp_StrPolyHash_values(" + rc + ")"
       end
     end
+    if recv_type == "poly_poly_hash"
+      args_id_ph = @nd_arguments[nid]
+      if mname == "[]" && args_id_ph >= 0
+        a0 = get_args(args_id_ph)[0]
+        return "sp_PolyPolyHash_get(" + rc + ", " + box_expr_to_poly(a0) + ")"
+      end
+      if (mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?") && args_id_ph >= 0
+        a0 = get_args(args_id_ph)[0]
+        return "sp_PolyPolyHash_has_key(" + rc + ", " + box_expr_to_poly(a0) + ")"
+      end
+      if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
+        return "sp_PolyPolyHash_length(" + rc + ")"
+      end
+      if mname == "empty?"
+        return "(sp_PolyPolyHash_length(" + rc + ") == 0)"
+      end
+      if mname == "any?" && @nd_block[nid] < 0
+        return "(sp_PolyPolyHash_length(" + rc + ") > 0)"
+      end
+      if mname == "keys"
+        @needs_poly_array = 1
+        @needs_rb_value = 1
+        return "sp_PolyPolyHash_keys(" + rc + ")"
+      end
+      if mname == "values"
+        @needs_poly_array = 1
+        @needs_rb_value = 1
+        return "sp_PolyPolyHash_values(" + rc + ")"
+      end
+    end
     if recv_type == "str_int_hash"
       if mname == "[]"
         return "sp_StrIntHash_get(" + rc + ", " + compile_str_arg0(nid) + ")"
@@ -27368,6 +27520,10 @@ class Compiler
             ctor236 = "sp_StrPolyHash_new()"
           elsif consensus_t == "sym_poly_hash"
             ctor236 = "sp_SymPolyHash_new()"
+          elsif consensus_t == "poly_poly_hash"
+            @needs_poly_poly_hash = 1
+            @needs_rb_value = 1
+            ctor236 = "sp_PolyPolyHash_new()"
           end
         else
           ctor236 = empty_array_new_for_type(consensus_t)
@@ -28926,7 +29082,7 @@ class Compiler
       # Without these arms the literal `{}` would always emit
       # sp_StrIntHash_new() and the assignment would mismatch the
       # promoted local's struct type.
-      if vt == "str_str_hash" || vt == "int_str_hash" || vt == "sym_int_hash" || vt == "sym_str_hash" || vt == "str_poly_hash" || vt == "sym_poly_hash"
+      if vt == "str_str_hash" || vt == "int_str_hash" || vt == "sym_int_hash" || vt == "sym_str_hash" || vt == "str_poly_hash" || vt == "sym_poly_hash" || vt == "poly_poly_hash"
         expr_id2 = @nd_expression[nid]
         if expr_id2 >= 0 && @nd_type[expr_id2] == "HashNode"
           elems2 = parse_id_list(@nd_elements[expr_id2])
@@ -28952,6 +29108,10 @@ class Compiler
               @needs_sym_poly_hash = 1
               @needs_rb_value = 1
               emit("  " + vref + " = sp_SymPolyHash_new();")
+            elsif vt == "poly_poly_hash"
+              @needs_poly_poly_hash = 1
+              @needs_rb_value = 1
+              emit("  " + vref + " = sp_PolyPolyHash_new();")
             end
             return
           end
@@ -29023,10 +29183,29 @@ class Compiler
         if rhs_t == "poly" && vt == "float"
           val = "(" + val + ").v.f"
         end
+        # Auto-unbox poly RHS into a typed pointer slot. The
+        # poly_poly_hash IndexOrWriteNode lowering returns sp_RbVal
+        # so a `param = @cache[k] ||= param` assignment against a
+        # typed param (e.g. `sp_Method *` for the optcarrot @pokes
+        # cache where all callers happen to pass Method) needs the
+        # `.v.p` extraction here. Strip the nullable `?` marker so
+        # nullable obj slots (`obj_Method?`) cast to the same C type.
+        kept_typed_unbox = 0
+        if rhs_t == "poly" && is_obj_type(base_type(vt)) == 1
+          cname_unbox = base_type(vt)[4, base_type(vt).length - 4]
+          val = "(sp_" + cname_unbox + " *)(" + val + ").v.p"
+          kept_typed_unbox = 1
+        end
         emit("  " + vref + " = " + val + ";")
       end
       if rhs_t != "nil" || is_nullable_type(vt) == 0
-        set_var_type(lname, rhs_t)
+        # Skip the type-widening update when we just unboxed the
+        # poly RHS into a typed pointer slot — the C variable's
+        # declared type is unchanged, so future reads must keep
+        # treating the slot as the original obj_X.
+        if !(rhs_t == "poly" && is_obj_type(base_type(vt)) == 1)
+          set_var_type(lname, rhs_t)
+        end
       end
       return
     end
@@ -29152,6 +29331,10 @@ class Compiler
           ctor = "sp_StrPolyHash_new()"
         elsif ivt == "sym_poly_hash"
           ctor = "sp_SymPolyHash_new()"
+        elsif ivt == "poly_poly_hash"
+          @needs_poly_poly_hash = 1
+          @needs_rb_value = 1
+          ctor = "sp_PolyPolyHash_new()"
         end
         if ctor != ""
           @needs_gc = 1
@@ -33074,6 +33257,15 @@ class Compiler
       emit("  sp_StrPolyHash_set(" + rc + ", " + idx_s + ", " + boxed + ");")
       return
     end
+    if rt == "poly_poly_hash"
+      key_boxed = box_expr_to_poly(arg_ids[0])
+      val_boxed = val
+      if arg_ids.length >= 2
+        val_boxed = box_expr_to_poly(arg_ids[1])
+      end
+      emit("  sp_PolyPolyHash_set(" + rc + ", " + key_boxed + ", " + val_boxed + ");")
+      return
+    end
     if rt == "int_array"
       # Check if value is an object pointer - needs cast
       vt = "int"
@@ -33514,6 +33706,34 @@ class Compiler
       emit("  }")
       return
     end
+    if rt == "poly_poly_hash"
+      # Lower `h[k] ||= v` to a get-then-set pair on the boxed key.
+      # The expression-form lifts the temp out of a block scope so
+      # callers can read the result; here we ignore the value but reuse
+      # the same emitter for symmetry.
+      compile_poly_poly_index_or_assign_to_temp(nid, rc, arg_ids)
+      return
+    end
+  end
+
+  # Emit the get-then-set body for `recv[k] ||= v` against a
+  # poly_poly_hash receiver and return the C name of the sp_RbVal temp
+  # holding the resulting value (existing on hit, freshly-stored rhs on
+  # miss). Caller is responsible for using or discarding the temp.
+  def compile_poly_poly_index_or_assign_to_temp(nid, rc, arg_ids)
+    tt = new_temp
+    tk = new_temp
+    tg = new_temp
+    key_boxed = box_expr_to_poly(arg_ids[0])
+    emit("  sp_PolyPolyHash *" + tt + " = " + rc + ";")
+    emit("  sp_RbVal " + tk + " = " + key_boxed + ";")
+    emit("  sp_RbVal " + tg + " = sp_PolyPolyHash_get(" + tt + ", " + tk + ");")
+    val_boxed = box_expr_to_poly(@nd_expression[nid])
+    emit("  if (" + tg + ".tag == SP_TAG_NIL) {")
+    emit("    " + tg + " = " + val_boxed + ";")
+    emit("    sp_PolyPolyHash_set(" + tt + ", " + tk + ", " + tg + ");")
+    emit("  }")
+    tg
   end
 
   # Return a C expression that evaluates to the inspected form of `val`
@@ -37264,6 +37484,37 @@ class Compiler
     if lt == "MultiWriteNode"
       compile_stmt(last)
       if return_type != "void"
+        emit("  return " + c_return_default(return_type) + ";")
+      end
+      return
+    end
+    if lt == "IndexOrWriteNode" || lt == "IndexAndWriteNode" || lt == "IndexOperatorWriteNode"
+      # `h[k] ||= v` returns the resulting value (existing-or-rhs).
+      # Lower as a statement, then re-read `h[k]` for the return —
+      # one extra hash lookup per call site, but the alternative would
+      # need to thread a temp through compile_index_or_assign's
+      # branches. Acceptable for the use case (single-cache lookup
+      # paths like optcarrot's @peeks/@pokes dedup, called at init).
+      compile_stmt(last)
+      if return_type != "void"
+        recv_iow = @nd_receiver[last]
+        args_iow = @nd_arguments[last]
+        if recv_iow >= 0 && args_iow >= 0
+          rt_iow = infer_type(recv_iow)
+          rc_iow = compile_expr(recv_iow)
+          a_iow = get_args(args_iow)[0]
+          if rt_iow == "poly_poly_hash"
+            ret = "sp_PolyPolyHash_get(" + rc_iow + ", " + box_expr_to_poly(a_iow) + ")"
+            if return_type == "poly"
+              emit("  return " + ret + ";")
+            else
+              # caller expects unboxed; the cache use case only flows
+              # poly back, but keep a sane default.
+              emit("  return " + c_return_default(return_type) + ";")
+            end
+            return
+          end
+        end
         emit("  return " + c_return_default(return_type) + ";")
       end
       return

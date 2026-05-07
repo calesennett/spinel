@@ -793,6 +793,7 @@ typedef uint64_t sp_RbValue;
 #define SP_BUILTIN_SYM_STR_HASH  (-17)
 #define SP_BUILTIN_STR_POLY_HASH (-18)
 #define SP_BUILTIN_SYM_POLY_HASH (-19)
+#define SP_BUILTIN_POLY_POLY_HASH (-20)
 typedef struct { int tag; int cls_id; union { mrb_int i; const char *s; mrb_float f; mrb_bool b; void *p; } v; } sp_RbVal;
 static sp_RbVal sp_box_int(mrb_int v) { sp_RbVal r; r.tag = SP_TAG_INT; r.cls_id = 0; r.v.i = v; return r; }
 static sp_RbVal sp_box_str(const char *v) { sp_RbVal r; r.tag = SP_TAG_STR; r.cls_id = 0; r.v.s = v; return r; }
@@ -1014,6 +1015,61 @@ static mrb_bool sp_SymPolyHash_has_key(sp_SymPolyHash*h,sp_sym k){mrb_int idx=(m
 static mrb_int sp_SymPolyHash_length(sp_SymPolyHash*h){return h->len;}
 static sp_IntArray*sp_SymPolyHash_keys(sp_SymPolyHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,(mrb_int)h->order[i]);return a;}
 static sp_PolyArray*sp_SymPolyHash_values(sp_SymPolyHash*h){sp_PolyArray*a=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++)sp_PolyArray_push(a,sp_SymPolyHash_get(h,h->order[i]));return a;}
+
+/* PolyPolyHash: heterogeneous keys + values (both sp_RbVal). For
+   primitives the hash/eql is tag-based (value equality); for OBJ tag
+   the default is pointer identity. Codegen patches sp_obj_hash_hook /
+   sp_obj_eql_hook with class-aware overrides (e.g. Method#eql? compares
+   bound receiver + fn_ptr) when the program needs them — null hooks
+   leave the runtime at identity, which is the right default for typed
+   pointers like IntArray. */
+typedef mrb_int  (*sp_obj_hash_fn)(int cls_id, void *p);
+typedef mrb_bool (*sp_obj_eql_fn)(int cls_id, void *a, void *b);
+static sp_obj_hash_fn sp_obj_hash_hook = NULL;
+static sp_obj_eql_fn  sp_obj_eql_hook  = NULL;
+static mrb_int sp_rbval_hash_key(sp_RbVal v) {
+  switch (v.tag) {
+    case SP_TAG_INT: case SP_TAG_BOOL: case SP_TAG_NIL: case SP_TAG_SYM:
+      return (mrb_int)v.v.i;
+    case SP_TAG_STR:
+      return v.v.s ? (mrb_int)sp_str_hash(v.v.s) : 0;
+    case SP_TAG_FLT: { uint64_t b; memcpy(&b, &v.v.f, sizeof(b)); return (mrb_int)b; }
+    case SP_TAG_OBJ:
+      if (sp_obj_hash_hook) return sp_obj_hash_hook(v.cls_id, v.v.p);
+      return (mrb_int)((uintptr_t)v.v.p);
+  }
+  return 0;
+}
+static mrb_bool sp_rbval_eql_key(sp_RbVal a, sp_RbVal b) {
+  if (a.tag != b.tag) return FALSE;
+  switch (a.tag) {
+    case SP_TAG_INT: case SP_TAG_BOOL: case SP_TAG_NIL: case SP_TAG_SYM:
+      return a.v.i == b.v.i;
+    case SP_TAG_STR:
+      if (a.v.s == b.v.s) return TRUE;
+      if (!a.v.s || !b.v.s) return FALSE;
+      return strcmp(a.v.s, b.v.s) == 0;
+    case SP_TAG_FLT:
+      return a.v.f == b.v.f;
+    case SP_TAG_OBJ:
+      if (a.cls_id != b.cls_id) return FALSE;
+      if (a.v.p == b.v.p) return TRUE;
+      if (sp_obj_eql_hook) return sp_obj_eql_hook(a.cls_id, a.v.p, b.v.p);
+      return FALSE;
+  }
+  return FALSE;
+}
+typedef struct{sp_RbVal*keys;sp_RbVal*vals;mrb_int*order;mrb_bool*occ;mrb_int len;mrb_int cap;mrb_int mask;}sp_PolyPolyHash;
+static void sp_PolyPolyHash_fin(void*p){sp_PolyPolyHash*h=(sp_PolyPolyHash*)p;free(h->keys);free(h->vals);free(h->order);free(h->occ);}
+static void sp_PolyPolyHash_scan(void*p){sp_PolyPolyHash*h=(sp_PolyPolyHash*)p;for(mrb_int i=0;i<h->cap;i++){if(h->occ[i]){sp_mark_rbval(h->keys[i]);sp_mark_rbval(h->vals[i]);}}}
+static sp_PolyPolyHash*sp_PolyPolyHash_new(void){sp_PolyPolyHash*h=(sp_PolyPolyHash*)sp_gc_alloc(sizeof(sp_PolyPolyHash),sp_PolyPolyHash_fin,sp_PolyPolyHash_scan);h->cap=16;h->mask=15;h->keys=(sp_RbVal*)calloc(h->cap,sizeof(sp_RbVal));h->vals=(sp_RbVal*)calloc(h->cap,sizeof(sp_RbVal));h->order=(mrb_int*)malloc(sizeof(mrb_int)*h->cap);h->occ=(mrb_bool*)calloc(h->cap,sizeof(mrb_bool));h->len=0;return h;}
+static void sp_PolyPolyHash_grow(sp_PolyPolyHash*h){mrb_int oc=h->cap;sp_RbVal*ok=h->keys;sp_RbVal*ov=h->vals;mrb_bool*oo=h->occ;mrb_int*oord=h->order;mrb_int olen=h->len;h->cap*=2;h->mask=h->cap-1;h->keys=(sp_RbVal*)calloc(h->cap,sizeof(sp_RbVal));h->vals=(sp_RbVal*)calloc(h->cap,sizeof(sp_RbVal));h->order=(mrb_int*)malloc(sizeof(mrb_int)*h->cap);h->occ=(mrb_bool*)calloc(h->cap,sizeof(mrb_bool));for(mrb_int i=0;i<olen;i++){mrb_int oi=oord[i];sp_RbVal k=ok[oi];mrb_int idx=(mrb_int)(sp_rbval_hash_key(k)&h->mask);while(h->occ[idx])idx=(idx+1)&h->mask;h->keys[idx]=k;h->vals[idx]=ov[oi];h->occ[idx]=TRUE;h->order[i]=idx;}free(ok);free(ov);free(oo);free(oord);}
+static sp_RbVal sp_PolyPolyHash_get(sp_PolyPolyHash*h,sp_RbVal k){mrb_int idx=(mrb_int)(sp_rbval_hash_key(k)&h->mask);while(h->occ[idx]){if(sp_rbval_eql_key(h->keys[idx],k))return h->vals[idx];idx=(idx+1)&h->mask;}return sp_box_nil();}
+static void sp_PolyPolyHash_set(sp_PolyPolyHash*h,sp_RbVal k,sp_RbVal v){if(h->len*2>=h->cap)sp_PolyPolyHash_grow(h);mrb_int idx=(mrb_int)(sp_rbval_hash_key(k)&h->mask);while(h->occ[idx]){if(sp_rbval_eql_key(h->keys[idx],k)){h->vals[idx]=v;return;}idx=(idx+1)&h->mask;}h->keys[idx]=k;h->vals[idx]=v;h->occ[idx]=TRUE;h->order[h->len]=idx;h->len++;}
+static mrb_bool sp_PolyPolyHash_has_key(sp_PolyPolyHash*h,sp_RbVal k){mrb_int idx=(mrb_int)(sp_rbval_hash_key(k)&h->mask);while(h->occ[idx]){if(sp_rbval_eql_key(h->keys[idx],k))return TRUE;idx=(idx+1)&h->mask;}return FALSE;}
+static mrb_int sp_PolyPolyHash_length(sp_PolyPolyHash*h){return h->len;}
+static sp_PolyArray*sp_PolyPolyHash_keys(sp_PolyPolyHash*h){sp_PolyArray*a=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++)sp_PolyArray_push(a,h->keys[h->order[i]]);return a;}
+static sp_PolyArray*sp_PolyPolyHash_values(sp_PolyPolyHash*h){sp_PolyArray*a=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++)sp_PolyArray_push(a,h->vals[h->order[i]]);return a;}
 
 #include <setjmp.h>
 #define SP_EXC_STACK_MAX 64
