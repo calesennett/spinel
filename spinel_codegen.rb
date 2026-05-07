@@ -28475,6 +28475,19 @@ class Compiler
         if vt == "poly" && rhs_t != "" && rhs_t != "poly"
           val = box_value_to_poly(rhs_t, val)
         end
+        # Auto-unbox poly RHS into a primitive local slot. Common
+        # case: `pixel0 = arr[i]` where arr is heterogeneous (poly
+        # element type) and the dispatch arms all return int —
+        # spinel types `arr[i]` as poly, but the local is concretely
+        # int from a prior int-typed write. Reading .v.i preserves
+        # the runtime int payload; non-int payloads fall to 0
+        # (matches `to_i` semantics for poly).
+        if rhs_t == "poly" && (vt == "int" || vt == "bool")
+          val = "(" + val + ").v.i"
+        end
+        if rhs_t == "poly" && vt == "float"
+          val = "(" + val + ").v.f"
+        end
         emit("  " + vref + " = " + val + ";")
       end
       if rhs_t != "nil" || is_nullable_type(vt) == 0
