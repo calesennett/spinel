@@ -32395,18 +32395,19 @@ class Compiler
     # bare return — emit shape depends on the enclosing function's
     # C return type:
     #   void              → return;
-    #   obj_<C>           → return self;       (constructor synthesis;
-    #                                           returns the partially-
-    #                                           initialized instance)
+    #   poly              → return sp_box_nil();    (boxed nil)
+    #   obj_<C>           → return self;            (constructor
+    #                                                synthesis path
+    #                                                with self in
+    #                                                scope)
     #   nullable pointer  → return NULL;
     #   anything else     → return 0;
     # The shape per @current_method_return matters because a
-    # `return if x.nil?` inside a `def initialize` reaches this
-    # bare-return path: in the synthesized `sp_<C>_new` (sp_<C>
-    # *-returning) emitting `return 0;` would silently NULL the
-    # instance on the early-return branch, and in the void
-    # `sp_<C>_initialize` form it would be a `void function
-    # should not return a value` C error.
+    # `return if x.nil?` inside an `sp_RbVal`-returning method
+    # would otherwise emit `return 0;` (int) into a poly slot,
+    # and the same bare-return inside a `def initialize` reaches
+    # the constructor-synthesis branch where `return 0;` would
+    # silently NULL the instance.
     emit_setjmp_depth_unwind
     emit_ensure_replays
     if @in_gc_scope == 1
@@ -32414,17 +32415,16 @@ class Compiler
     end
     if @current_method_return == "void"
       emit("  return;")
+    elsif @current_method_return == "poly"
+      @needs_rb_value = 1
+      emit("  return sp_box_nil();")
     elsif is_obj_type(@current_method_return) == 1
       # `self` is in C scope only when the wrapping function has a
       # self binding — instance methods and constructor synthesis.
       # Class methods, module class methods, and top-level free
-      # functions don't have self. Issue #314 follow-up: a class
-      # method whose return type was inferred as `obj_<C>` (because
-      # every explicit return path returned that type) lowered a
-      # bare `return` to `return self;` — undeclared identifier C
-      # error. Companion to b9d6303's bare-return-in-initialize fix.
-      # c_return_default handles value-type classes (returns
-      # `(sp_<C>){0}` for struct returns, NULL for pointer returns).
+      # functions don't have self; their bare returns fall through
+      # to `c_return_default` (value-type classes get
+      # `(sp_<C>){0}`, pointer-typed obj returns get NULL).
       if @current_method_has_self == 1
         emit("  return self;")
       else
