@@ -5187,6 +5187,15 @@ class Compiler
     if rt == "poly_array"
       return "poly"
     end
+    if rt == "poly"
+      # RHS evaluates to sp_RbVal (e.g. `@h[k][i]` where @h is a
+      # poly_poly_hash whose values are poly_arrays of inner poly
+      # elements).  Mirror compile_multi_write's `val_t_local == "poly"`
+      # arm: unbox to sp_PolyArray * at runtime, fetch each slot via
+      # sp_PolyArray_get returning sp_RbVal, so each target slot is
+      # typed `poly` and stays boxed for downstream poly dispatch.
+      return "poly"
+    end
     "int"
   end
 
@@ -36417,12 +36426,36 @@ class Compiler
       emit("      else if (" + poly_tmp + ".cls_id == SP_BUILTIN_PTR_ARRAY) " + val_tmp + " = sp_box_obj(sp_PtrArray_get((sp_PtrArray *)" + poly_tmp + ".v.p, " + idx_tmp + "), 0);")
       emit("      else if (" + poly_tmp + ".cls_id == SP_BUILTIN_POLY_ARRAY) " + val_tmp + " = sp_PolyArray_get((sp_PolyArray *)" + poly_tmp + ".v.p, " + idx_tmp + ");")
       if has_bp == 1
-        emit("      sp_RbVal lv_" + bp1 + " = " + val_tmp + ";")
+        if bp2 != ""
+          # Multi-param block over a poly receiver: CRuby auto-splats
+          # when the yielded element is itself an Array. Mirror that:
+          # if the runtime element is a typed array, distribute its
+          # first two slots across bp1/bp2; otherwise bp1 takes the
+          # whole element and bp2 stays nil.
+          emit("      sp_RbVal lv_" + bp1 + " = sp_box_nil();")
+          emit("      sp_RbVal lv_" + bp2 + " = sp_box_nil();")
+          emit("      if (" + val_tmp + ".tag == SP_TAG_OBJ && " + val_tmp + ".cls_id == SP_BUILTIN_POLY_ARRAY) {")
+          emit("        sp_PolyArray *_pa = (sp_PolyArray *)" + val_tmp + ".v.p;")
+          emit("        if (sp_PolyArray_length(_pa) > 0) lv_" + bp1 + " = sp_PolyArray_get(_pa, 0);")
+          emit("        if (sp_PolyArray_length(_pa) > 1) lv_" + bp2 + " = sp_PolyArray_get(_pa, 1);")
+          emit("      } else if (" + val_tmp + ".tag == SP_TAG_OBJ && " + val_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) {")
+          emit("        sp_IntArray *_ia = (sp_IntArray *)" + val_tmp + ".v.p;")
+          emit("        if (sp_IntArray_length(_ia) > 0) lv_" + bp1 + " = sp_box_int(sp_IntArray_get(_ia, 0));")
+          emit("        if (sp_IntArray_length(_ia) > 1) lv_" + bp2 + " = sp_box_int(sp_IntArray_get(_ia, 1));")
+          emit("      } else {")
+          emit("        lv_" + bp1 + " = " + val_tmp + ";")
+          emit("      }")
+        else
+          emit("      sp_RbVal lv_" + bp1 + " = " + val_tmp + ";")
+        end
       end
       @indent = @indent + 2
       push_scope
       if has_bp == 1
         declare_var(bp1, "poly")
+        if bp2 != ""
+          declare_var(bp2, "poly")
+        end
       end
       redo_label = push_redo_label
       emit_redo_label(redo_label)
