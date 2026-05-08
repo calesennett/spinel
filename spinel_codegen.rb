@@ -4006,6 +4006,16 @@ class Compiler
       end
       return "int_array"
     end
+    # `replace(other)` returns the receiver, not a fresh array;
+    # the inferred result must therefore preserve the receiver's
+    # array type so that an expression-form `c = a.replace(b)`
+    # still tags `c` as `int_array` (or whatever `a` is) rather
+    # than falling through to `int`.
+    if mname == "replace"
+      if recv >= 0
+        return infer_type(recv)
+      end
+    end
     if mname == "pop"
       if recv >= 0
         rt = infer_type(recv)
@@ -26332,6 +26342,15 @@ class Compiler
             return tmp
           end
         end
+      end
+      # `replace(other)` in expression position: the stmt-form
+      # arm in compile_*_stmt only fires when the call's value is
+      # discarded; in expression position (e.g. last stmt of a
+      # method body, or rvalue of an assignment) we still need to
+      # emit the side effect *and* yield the receiver as the
+      # value. Use the comma operator so the result is `rc`.
+      if mname == "replace" && recv_type == "int_array"
+        return "(sp_IntArray_replace(" + rc + ", " + compile_arg0(nid) + "), " + rc + ")"
       end
       # take_while / drop_while: block-driven prefix scan. take_while
       # collects elements from the front while the block stays truthy;
