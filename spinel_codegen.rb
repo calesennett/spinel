@@ -32038,9 +32038,27 @@ class Compiler
         end
       else
         if pred_type == "string"
-          result = result + "strcmp(" + tmp + ", " + compile_expr(cid) + ") == 0"
+          # `case <string> when :sym_literal` — CRuby's
+          # `:sym === "str"` is always false (Symbol#=== returns
+          # false for non-Symbol receivers), so emit a literal
+          # 0 for this arm. Without the special-case
+          # compile_expr(cid) returns `SPS_<sym>` (an sp_sym aka
+          # long long) and strcmp would reject it.
+          if @nd_type[cid] == "SymbolNode"
+            result = result + "0"
+          else
+            result = result + "strcmp(" + tmp + ", " + compile_expr(cid) + ") == 0"
+          end
         else
-          result = result + tmp + " == " + compile_expr(cid)
+          # Symmetric case: `case <sym> when "literal_str"` is
+          # also always false in CRuby (String#=== returns false
+          # for a Symbol). Emit 0 to avoid a `mrb_int == const
+          # char *` type mismatch in the generated C.
+          if pred_type == "symbol" && @nd_type[cid] == "StringNode"
+            result = result + "0"
+          else
+            result = result + tmp + " == " + compile_expr(cid)
+          end
         end
       end
       k = k + 1
