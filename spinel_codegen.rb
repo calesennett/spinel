@@ -4964,6 +4964,286 @@ class Compiler
   # the common Object/Enumerable surface (`length`, `each`, `to_s`,
   # ...) — when these match a user class they don't actually
   # discriminate from a built-in.
+  # Issue #397. A method whose param starts as `str_int_hash` (the
+  # `{}` default) but whose body writes a non-int value to it
+  # (`receiver["k"] = "v"`) ended up emitting `sp_StrIntHash_set(...,
+  # const char *)` — a `mrb_int` slot getting a string, fails C-compile.
+  # Fix: scan the body for `lv_<param>[k] = v` writes, infer the right
+  # hash variant from the observed key/value types, and widen the
+  # param's hash type. Compile_call_args_with_defaults then coerces
+  # the caller's empty `{}` literal to match the widened param type.
+  def narrow_param_hash_types_from_body_writes
+    # Top-level methods.
+    mi = 0
+    while mi < @meth_names.length
+      bid_h = @meth_body_ids[mi]
+      if bid_h >= 0
+        pnames = @meth_param_names[mi].split(",")
+        ptypes = @meth_param_types[mi].split(",")
+        changed = 0
+        pk = 0
+        while pk < pnames.length
+          if pk < ptypes.length && is_hash_type(ptypes[pk]) == 1
+            new_t = infer_param_hash_from_writes(bid_h, pnames[pk], ptypes[pk])
+            if new_t != "" && new_t != ptypes[pk]
+              ptypes[pk] = new_t
+              changed = 1
+            end
+          end
+          pk = pk + 1
+        end
+        if changed == 1
+          @meth_param_types[mi] = ptypes.join(",")
+        end
+      end
+      mi = mi + 1
+    end
+    # Class instance methods.
+    ci = 0
+    while ci < @cls_names.length
+      all_params = @cls_meth_params[ci].split("|")
+      all_ptypes = @cls_meth_ptypes[ci].split("|")
+      bodies = @cls_meth_bodies[ci].split(";")
+      cls_changed = 0
+      mj = 0
+      while mj < all_params.length
+        bid_c = -1
+        if mj < bodies.length
+          bid_c = bodies[mj].to_i
+        end
+        if bid_c >= 0
+          cm_pnames = all_params[mj].split(",")
+          cm_ptypes = "".split(",")
+          if mj < all_ptypes.length
+            cm_ptypes = all_ptypes[mj].split(",")
+          end
+          m_changed = 0
+          pk2 = 0
+          while pk2 < cm_pnames.length
+            if pk2 < cm_ptypes.length && is_hash_type(cm_ptypes[pk2]) == 1
+              new_t = infer_param_hash_from_writes(bid_c, cm_pnames[pk2], cm_ptypes[pk2])
+              if new_t != "" && new_t != cm_ptypes[pk2]
+                cm_ptypes[pk2] = new_t
+                m_changed = 1
+              end
+            end
+            pk2 = pk2 + 1
+          end
+          if m_changed == 1
+            all_ptypes[mj] = cm_ptypes.join(",")
+            cls_changed = 1
+          end
+        end
+        mj = mj + 1
+      end
+      if cls_changed == 1
+        @cls_meth_ptypes[ci] = all_ptypes.join("|")
+      end
+      ci = ci + 1
+    end
+  end
+
+  # Walk the method body looking for `lv_<pname>[k] = v` writes
+  # (CallNode `[]=` with recv = LocalVariableReadNode named pname).
+  # Returns a more-specific hash type than `cur` based on the
+  # observed key + value types, or "" if there's no widening needed
+  # (or if the observed types are inconsistent).
+  def infer_param_hash_from_writes(nid, pname, cur)
+    if nid < 0
+      return ""
+    end
+    # Track all observed value types via a single string accumulator.
+    val_types = "".split(",")
+    key_types = "".split(",")
+    collect_param_hash_writes(nid, pname, val_types, key_types)
+    if val_types.length == 0
+      return ""
+    end
+    # Decide hash variant from the union of observed types. If any
+    # observed value type doesn't fit `cur`'s value slot, widen.
+    cur_kt = hash_key_part(cur)
+    cur_vt = hash_value_part(cur)
+    new_vt = unify_hash_value_types(val_types)
+    new_kt = unify_hash_key_types(key_types, cur_kt)
+    return compose_hash_type(new_kt, new_vt)
+  end
+
+  def collect_param_hash_writes(nid, pname, val_types, key_types)
+    if nid < 0
+      return
+    end
+    if @nd_type[nid] == "CallNode" && @nd_name[nid] == "[]="
+      r = @nd_receiver[nid]
+      if r >= 0 && @nd_type[r] == "LocalVariableReadNode" && @nd_name[r] == pname
+        args_id_h = @nd_arguments[nid]
+        if args_id_h >= 0
+          args = get_args(args_id_h)
+          if args.length >= 2
+            kt = infer_type(args[0])
+            vt = infer_type(args[args.length - 1])
+            if not_in(kt, key_types) == 1
+              key_types.push(kt)
+            end
+            if not_in(vt, val_types) == 1
+              val_types.push(vt)
+            end
+          end
+        end
+      end
+    end
+    cs = []
+    push_child_ids(nid, cs)
+    k = 0
+    while k < cs.length
+      collect_param_hash_writes(cs[k], pname, val_types, key_types)
+      k = k + 1
+    end
+  end
+
+  def hash_key_part(t)
+    if t == "str_int_hash" || t == "str_str_hash" || t == "str_poly_hash"
+      return "str"
+    end
+    if t == "sym_int_hash" || t == "sym_str_hash" || t == "sym_poly_hash"
+      return "sym"
+    end
+    if t == "int_str_hash"
+      return "int"
+    end
+    if t == "poly_poly_hash"
+      return "poly"
+    end
+    "str"
+  end
+
+  def hash_value_part(t)
+    if t == "str_int_hash" || t == "sym_int_hash"
+      return "int"
+    end
+    if t == "str_str_hash" || t == "sym_str_hash" || t == "int_str_hash"
+      return "str"
+    end
+    if t == "str_poly_hash" || t == "sym_poly_hash" || t == "poly_poly_hash"
+      return "poly"
+    end
+    "int"
+  end
+
+  def unify_hash_value_types(vts)
+    if vts.length == 0
+      return "int"
+    end
+    if vts.length == 1
+      v = vts[0]
+      return "int" if v == "int" || v == "bool" || v == "nil"
+      return "str" if v == "string"
+      return "poly"
+    end
+    # Multiple distinct types -> poly.
+    "poly"
+  end
+
+  def unify_hash_key_types(kts, cur_kt)
+    if kts.length == 0
+      return cur_kt
+    end
+    if kts.length == 1
+      k = kts[0]
+      return "str" if k == "string"
+      return "sym" if k == "symbol"
+      return cur_kt
+    end
+    "poly"
+  end
+
+  # Issue #397 helper: when positional arg `nid` is an empty `{}` and
+  # the receiving param's expected type `pt` is a hash variant, emit
+  # the matching `sp_<HashType>_new()`. Returns "" if the arg isn't an
+  # empty hash literal or the param isn't a hash type (caller falls
+  # back to the regular compile_expr path).
+  def empty_hash_coerce(nid, pt)
+    if nid < 0
+      return ""
+    end
+    if @nd_type[nid] != "HashNode"
+      return ""
+    end
+    elems = parse_id_list(@nd_elements[nid])
+    if elems.length != 0
+      return ""
+    end
+    if is_hash_type(pt) == 0
+      return ""
+    end
+    @needs_gc = 1
+    if pt == "str_int_hash"
+      @needs_str_int_hash = 1
+      return "sp_StrIntHash_new()"
+    end
+    if pt == "str_str_hash"
+      @needs_str_str_hash = 1
+      return "sp_StrStrHash_new()"
+    end
+    if pt == "str_poly_hash"
+      @needs_str_poly_hash = 1
+      return "sp_StrPolyHash_new()"
+    end
+    if pt == "sym_int_hash"
+      @needs_sym_int_hash = 1
+      return "sp_SymIntHash_new()"
+    end
+    if pt == "sym_str_hash"
+      @needs_sym_str_hash = 1
+      return "sp_SymStrHash_new()"
+    end
+    if pt == "sym_poly_hash"
+      @needs_sym_poly_hash = 1
+      return "sp_SymPolyHash_new()"
+    end
+    if pt == "int_str_hash"
+      @needs_int_str_hash = 1
+      return "sp_IntStrHash_new()"
+    end
+    if pt == "poly_poly_hash"
+      @needs_poly_poly_hash = 1
+      return "sp_PolyPolyHash_new()"
+    end
+    ""
+  end
+
+  def compose_hash_type(kt, vt)
+    if kt == "str" && vt == "int"
+      @needs_str_int_hash = 1
+      return "str_int_hash"
+    end
+    if kt == "str" && vt == "str"
+      @needs_str_str_hash = 1
+      return "str_str_hash"
+    end
+    if kt == "str" && vt == "poly"
+      @needs_str_poly_hash = 1
+      return "str_poly_hash"
+    end
+    if kt == "sym" && vt == "int"
+      @needs_sym_int_hash = 1
+      return "sym_int_hash"
+    end
+    if kt == "sym" && vt == "str"
+      @needs_sym_str_hash = 1
+      return "sym_str_hash"
+    end
+    if kt == "sym" && vt == "poly"
+      @needs_sym_poly_hash = 1
+      return "sym_poly_hash"
+    end
+    if kt == "int" && vt == "str"
+      @needs_int_str_hash = 1
+      return "int_str_hash"
+    end
+    @needs_poly_poly_hash = 1
+    return "poly_poly_hash"
+  end
+
 
   # Walk `nid` for CallNode whose receiver is a LocalVariableReadNode
   # naming one of the params. Each such site contributes one entry
@@ -5507,22 +5787,10 @@ class Compiler
 
 
 
-
-
-
   # Build a string fingerprint of the arrays that iterative type inference
   # refines. Identical fingerprints between successive iterations means a
   # fixed point has been reached and further iterations are wasted work.
 
-
-  # End-to-end whole-program analysis. Splits cleanly out of `compile`
-  # so the same work can be invoked once and its results serialized
-  # into an IR file, then loaded by a separate codegen step that runs
-  # only `generate_code`. Everything that mutates analysis-derived
-  # state (the iterative type-inference fixpoint, `detect_features`,
-  # `detect_value_types`, `recalc_needs_gc`, sym/toplevel-ivar
-  # collection, live-method computation) belongs here so codegen can
-  # treat its inputs as read-only.
 
   def generate_code
     stmts = get_body_stmts(@root_id)
@@ -16854,7 +17122,18 @@ class Compiler
         if pt == "poly"
           result = result + box_expr_to_poly(positional_ids[k])
         else
-          result = result + compile_expr(positional_ids[k])
+          # Issue #397: empty `{}` literal as arg gets coerced to the
+          # param's expected hash variant (which may have been widened
+          # by narrow_param_hash_types_from_body_writes from the
+          # caller-side default `str_int_hash`). Without this, the
+          # caller would emit `sp_StrIntHash_new()` and the callee's
+          # signature `sp_StrStrHash *` would type-mismatch.
+          coerced = empty_hash_coerce(positional_ids[k], pt)
+          if coerced != ""
+            result = result + coerced
+          else
+            result = result + compile_expr(positional_ids[k])
+          end
         end
         k = k + 1
         next
@@ -17129,6 +17408,15 @@ class Compiler
                 k = k + 1
                 next
               end
+            end
+            # Issue #397: empty `{}` literal -> coerce to the param's
+            # widened hash variant (e.g. body promoted str_int_hash
+            # to str_str_hash via narrow_param_hash_types_from_body_writes).
+            coerced_h = empty_hash_coerce(positional_ids[k], ptypes[k])
+            if coerced_h != ""
+              result = result + coerced_h
+              k = k + 1
+              next
             end
             # When the param expects `sp_<C> *` but the arg's static
             # type is `int` (typically a local catching a method
