@@ -2825,6 +2825,20 @@ class Compiler
         @needs_rb_value = 1
         return "poly_array"
       end
+      # Hash literals as elements (`[{n: 3}, {n: 1}]`): each
+      # element is a heap-allocated hash pointer. Spinel has no
+      # typed `<hash>_ptr_array` slot, so box via poly_array;
+      # sp_box_hash_to_poly is called on each push and the
+      # poly-builtin dispatch on `arr[i]` recovers the hash.
+      # Without this arm, the array's inferred type fell back to
+      # `int_array` (the bottom of this function), and
+      # `sp_IntArray_push` was called with a hash pointer —
+      # int-from-pointer C-compile error.
+      if is_hash_type(et) == 1
+        @needs_gc = 1
+        @needs_rb_value = 1
+        return "poly_array"
+      end
       # Check if elements have mixed types
       k = 1
       while k < elems.length
@@ -7094,6 +7108,15 @@ class Compiler
       val_t = infer_type(@nd_expression[nid])
       register_cvar(qname, val_t)
       try_fold_cvar_init(qname, @nd_expression[nid])
+    end
+    # `@@x op= val` / `@@x ||= val` / `@@x &&= val` — same
+    # storage as plain `@@x = ...`. Register the cvar so the
+    # static decl pass emits a slot, and seed its type from the
+    # rhs (or default int for `||=`/`&&=` reading nil).
+    if t == "ClassVariableOperatorWriteNode" || t == "ClassVariableOrWriteNode" || t == "ClassVariableAndWriteNode"
+      qname = cvar_qname(class_idx, @nd_name[nid])
+      val_t = infer_type(@nd_expression[nid])
+      register_cvar(qname, val_t)
     end
     cs = []
     push_child_ids(nid, cs)
@@ -21620,6 +21643,14 @@ class Compiler
       register_cvar(qname, val_t)
       return "(cvar_" + qname + " = " + val + ")"
     end
+    if t == "ClassVariableOperatorWriteNode" || t == "ClassVariableOrWriteNode" || t == "ClassVariableAndWriteNode"
+      # Expression form (`x = (@@y op= v)` or last stmt of a
+      # class method body). Run the statement-style emit for the
+      # side effect, then surface the cvar's post-assign value.
+      compile_stmt(nid)
+      qname_e = cvar_qname(@current_class_idx, @nd_name[nid])
+      return "cvar_" + qname_e
+    end
     if t == "InstanceVariableWriteNode"
       # Same poly-slot boxing as the statement-form emit.
       # Expression form (`x = (@y = expr)`) is rarer but reaches
@@ -29072,6 +29103,21 @@ class Compiler
       shc = "sp_SymPolyHash_get((sp_SymPolyHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + ")"
       shrhs = is_poly_ret == 1 ? shc : "(" + shc + ").v.i"
       emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_POLY_HASH) " + result_tmp + " = " + shrhs + ";")
+      # SymIntHash arm: heterogeneous-element array of `{n: 3}`-style
+      # hashes (issue #402) boxes each as SymIntHash. Returns mrb_int,
+      # box to poly when the call site expects poly. Only emit when
+      # the program already uses SymIntHash so we don't pull the
+      # runtime helpers in for unrelated programs.
+      if @needs_sym_int_hash == 1
+        sihc = "sp_SymIntHash_get((sp_SymIntHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + ")"
+        sihrhs = is_poly_ret == 1 ? "sp_box_int(" + sihc + ")" : sihc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_INT_HASH) " + result_tmp + " = " + sihrhs + ";")
+      end
+      if @needs_sym_str_hash == 1
+        sshc = "sp_SymStrHash_get((sp_SymStrHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + ")"
+        sshrhs = is_poly_ret == 1 ? "sp_box_str(" + sshc + ")" : sshc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_STR_HASH) " + result_tmp + " = " + sshrhs + ";")
+      end
     end
     # `length` / `size` — every built-in array exposes its own
     # `_length` helper (sym_array shares IntArray's). PtrArray is
@@ -31100,6 +31146,66 @@ class Compiler
       emit("  cvar_" + qname + " = " + val + ";")
       return
     end
+    if t == "ClassVariableOperatorWriteNode"
+      # `@@x op= val` -- desugar to `@@x = @@x op val`. Mirrors
+      # GlobalVariableOperatorWriteNode and the instance-var
+      # variant. Same storage path as ClassVariableWriteNode.
+      qname = cvar_qname(@current_class_idx, @nd_name[nid])
+      val = compile_expr(@nd_expression[nid])
+      val_t = infer_type(@nd_expression[nid])
+      register_cvar(qname, val_t)
+      cname = "cvar_" + qname
+      op = @nd_binop[nid]
+      if op == "+"
+        emit("  " + cname + " += " + val + ";")
+      elsif op == "-"
+        emit("  " + cname + " -= " + val + ";")
+      elsif op == "*"
+        emit("  " + cname + " *= " + val + ";")
+      elsif op == "/"
+        emit("  " + cname + " = sp_idiv(" + cname + ", " + val + ");")
+      elsif op == "%"
+        emit("  " + cname + " = sp_imod(" + cname + ", " + val + ");")
+      elsif op == "<<"
+        emit("  " + cname + " <<= " + val + ";")
+      elsif op == ">>"
+        emit("  " + cname + " >>= " + val + ";")
+      elsif op == "&"
+        emit("  " + cname + " &= " + val + ";")
+      elsif op == "|"
+        emit("  " + cname + " |= " + val + ";")
+      elsif op == "^"
+        emit("  " + cname + " ^= " + val + ";")
+      else
+        emit("  " + cname + " = " + cname + " " + op + " " + val + ";")
+      end
+      return
+    end
+    if t == "ClassVariableOrWriteNode"
+      # `@@x ||= val` -- evaluate rhs only when @@x is falsy.
+      # Mirror of GlobalVariableOrWriteNode.
+      qname = cvar_qname(@current_class_idx, @nd_name[nid])
+      val_t = infer_type(@nd_expression[nid])
+      register_cvar(qname, val_t)
+      cname = "cvar_" + qname
+      emit("  if (!(" + cname + ")) {")
+      val = compile_expr(@nd_expression[nid])
+      emit("    " + cname + " = " + val + ";")
+      emit("  }")
+      return
+    end
+    if t == "ClassVariableAndWriteNode"
+      # `@@x &&= val` -- evaluate rhs only when @@x is truthy.
+      qname = cvar_qname(@current_class_idx, @nd_name[nid])
+      val_t = infer_type(@nd_expression[nid])
+      register_cvar(qname, val_t)
+      cname = "cvar_" + qname
+      emit("  if (" + cname + ") {")
+      val = compile_expr(@nd_expression[nid])
+      emit("    " + cname + " = " + val + ";")
+      emit("  }")
+      return
+    end
     if t == "RedoNode"
       # `redo` -- jump to the top of the current iteration without
       # advancing the iterator or re-evaluating the loop guard. The
@@ -32762,6 +32868,10 @@ class Compiler
       bt = base_type(pred_type)
       obj_cname = bt[4, bt.length - 4]
       emit("  sp_" + obj_cname + " *" + tmp + " = " + pred_val + ";")
+    elsif pred_type == "poly"
+      # `case <poly_value> when ...` — keep the receiver tagged so
+      # each when-arm can do tag-check + value-compare. Issue #387.
+      emit("  sp_RbVal " + tmp + " = " + pred_val + ";")
     else
       emit("  mrb_int " + tmp + " = " + pred_val + ";")
     end
@@ -32867,7 +32977,34 @@ class Compiler
           result = result + "0"
         end
       else
-        if pred_type == "string"
+        if pred_type == "poly"
+          # `case <poly> when <lit>` — Issue #387. The pred_tmp is
+          # an sp_RbVal; emit a tag-check + value-compare matched
+          # to the literal's type. Class consts (`when Foo`) are
+          # left for the future Class-object work; here we only
+          # cover the value-literal arms (sym/str/int/float/nil).
+          ct = @nd_type[cid]
+          if ct == "SymbolNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_SYM && " + tmp + ".v.i == " + compile_expr(cid) + ")"
+          elsif ct == "StringNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_STR && strcmp(" + tmp + ".v.s, " + compile_expr(cid) + ") == 0)"
+          elsif ct == "IntegerNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_INT && " + tmp + ".v.i == " + compile_expr(cid) + ")"
+          elsif ct == "FloatNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_FLT && " + tmp + ".v.f == " + compile_expr(cid) + ")"
+          elsif ct == "NilNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_NIL)"
+          elsif ct == "TrueNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_BOOL && " + tmp + ".v.b)"
+          elsif ct == "FalseNode"
+            result = result + "(" + tmp + ".tag == SP_TAG_BOOL && !" + tmp + ".v.b)"
+          else
+            # Fallback: unbox via sp_poly_eq (does the right thing for
+            # numeric / string / sym pairs) and box the rhs.
+            @needs_rb_value = 1
+            result = result + "sp_poly_eq(" + tmp + ", " + box_expr_to_poly(cid) + ")"
+          end
+        elsif pred_type == "string"
           # `case <string> when :sym_literal` — CRuby's
           # `:sym === "str"` is always false (Symbol#=== returns
           # false for non-Symbol receivers), so emit a literal
@@ -40111,6 +40248,13 @@ class Compiler
       compile_stmt(last)
       if return_type != "void"
         emit("  return " + c_return_default(return_type) + ";")
+      end
+      return
+    end
+    if lt == "ClassVariableWriteNode" || lt == "ClassVariableOperatorWriteNode" || lt == "ClassVariableOrWriteNode" || lt == "ClassVariableAndWriteNode"
+      compile_stmt(last)
+      if return_type != "void"
+        emit("  return cvar_" + cvar_qname(@current_class_idx, @nd_name[last]) + ";")
       end
       return
     end
