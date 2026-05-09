@@ -2539,6 +2539,16 @@ class Compiler
       end
       return "int"
     end
+    if t == "ClassVariableWriteNode"
+      # `@@x = expr` as an expression returns the assigned value, so
+      # the static type is the rhs's type. Without this case the
+      # caller's `infer_type` falls through to the default (int) and
+      # surrounding code -- e.g. a method whose body's last
+      # expression is `@@x = v` -- gets `mrb_int` as the inferred
+      # return, producing a const char* / mrb_int mismatch when v
+      # is a string.
+      return infer_type(@nd_expression[nid])
+    end
     if t == "ConstantReadNode"
       if @nd_name[nid] == "ARGV"
         return "argv"
@@ -4790,6 +4800,9 @@ class Compiler
           if mname == "[]"
             return "string"
           end
+          if mname == "fetch"
+            return "string"
+          end
         end
         if rcname == "Dir"
           if mname == "home"
@@ -7016,29 +7029,23 @@ class Compiler
     collect_class_with_prefix(nid, "")
   end
 
-  # Walk every class body for class-var writes; register each
-  # (class, name) pair so the static-declaration pass can emit
-  # `static <type> cvar_<qname> = <default>;` ahead of the
-  # functions that touch it.
+  # Walk class bodies, module bodies, and the top-level statement
+  # list for class-var writes; register each (class-or-Toplevel,
+  # name) pair so the static-declaration pass can emit
+  # `static <type> cvar_<qname> = <default>;` ahead of the functions
+  # that touch it.
+  #
+  # Module-scope and top-level `@@x = ...` writes belong to the
+  # `Toplevel` namespace -- spinel models cvars per-class, modules
+  # don't have a cls_id of their own, and tying them to "Toplevel"
+  # matches what the read/write codegen already emits when
+  # `@current_class_idx == -1`.
   def collect_cvars
     root = @root_id
     if @nd_type[root] != "ProgramNode"
       return
     end
-    stmts = get_body_stmts(root)
-    stmts.each { |sid|
-      if @nd_type[sid] == "ClassNode"
-        cp = @nd_constant_path[sid]
-        if cp >= 0
-          cname = const_ref_flat_name(cp)
-          ci = find_class_idx(cname)
-          if ci >= 0
-            body_id = @nd_body[sid]
-            collect_cvars_in(body_id, ci)
-          end
-        end
-      end
-    }
+    collect_cvars_in(root, -1)
   end
 
   # Recursively scan `nid`'s subtree for ClassVariable*WriteNode and
@@ -7047,11 +7054,41 @@ class Compiler
   # registered when their parent ClassVariableWriteNode is seen, OR
   # lazily during compile_stmt if no plain Write precedes them in
   # the same class.
+  #
+  # When the walk crosses into a nested ClassNode or ModuleNode the
+  # context flips: nested ClassNode switches to that class's
+  # @cls_names index, ModuleNode keeps the Toplevel namespace.
   def collect_cvars_in(nid, class_idx)
     if nid < 0
       return
     end
     t = @nd_type[nid]
+    if t == "ClassNode"
+      cp = @nd_constant_path[nid]
+      if cp >= 0
+        cname = const_ref_flat_name(cp)
+        ci = find_class_idx(cname)
+        if ci >= 0
+          collect_cvars_in(@nd_body[nid], ci)
+        end
+      end
+      return
+    end
+    if t == "ModuleNode"
+      collect_cvars_in(@nd_body[nid], -1)
+      return
+    end
+    if t == "DefNode"
+      # Method bodies aren't walked at collect-time. A `@@x = v`
+      # inside a method writes during the call, but `v`'s type isn't
+      # yet resolved (LocalVariableReadNode falls back to "int" when
+      # the var-type table hasn't been populated), which would
+      # spuriously widen a class-body literal's `string`/`float`
+      # initialization to poly. The method-body write is registered
+      # defensively at compile_stmt time anyway, when v's call-site-
+      # resolved type is known.
+      return
+    end
     if t == "ClassVariableWriteNode"
       qname = cvar_qname(class_idx, @nd_name[nid])
       val_t = infer_type(@nd_expression[nid])
@@ -27899,6 +27936,29 @@ class Compiler
       if rcname == "ENV"
         if mname == "[]"
           return "sp_str_dup_external(getenv(" + compile_arg0(nid) + "))"
+        end
+        if mname == "fetch"
+          # Two-arg form: ENV.fetch(key, default). If the env var is
+          # set, return its value; otherwise return the supplied
+          # default. The single-arg form (`ENV.fetch("X")`) raises
+          # KeyError in CRuby; spinel doesn't model that, so it
+          # behaves like ENV[] -- callers wanting strict behaviour
+          # should pass an explicit default.
+          args_id = @nd_arguments[nid]
+          if args_id >= 0
+            argz = get_args(args_id)
+            if argz.length >= 2
+              key = compile_expr(argz[0])
+              dfl = compile_expr_as_string(argz[1])
+              tmp = new_temp
+              return "({ const char *" + tmp + " = getenv(" + key + "); " +
+                     tmp + " ? sp_str_dup_external(" + tmp + ") : (" + dfl + "); })"
+            end
+            if argz.length == 1
+              return "sp_str_dup_external(getenv(" + compile_arg0(nid) + "))"
+            end
+          end
+          return "(&(\"\\xff\")[1])"
         end
       end
       # Dir
