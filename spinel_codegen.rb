@@ -2350,6 +2350,27 @@ class Compiler
       return "void"
     end
     t = @nd_type[nid]
+    if t == "SuperNode" || t == "ForwardingSuperNode"
+      # `super` returns whatever the parent's same-named method
+      # returns. Walk to the parent's `find_method_owner`-resolved
+      # method and read its return type.
+      if @current_class_idx >= 0 && @current_method_name != ""
+        parent_name_st = @cls_parents[@current_class_idx]
+        if parent_name_st != ""
+          parent_ci_st = find_class_idx(parent_name_st)
+          if parent_ci_st >= 0
+            owner_st = find_method_owner(parent_ci_st, @current_method_name)
+            if owner_st != ""
+              ret_st = cls_method_return(find_class_idx(owner_st), @current_method_name)
+              if ret_st != ""
+                return ret_st
+              end
+            end
+          end
+        end
+      end
+      return "int"
+    end
     if t == "IntegerNode"
       return "int"
     end
@@ -22163,7 +22184,62 @@ class Compiler
       end
       return tmp
     end
+    if t == "SuperNode" || t == "ForwardingSuperNode"
+      return compile_super_expr(nid, t)
+    end
     "0"
+  end
+
+  # `super` / `super(...)` in a non-`initialize` instance method.
+  # Issue #401 — without this the call fell through to `0`.
+  # `super` inside `initialize` is handled in the constructor synth
+  # path (lines ~19041) and doesn't reach compile_expr.
+  def compile_super_expr(nid, t)
+    if @current_class_idx < 0 || @current_method_name == ""
+      return "0"
+    end
+    parent_name = @cls_parents[@current_class_idx]
+    if parent_name == ""
+      return "0"
+    end
+    parent_ci = find_class_idx(parent_name)
+    if parent_ci < 0
+      return "0"
+    end
+    mname_su = @current_method_name
+    owner_su = find_method_owner(parent_ci, mname_su)
+    if owner_su == ""
+      return "0"
+    end
+    cast_self = "(sp_" + owner_su + " *)self"
+    args_c = ""
+    if t == "ForwardingSuperNode"
+      # Forward every formal param of the current method by name.
+      cur_params = @cls_meth_params[@current_class_idx].split("|")
+      midx_cur = cls_find_method_direct(@current_class_idx, mname_su)
+      if midx_cur >= 0 && midx_cur < cur_params.length
+        pn_list = cur_params[midx_cur].split(",")
+        pi_su = 0
+        while pi_su < pn_list.length
+          if pn_list[pi_su] != ""
+            args_c = args_c + ", lv_" + pn_list[pi_su]
+          end
+          pi_su = pi_su + 1
+        end
+      end
+    else
+      # SuperNode: explicit `super(arg1, arg2, ...)` — use the arg list.
+      args_id_su = @nd_arguments[nid]
+      if args_id_su >= 0
+        a_ids = get_args(args_id_su)
+        ai_su = 0
+        while ai_su < a_ids.length
+          args_c = args_c + ", " + compile_expr(a_ids[ai_su])
+          ai_su = ai_su + 1
+        end
+      end
+    end
+    "sp_" + owner_su + "_" + sanitize_name(mname_su) + "(" + cast_self + args_c + ")"
   end
 
   def c_string_literal(s)
@@ -40455,6 +40531,14 @@ class Compiler
       tmp = new_temp
       if pred_type == "string"
         emit("  const char *" + tmp + " = " + pred_val + ";")
+      elsif pred_type == "poly"
+        # `case <poly> when ...` -- mirror compile_case_stmt's
+        # poly arm. Issue #387.
+        emit("  sp_RbVal " + tmp + " = " + pred_val + ";")
+      elsif is_obj_type(pred_type) == 1
+        bt_cr = base_type(pred_type)
+        cn_cr = bt_cr[4, bt_cr.length - 4]
+        emit("  sp_" + cn_cr + " *" + tmp + " = " + pred_val + ";")
       else
         emit("  mrb_int " + tmp + " = " + pred_val + ";")
       end
