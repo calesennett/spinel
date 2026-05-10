@@ -3157,6 +3157,14 @@ class Compiler
     if mname == "inspect"
       return "string"
     end
+    # Issue #404 Phase 2: Class#name -- the class's source name as
+    # a string. Aliases `.to_s` at the runtime helper level
+    # (sp_class_to_s), so the return type is the same.
+    if mname == "name"
+      if recv >= 0 && infer_type(recv) == "class"
+        return "string"
+      end
+    end
     if mname == "to_i"
       return "int"
     end

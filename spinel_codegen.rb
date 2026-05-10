@@ -6232,6 +6232,11 @@ class Compiler
     emit_raw(line)
     emit_raw("static const char *sp_class_to_s(sp_Class c) __attribute__((unused));")
     emit_raw("static const char *sp_class_to_s(sp_Class c){if(c.cls_id>=0&&c.cls_id<SP_CLASS_COUNT)return sp_class_names[c.cls_id];return \"\";}")
+    # Issue #404 Phase 2: equality between Class values is by
+    # cls_id. Same struct shape on both sides since sp_Class is
+    # a single-int wrapper -- a direct field compare is enough.
+    emit_raw("static mrb_bool sp_class_eq(sp_Class a, sp_Class b) __attribute__((unused));")
+    emit_raw("static mrb_bool sp_class_eq(sp_Class a, sp_Class b){return a.cls_id == b.cls_id;}")
     emit_raw("")
   end
 
@@ -15881,17 +15886,36 @@ class Compiler
   end
 
   def compile_object_method_expr(nid, mname, rc, recv_type)
-    # Issue #404 Phase 1: methods on a sp_Class value. Only `.to_s`
-    # is wired up; the broader Class API (`.name`, `.inspect`,
-    # `.==`, `.!=`, `.superclass`, `.ancestors`, dynamic
-    # `is_a?(c)` against a variable) is out of scope and left for
-    # Phase 2. The stash from the earlier broader attempt
-    # documented in memory had bootstrap issues; this narrower
-    # surface keeps the change small enough to verify locally.
+    # Issue #404: methods on a sp_Class value.
+    #
+    # Phase 1 (#404): `.to_s` -> sp_class_to_s(c) (per-program
+    # sp_class_names[] lookup).
+    #
+    # Phase 2 additions:
+    #   - `.name` / `.inspect` -- both alias `.to_s` in the simple
+    #     case. CRuby's #inspect is technically `"#<Class:Foo>"`
+    #     but Phase 2 keeps the bare-name shape consistent with
+    #     the existing #to_s; the canonical CRuby spelling is a
+    #     Phase 3 polish.
+    #   - `.==` / `.!=` / `.eql?` -- equality compares the cls_id
+    #     fields via the sp_class_eq runtime helper.
+    #
+    # Out of scope for Phase 2: `.superclass`, `.ancestors`,
+    # `.<` / `.<=` / `.>` / `.>=`, dynamic `is_a?(c)` against a
+    # variable, case-when on a Class value. Those need
+    # precomputed ancestor tables (see docs/CLASS-OBJECT.md).
     if recv_type == "class"
-      if mname == "to_s"
+      if mname == "to_s" || mname == "name" || mname == "inspect"
         @needs_class_table = 1
         return "sp_class_to_s(" + rc + ")"
+      end
+      if mname == "==" || mname == "eql?"
+        rhs_419eq = compile_arg0(nid)
+        return "sp_class_eq(" + rc + ", " + rhs_419eq + ")"
+      end
+      if mname == "!="
+        rhs_419ne = compile_arg0(nid)
+        return "(!sp_class_eq(" + rc + ", " + rhs_419ne + "))"
       end
       # Issue #419: `<obj>.class.<cmeth>(...)` lowering. The recv
       # here is itself a `<X>.class` CallNode -- the outer
@@ -16895,6 +16919,21 @@ class Compiler
     at = "int"
     if arg_id >= 0
       at = infer_type(arg_id)
+    end
+    # Issue #404 Phase 2: sp_Class equality via field compare.
+    # Class is a value-type struct so plain `==` on a struct
+    # isn't valid C; route through the sp_class_eq runtime helper.
+    # Same shape for both sides being "class" (the canonical
+    # `Foo == Bar` / `c == Foo`) -- mixed class-vs-non-class falls
+    # through to the existing cross-type fold below.
+    if lt == "class" && at == "class"
+      lc_cls = compile_expr(recv)
+      rc_cls = arg_id >= 0 ? compile_expr(arg_id) : "((sp_Class){-1LL})"
+      @needs_class_table = 1
+      if op == "=="
+        return "sp_class_eq(" + lc_cls + ", " + rc_cls + ")"
+      end
+      return "(!sp_class_eq(" + lc_cls + ", " + rc_cls + "))"
     end
     # Cross-type prim-vs-obj. Integer#== / Float#== fall back to
     # `other == self` via num_equal (numeric.c); String, Symbol,
