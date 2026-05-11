@@ -16972,6 +16972,19 @@ class Compiler
     # variable, case-when on a Class value. Those need
     # precomputed ancestor tables (see docs/CLASS-OBJECT.md).
     if recv_type == "class"
+      # Issue #428: `Kernel.<m>(args)` routes to the bare-method
+      # dispatch (compile_no_recv_call_expr handles `sleep` /
+      # `puts` / `rand` / etc. as zero-receiver calls already).
+      # Bare `sleep(...)` works fine; the Kernel-prefixed form
+      # was emit-0'd because compile_object_method_expr's
+      # recv_type=="class" arms only covered class-introspection
+      # methods. CRuby's Kernel includes every method-function
+      # we already implement at the bare path, so the redirect
+      # is uniform -- no per-method list needed here.
+      recv_id_428 = @nd_receiver[nid]
+      if recv_id_428 >= 0 && @nd_type[recv_id_428] == "ConstantReadNode" && @nd_name[recv_id_428] == "Kernel"
+        return compile_no_recv_call_expr(nid, mname)
+      end
       if mname == "to_s" || mname == "name" || mname == "inspect"
         @needs_class_table = 1
         return "sp_class_to_s(" + rc + ")"
