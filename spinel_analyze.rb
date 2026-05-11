@@ -21,8 +21,8 @@ class Compiler
     @temp_counter = 0
     @label_counter = 0
 
-    # ---- AST node storage (parallel arrays by node ID) ----
-    # Use "".split(",") for StrArray init (v1 infers StrArray from split)
+ # ---- AST node storage (parallel arrays by node ID) ----
+ # Use "".split(",") for StrArray init (v1 infers StrArray from split)
     @nd_type = "".split(",")
     @nd_name = "".split(",")
     @nd_value = []
@@ -33,7 +33,7 @@ class Compiler
     @nd_callop = "".split(",")
     @nd_unescaped = "".split(",")
 
-    # Node references (integer node IDs, -1 = nil)
+ # Node references (integer node IDs, -1 = nil)
     @nd_receiver = []
     @nd_arguments = []
     @nd_body = []
@@ -47,8 +47,8 @@ class Compiler
     @nd_constant_path = []
     @nd_superclass = []
     @nd_rest = []
-    # ParametersNode#keyword_rest -- holds a KeywordRestParameterNode
-    # (def f(**kw)) or NoKeywordsParameterNode (def f(**nil)).
+ # ParametersNode#keyword_rest -- holds a KeywordRestParameterNode
+ # (def f(**kw)) or NoKeywordsParameterNode (def f(**nil)).
     @nd_keyword_rest = []
     @nd_rescue_clause = []
     @nd_ensure_clause = []
@@ -59,7 +59,7 @@ class Compiler
     @nd_reference = []
     @nd_collection = []
 
-    # Node array fields: stored as comma-separated ID strings
+ # Node array fields: stored as comma-separated ID strings
     @nd_stmts = "".split(",")
     @nd_args = "".split(",")
     @nd_requireds = "".split(",")
@@ -71,123 +71,123 @@ class Compiler
     @nd_exceptions = "".split(",")
     @nd_targets = "".split(",")
     @nd_rights = "".split(",")
-    # ParametersNode#posts -- required params after the splat
-    # (def f(*r, x, y) → posts = [x, y]). Currently unused by codegen
-    # (post-rest parameters aren't observed in test/), but the parser
-    # emits the field so future tests get a proper AST.
+ # ParametersNode#posts -- required params after the splat
+ # (def f(*r, x, y) → posts = [x, y]). Currently unused by codegen
+ # (post-rest parameters aren't observed in test/), but the parser
+ # emits the field so future tests get a proper AST.
     @nd_posts = "".split(",")
-    # AliasMethodNode / AliasGlobalVariableNode -- parallel ref slots
-    # for the new and old names (SymbolNode for methods, GlobalVariableReadNode
-    # for globals).
+ # AliasMethodNode / AliasGlobalVariableNode -- parallel ref slots
+ # for the new and old names (SymbolNode for methods, GlobalVariableReadNode
+ # for globals).
     @nd_new_name = []
     @nd_old_name = []
-    # UndefNode -- comma-separated child ids for the SymbolNode names.
+ # UndefNode -- comma-separated child ids for the SymbolNode names.
     @nd_names = "".split(",")
 
-    # Per-node inferred type, parallel to the other @nd_* arrays.
-    # Empty string means "not yet annotated"; node_type falls back to
-    # infer_type in that case (transparent during analysis). After
-    # `freeze_analysis` runs, every reachable node gets a non-empty
-    # entry so the codegen path becomes O(1) per node lookup instead
-    # of recursively re-walking the subtree on every infer_type call.
+ # Per-node inferred type, parallel to the other @nd_* arrays.
+ # Empty string means "not yet annotated"; node_type falls back to
+ # infer_type in that case (transparent during analysis). After
+ # `freeze_analysis` runs, every reachable node gets a non-empty
+ # entry so the codegen path becomes O(1) per node lookup instead
+ # of recursively re-walking the subtree on every infer_type call.
     @nd_inferred_type = "".split(",")
-    # 1 once analysis has converged and freeze_analysis has filled
-    # @nd_inferred_type. Switches infer_type to consult the cache
-    # first; analysis iterations themselves keep recomputing because
-    # cached values would otherwise pin to stale converging types.
+ # 1 once analysis has converged and freeze_analysis has filled
+ # @nd_inferred_type. Switches infer_type to consult the cache
+ # first; analysis iterations themselves keep recomputing because
+ # cached values would otherwise pin to stale converging types.
     @analysis_frozen = 0
 
-    # Per-scope local-decls cache. Indexed by the body node id (bid)
-    # of the scope: top-level main uses @root_id, method bodies use
-    # @meth_body_ids[i], class instance methods use the bid stored
-    # in @cls_meth_bodies[ci][bj], etc. Both arrays are pipe-joined
-    # ("name1|name2|...") for compact IR transfer. Empty string at
-    # @nd_scope_names[bid] means "no precomputed scope decls for this
-    # bid"; codegen falls back to its own scan_locals path in that
-    # case (block-iteration bodies, ad-hoc temp scopes, etc.).
+ # Per-scope local-decls cache. Indexed by the body node id (bid)
+ # of the scope: top-level main uses @root_id, method bodies use
+ # @meth_body_ids[i], class instance methods use the bid stored
+ # in @cls_meth_bodies[ci][bj], etc. Both arrays are pipe-joined
+ # ("name1|name2|...") for compact IR transfer. Empty string at
+ # @nd_scope_names[bid] means "no precomputed scope decls for this
+ # bid"; codegen falls back to its own scan_locals path in that
+ # case (block-iteration bodies, ad-hoc temp scopes, etc.).
     @nd_scope_names = "".split(",")
     @nd_scope_types = "".split(",")
 
     @nd_count = 0
     @root_id = 0
 
-    # Issue: unresolved-call warnings deduped by "<mname>:<recv_type>"
-    # so a hot call site that fails to resolve emits one warning, not N.
+ # Issue: unresolved-call warnings deduped by "<mname>:<recv_type>"
+ # so a hot call site that fails to resolve emits one warning, not N.
     @unresolved_call_warnings = "".split(",")
 
-    # ---- Top-level methods (parallel arrays) ----
+ # ---- Top-level methods (parallel arrays) ----
     @meth_names = "".split(",")
     @meth_param_names = "".split(",")
     @meth_param_types = "".split(",")
-    # Per-param "deferred element" flag: "1" means at least one caller
-    # passed an empty `[]` literal (or a local that itself was assigned
-    # an empty literal). Used by the param body-push promotion pass
-    # (issue #58) to decide whether the param's int_array can be safely
-    # promoted to a concrete typed-array based on body usage.
+ # Per-param "deferred element" flag: "1" means at least one caller
+ # passed an empty `[]` literal (or a local that itself was assigned
+ # an empty literal). Used by the param body-push promotion pass
+ # to decide whether the param's int_array can be safely
+ # promoted to a concrete typed-array based on body usage.
     @meth_param_empty = "".split(",")
     @meth_return_types = "".split(",")
     @meth_body_ids = []
     @meth_has_defaults = "".split(",")
     @meth_rest_index = []
 
-    # ---- Classes (parallel arrays) ----
+ # ---- Classes (parallel arrays) ----
     @cls_names = "".split(",")
     @cls_parents = "".split(",")
-    # Issue #404 Phase 3 Tier 2: per-class list of included module
-    # names, semicolon-separated. Modules live in @module_names so
-    # the resolution from name -> id is deferred to codegen time.
+ # per-class list of included module
+ # names, semicolon-separated. Modules live in @module_names so
+ # the resolution from name -> id is deferred to codegen time.
     @cls_includes = "".split(",")
     @cls_ivar_names = "".split(",")
     @cls_ivar_types = "".split(",")
-    # Per-ivar flag: was the ivar's first scanned write a definite
-    # literal (IntegerNode / FloatNode / StringNode / ...)? Used to
-    # distinguish concrete-literal writes from best-guess inference
-    # so type unification only widens to poly when both writes are
-    # definite — non-recognized CallNodes default to "int" through
-    # infer_ivar_init_type and a naive trust of that produces
-    # spurious disagreement.
+ # Per-ivar flag: was the ivar's first scanned write a definite
+ # literal (IntegerNode / FloatNode / StringNode / ...)? Used to
+ # distinguish concrete-literal writes from best-guess inference
+ # so type unification only widens to poly when both writes are
+ # definite — non-recognized CallNodes default to "int" through
+ # infer_ivar_init_type and a naive trust of that produces
+ # spurious disagreement.
     @cls_ivar_init_definite = "".split(",")
-    # Per-(class, ivar) accumulator of distinct concrete writer
-    # types observed by scan_writer_calls. After all writer-scan
-    # iterations finish, slots with 2+ distinct entries widen to
-    # poly. Observations are recorded with the scope active inside
-    # scan_writer_calls (params declared with their iteratively-
-    # widened ptypes), so e.g. `value` in `def write_any(value);
-    # @id = value` resolves to its caller-pinned type rather than
-    # the placeholder "int" outside that scope. Each entry is a
-    # comma-separated list of distinct types per ivar; the outer
-    # dimension is semicolon-separated and parallel to
-    # `@cls_ivar_names[ci]`.
+ # Per-(class, ivar) accumulator of distinct concrete writer
+ # types observed by scan_writer_calls. After all writer-scan
+ # iterations finish, slots with 2+ distinct entries widen to
+ # poly. Observations are recorded with the scope active inside
+ # scan_writer_calls (params declared with their iteratively-
+ # widened ptypes), so e.g. `value` in `def write_any(value);
+ # @id = value` resolves to its caller-pinned type rather than
+ # the placeholder "int" outside that scope. Each entry is a
+ # comma-separated list of distinct types per ivar; the outer
+ # dimension is semicolon-separated and parallel to
+ # `@cls_ivar_names[ci]`.
     @cls_ivar_observed_types = "".split(",")
-    # Memoization for `find_lv_ivar_alias_in_ast`. Keyed by
-    # `"<class_idx>:<lv_name>"`, value is the resolved ivar name (or
-    # `""` when the LV has multiple sources / non-ivar writes).
+ # Memoization for `find_lv_ivar_alias_in_ast`. Keyed by
+ # `"<class_idx>:<lv_name>"`, value is the resolved ivar name (or
+ # `""` when the LV has multiple sources / non-ivar writes).
     @lv_alias_cache = {}
-    # Memoize cls_find_method_direct(ci, mname) which is called
-    # heavily during the fixpoint and otherwise re-splits
-    # @cls_meth_names[ci] on every call. Key = "<ci>:<mname>".
-    # Invalidated on append_cls_meth (when @cls_meth_names mutates).
+ # Memoize cls_find_method_direct(ci, mname) which is called
+ # heavily during the fixpoint and otherwise re-splits
+ # @cls_meth_names[ci] on every call. Key = "<ci>:<mname>".
+ # Invalidated on append_cls_meth (when @cls_meth_names mutates).
     @cls_meth_idx_cache = {}
-    # Same shape for cls_method_return — top String#split caller.
-    # Key = "<ci>:<mname>", value = the recorded return type.
-    # Invalidated on append_cls_meth + at every refresh of
-    # @cls_meth_returns (infer_all_returns line 12334).
+ # Same shape for cls_method_return — top String#split caller.
+ # Key = "<ci>:<mname>", value = the recorded return type.
+ # Invalidated on append_cls_meth + at every refresh of
+ # @cls_meth_returns (infer_all_returns line 12334).
     @cls_meth_return_cache = {}
-    # Same shape for cls_ivar_type. @cls_ivar_types has ~20 mutation
-    # sites scattered across record_ivar_observation /
-    # update_ivar_type / refine_module_ivar_types / etc., so use a
-    # version counter that each writer bumps. cls_ivar_type clears
-    # the cache when versions disagree, so the cache is auto-fresh
-    # per call without per-site invalidation.
+ # Same shape for cls_ivar_type. @cls_ivar_types has ~20 mutation
+ # sites scattered across record_ivar_observation /
+ # update_ivar_type / refine_module_ivar_types / etc., so use a
+ # version counter that each writer bumps. cls_ivar_type clears
+ # the cache when versions disagree, so the cache is auto-fresh
+ # per call without per-site invalidation.
     @cls_ivar_type_cache = {}
     @cls_ivar_types_version = 0
     @cls_ivar_type_cache_version = 0
-    # Single-slot caches for the outer "|" split of joined per-class
-    # method/param fields. cls_meth_ptypes_get / cls_meth_pnames_get /
-    # cls_cmeth_*_get all do `field[ci].split("|")` then
-    # `[midx].split(",")` — the outer split is repeated for every
-    # (ci, midx) pair. Cache one ci's outer split per field;
-    # consecutive calls with the same ci skip the outer split.
+ # Single-slot caches for the outer "|" split of joined per-class
+ # method/param fields. cls_meth_ptypes_get / cls_meth_pnames_get /
+ # cls_cmeth_*_get all do `field[ci].split("|")` then
+ # `[midx].split(",")` — the outer split is repeated for every
+ # (ci, midx) pair. Cache one ci's outer split per field;
+ # consecutive calls with the same ci skip the outer split.
     @cmp_outer_ci = -1
     @cmp_outer_split = "".split(",")
     @cmp_outer_version = 0
@@ -204,8 +204,8 @@ class Compiler
     @cls_meth_params_version = 0
     @cls_cmeth_ptypes_version = 0
     @cls_cmeth_params_version = 0
-    # Top-level (script-scope) ivars. Lowered to `static` file-scope
-    # globals because `main()` / top-level `def` bodies have no `self`.
+ # Top-level (script-scope) ivars. Lowered to `static` file-scope
+ # globals because `main()` / top-level `def` bodies have no `self`.
     @toplevel_ivar_names = "".split(",")
     @toplevel_ivar_types = "".split(",")
     @cls_meth_names = "".split(",")
@@ -214,8 +214,8 @@ class Compiler
     @cls_meth_returns = "".split(",")
     @cls_meth_bodies = "".split(",")
     @cls_meth_defaults = "".split(",")
-    # Mirror of @meth_param_empty for class methods. Pipe-separated by
-    # method, comma-separated by param. Issue #58.
+ # Mirror of @meth_param_empty for class methods. Pipe-separated by
+ # method, comma-separated by param. .
     @cls_meth_ptypes_empty = "".split(",")
     @cls_attr_readers = "".split(",")
     @cls_attr_writers = "".split(",")
@@ -226,82 +226,82 @@ class Compiler
     @cls_cmeth_bodies = "".split(",")
     @cls_cmeth_defaults = "".split(",")
     @cls_is_value_type = []
-    # SRA (scalar replacement of aggregates) eligibility flag per class.
-    # Classes marked here can have their non-escaping instances replaced
-    # with individual scalar locals. Distinct from value_type: SRA allows
-    # attr_writer (mutation is rewritten to per-field assignment).
+ # SRA (scalar replacement of aggregates) eligibility flag per class.
+ # Classes marked here can have their non-escaping instances replaced
+ # with individual scalar locals. Distinct from value_type: SRA allows
+ # attr_writer (mutation is rewritten to per-field assignment).
     @cls_is_sra = []
 
-    # ---- Constants (parallel arrays) ----
+ # ---- Constants (parallel arrays) ----
     @const_names = "".split(",")
     @const_types = "".split(",")
 
-    # ---- Class variables (@@var) ----
-    # Per-(class,name) parallel arrays. Storage is a per-class C global
-    # named `cvar_<ClassName>_<var>` (var without the @@ prefix).
-    # Spinel's class-var lookup does NOT walk the inheritance chain --
-    # each class's @@var is independent. CRuby's hierarchy-shared cvars
-    # are a known footgun (mame, ko1, et al. publicly disrecommend
-    # them); the simpler per-class semantics fit Spinel's compile-time
-    # storage model better. Documented in the test fixtures.
+ # ---- Class variables (@@var) ----
+ # Per-(class,name) parallel arrays. Storage is a per-class C global
+ # named `cvar_<ClassName>_<var>` (var without the @@ prefix).
+ # Spinel's class-var lookup does NOT walk the inheritance chain --
+ # each class's @@var is independent. CRuby's hierarchy-shared cvars
+ # are a known footgun (mame, ko1, et al. publicly disrecommend
+ # them); the simpler per-class semantics fit Spinel's compile-time
+ # storage model better. Documented in the test fixtures.
     @cvar_names = "".split(",")
     @cvar_types = "".split(",")
-    # Compile-time literal initializer per cvar, if the class-body
-    # write was `@@x = <literal>`. "" means "use type-default". This
-    # is necessary because Spinel doesn't run class-body statements
-    # at startup, so any initializer that's not a fold-able literal
-    # leaves the cvar at its type-default until first write.
+ # Compile-time literal initializer per cvar, if the class-body
+ # write was `@@x = <literal>`. "" means "use type-default". This
+ # is necessary because Spinel doesn't run class-body statements
+ # at startup, so any initializer that's not a fold-able literal
+ # leaves the cvar at its type-default until first write.
     @cvar_init_values = "".split(",")
     @const_expr_ids = []
     @const_scope_names = "".split(",")
 
-    # `redo` -- labeled-goto target stack. Each loop emitter pushes
-    # a fresh label name when entering an iteration body and pops on
-    # exit; a `redo` jumps to the top of the innermost label.
+ # `redo` -- labeled-goto target stack. Each loop emitter pushes
+ # a fresh label name when entering an iteration body and pops on
+ # exit; a `redo` jumps to the top of the innermost label.
     @redo_label_stack = "".split(",")
     @redo_label_counter = 0
 
-    # `alias $copy $orig` -- maps new gvar name to its target.
-    # Populated by collect_all from AliasGlobalVariableNode
-    # statements; consulted by sanitize_gvar / scan_features /
-    # infer_type so $copy and $orig share storage.
+ # `alias $copy $orig` -- maps new gvar name to its target.
+ # Populated by collect_all from AliasGlobalVariableNode
+ # statements; consulted by sanitize_gvar / scan_features /
+ # infer_type so $copy and $orig share storage.
     @galias_new = "".split(",")
     @galias_old = "".split(",")
 
-    # `undef foo` -- per-(class, method-name) registry of removed
-    # methods. Recorded by collect_class_method_undef; compile-time
-    # enforcement of "call after undef fails" is currently a
-    # documented out-of-scope.
+ # `undef foo` -- per-(class, method-name) registry of removed
+ # methods. Recorded by collect_class_method_undef; compile-time
+ # enforcement of "call after undef fails" is currently a
+ # documented out-of-scope.
     @undef_class_idx = []
     @undef_method = "".split(",")
 
-    # `BEGIN { ... }` bodies, in source-encounter order. Hoisted to
-    # the top of main() during emit_main.
+ # `BEGIN { ... }` bodies, in source-encounter order. Hoisted to
+ # the top of main() during emit_main.
     @pre_execution_blocks = []
 
-    # `END { ... }` bodies, in source-encounter order. Each emits a
-    # static C function; main() startup registers them via atexit()
-    # which naturally invokes handlers LIFO -- matches CRuby's
-    # reverse-of-source-order END execution.
+ # `END { ... }` bodies, in source-encounter order. Each emits a
+ # static C function; main() startup registers them via atexit()
+ # which naturally invokes handlers LIFO -- matches CRuby's
+ # reverse-of-source-order END execution.
     @post_execution_blocks = []
 
-    # ---- Scope stack for local variables ----
+ # ---- Scope stack for local variables ----
     @scope_names = "".split(",")
     @scope_types = "".split(",")
-    # Parallel to `@scope_names`: when a local was assigned directly
-    # from an ivar read (`lv = @ivar`), record the ivar name here so
-    # later sites that need ivar-side metadata (notably the
-    # `<poly>[k]` narrowing in `compile_poly_method_call`) can
-    # resolve through the alias. Empty string when the local has no
-    # such alias (or had a non-ivar write since).
+ # Parallel to `@scope_names`: when a local was assigned directly
+ # from an ivar read (`lv = @ivar`), record the ivar name here so
+ # later sites that need ivar-side metadata (notably the
+ # `<poly>[k]` narrowing in `compile_poly_method_call`) can
+ # resolve through the alias. Empty string when the local has no
+ # such alias (or had a non-ivar write since).
     @scope_ivar_alias = "".split(",")
 
-    # Type-narrow stack for `is_a?`/`kind_of?` guards. While walking
-    # the then-arm of `if v.is_a?(Hash)` or the truthy branch of
-    # `v.is_a?(Hash) ? a : b`, the narrowed `(var_name,
-    # narrowed_type)` is pushed here; find_var_type's top-down
-    # lookup picks it up so infer_type / scan / codegen see the
-    # narrowed type without per-pass plumbing.
+ # Type-narrow stack for `is_a?`/`kind_of?` guards. While walking
+ # the then-arm of `if v.is_a?(Hash)` or the truthy branch of
+ # `v.is_a?(Hash) ? a : b`, the narrowed `(var_name,
+ # narrowed_type)` is pushed here; find_var_type's top-down
+ # lookup picks it up so infer_type / scan / codegen see the
+ # narrowed type without per-pass plumbing.
     @type_narrow_names = "".split(",")
     @type_narrow_types = "".split(",")
 
@@ -310,13 +310,13 @@ class Compiler
     @current_lexical_scope = ""
     @current_method_return = ""
     @current_method_block_param = ""
-    # 1 when the wrapping C function being emitted has a `self`
-    # binding (instance method, constructor synthesis). 0 for
-    # class methods, module class methods, and top-level free
-    # functions. Drives the bare-return-with-obj_<C>-return shape
-    # in compile_return_stmt: only when has_self == 1 does a bare
-    # `return` whose function returns obj_<C> lower to `return
-    # self;`; otherwise it emits the type's default value.
+ # 1 when the wrapping C function being emitted has a `self`
+ # binding (instance method, constructor synthesis). 0 for
+ # class methods, module class methods, and top-level free
+ # functions. Drives the bare-return-with-obj_<C>-return shape
+ # in compile_return_stmt: only when has_self == 1 does a bare
+ # `return` whose function returns obj_<C> lower to `return
+ # self;`; otherwise it emits the type's default value.
     @current_method_has_self = 0
     @in_main = 0
     @in_loop = 0
@@ -325,28 +325,28 @@ class Compiler
     @in_yield_method = 0
     @current_method_yield_arity = 1
     @in_gc_scope = 0
-    # Set during the arity-0 instance_eval trampoline inlining so
-    # receiverless calls in the spliced block body dispatch against
-    # the rebound self (the .instance_eval receiver) instead of the
-    # enclosing method's self.
+ # Set during the arity-0 instance_eval trampoline inlining so
+ # receiverless calls in the spliced block body dispatch against
+ # the rebound self (the .instance_eval receiver) instead of the
+ # enclosing method's self.
     @instance_eval_self_var = ""
     @instance_eval_self_type = ""
 
-    # During default-arg substitution, when the callee's default
-    # expression is inlined into the caller, `self_arrow` consults
-    # this override to route `self->iv_X` against the call's
-    # explicit receiver instead of the caller's self.
+ # During default-arg substitution, when the callee's default
+ # expression is inlined into the caller, `self_arrow` consults
+ # this override to route `self->iv_X` against the call's
+ # explicit receiver instead of the caller's self.
     @self_override = ""
 
-    # Yield/block tracking (parallel with meth_names / cls_meth_names)
+ # Yield/block tracking (parallel with meth_names / cls_meth_names)
     @meth_has_yield = []
     @cls_meth_has_yield = "".split(",")
 
-    # Block function accumulator (emitted before forward decls)
+ # Block function accumulator (emitted before forward decls)
     @block_funcs = ""
     @block_counter = 0
 
-    # Feature flags
+ # Feature flags
     @needs_gc = 0
     @needs_system = 0
     @needs_int_array = 0
@@ -360,34 +360,34 @@ class Compiler
     @needs_sym_str_hash = 0
     @needs_sym_intern = 0
     @needs_setjmp = 0
-    # Stack of (class_var, msg_var) pairs naming the snapshot locals
-    # emitted at the top of each rescue body. A bare `raise` inside a
-    # rescue body re-raises with the snapshotted class+message rather
-    # than fabricating a fresh RuntimeError. Empty outside any rescue.
+ # Stack of (class_var, msg_var) pairs naming the snapshot locals
+ # emitted at the top of each rescue body. A bare `raise` inside a
+ # rescue body re-raises with the snapshotted class+message rather
+ # than fabricating a fresh RuntimeError. Empty outside any rescue.
     @rescue_cls_stack = "".split(",")
     @rescue_msg_stack = "".split(",")
     @rescue_depth = 0
-    # Stack of ensure-clause node IDs (encoded as strings) currently in
-    # scope. Each entry corresponds to an enclosing `begin..ensure..end`
-    # whose body is being compiled. When `return` is emitted from inside
-    # the body, each ensure body is replayed (innermost-first) before
-    # the C `return`, so writebacks in `ensure` execute on early return.
+ # Stack of ensure-clause node IDs (encoded as strings) currently in
+ # scope. Each entry corresponds to an enclosing `begin..ensure..end`
+ # whose body is being compiled. When `return` is emitted from inside
+ # the body, each ensure body is replayed (innermost-first) before
+ # the C `return`, so writebacks in `ensure` execute on early return.
     @ensure_stack = "".split(",")
-    # Number of `sp_exc_top++` pushes emitted along the static
-    # fall-through path leading to the current emit point but not
-    # yet matched by an emitted `sp_exc_top--`. An early `return`
-    # emits `sp_exc_top -= N` to balance them, so the caller doesn't
-    # longjmp into our stale stack frame after we've returned.
+ # Number of `sp_exc_top++` pushes emitted along the static
+ # fall-through path leading to the current emit point but not
+ # yet matched by an emitted `sp_exc_top--`. An early `return`
+ # emits `sp_exc_top -= N` to balance them, so the caller doesn't
+ # longjmp into our stale stack frame after we've returned.
     @setjmp_depth = 0
-    # Counter used to mint unique snapshot variable names
-    # (`_ensure_cls_<n>`, `_ensure_msg_<n>`) for re-raising the
-    # in-flight exception after an ensure body runs on the
-    # exception path of a `begin..ensure..end`.
+ # Counter used to mint unique snapshot variable names
+ # (`_ensure_cls_<n>`, `_ensure_msg_<n>`) for re-raising the
+ # in-flight exception after an ensure body runs on the
+ # exception path of a `begin..ensure..end`.
     @ensure_emit_depth = 0
-    # Exception variable bindings: parallel stacks of (var_name, cls_var).
-    # A `rescue => e` binds `e` to the message string and registers it
-    # here so that `e.message`, `e.class`, `e.to_s`, and `e.inspect`
-    # dispatch correctly. Pushed at rescue body entry, popped at exit.
+ # Exception variable bindings: parallel stacks of (var_name, cls_var).
+ # A `rescue => e` binds `e` to the message string and registers it
+ # here so that `e.message`, `e.class`, `e.to_s`, and `e.inspect`
+ # dispatch correctly. Pushed at rescue body entry, popped at exit.
     @exc_var_names = "".split(",")
     @exc_var_cls_vars = "".split(",")
     @needs_mutable_str = 0
@@ -396,26 +396,26 @@ class Compiler
     @needs_rand = 0
     @regexp_patterns = "".split(",")
     @regexp_flags = "".split(",")
-    # Dynamic-regex (InterpolatedRegularExpressionNode) call-site cache.
-    # Each AST node gets a unique idx so the emitter can produce one
-    # `sp_re_dyn_<idx>` helper per source location with its own
-    # function-scope cache (string key + compiled pattern). Collected
-    # in scan_features so indexes are stable across compile_expr visits.
+ # Dynamic-regex (InterpolatedRegularExpressionNode) call-site cache.
+ # Each AST node gets a unique idx so the emitter can produce one
+ # `sp_re_dyn_<idx>` helper per source location with its own
+ # function-scope cache (string key + compiled pattern). Collected
+ # in scan_features so indexes are stable across compile_expr visits.
     @dyn_regex_node_ids = []
     @dyn_regex_flags = "".split(",")
-    # `var = /lit/` resolution. Parallel arrays: `@local_regex_names`
-    # holds the local-variable name and `@local_regex_idx` holds the
-    # corresponding `@regexp_patterns` index, or -1 when the same name
-    # has any other (non-regex or different-regex) write anywhere in
-    # the program — in which case the dispatcher must fall through.
+ # `var = /lit/` resolution. Parallel arrays: `@local_regex_names`
+ # holds the local-variable name and `@local_regex_idx` holds the
+ # corresponding `@regexp_patterns` index, or -1 when the same name
+ # has any other (non-regex or different-regex) write anywhere in
+ # the program — in which case the dispatcher must fall through.
     @local_regex_names = "".split(",")
     @local_regex_idx = []
 
-    # Cache for parse_id_list: AST list fields never change once loaded,
-    # so the parsed IntArray can be shared across callers. The `[[0]]`
-    # literal teaches Spinel that @parse_id_pool is ptr_array<int_array>;
-    # slot 0 is a reserved dummy. PtrArray now scans its elements, so
-    # cached IntArrays stay reachable.
+ # Cache for parse_id_list: AST list fields never change once loaded,
+ # so the parsed IntArray can be shared across callers. The `[[0]]`
+ # literal teaches Spinel that @parse_id_pool is ptr_array<int_array>;
+ # slot 0 is a reserved dummy. PtrArray now scans its elements, so
+ # cached IntArrays stay reachable.
     @parse_id_cache = {}
     @parse_id_pool = [[0]]
 
@@ -423,10 +423,10 @@ class Compiler
     @proc_counter = 0
     @proc_funcs = ""
 
-    # @needs_* flags + lazy ivars that the original codebase set inside
-    # compile_*/emit_* paths (which no longer live in spinel_analyze.rb).
-    # Pre-initialize so dump_analysis_buf can reference them and so spinel
-    # sees them as struct fields when self-compiling spinel_analyze.rb.
+ # @needs_* flags + lazy ivars that the original codebase set inside
+ # compile_*/emit_* paths (which no longer live in spinel_analyze.rb).
+ # Pre-initialize so dump_analysis_buf can reference them and so spinel
+ # sees them as struct fields when self-compiling spinel_analyze.rb.
     @needs_file_io = 0
     @needs_poly_array = 0
     @needs_poly_poly_hash = 0
@@ -437,7 +437,7 @@ class Compiler
     @cls_meth_live = ""
     @multi_const_inits = "".split(",")
 
-    # Lambda support
+ # Lambda support
     @needs_lambda = 0
     @lambda_counter = 0
     @lambda_funcs = ""
@@ -447,18 +447,18 @@ class Compiler
     @lambda_var_ret_names = "".split(",")
     @lambda_var_ret_types = "".split(",")
     @last_lambda_ret_type = ""
-    # `Klass.method(:cls_meth)` generates an adapter trampoline so the
-    # Method object's `(void *self, mrb_int...)` ABI fits a class
-    # method's no-self C signature. Tracks emitted (Klass, method)
-    # pairs to avoid duplicate definitions.
+ # `Klass.method(:cls_meth)` generates an adapter trampoline so the
+ # Method object's `(void *self, mrb_int...)` ABI fits a class
+ # method's no-self C signature. Tracks emitted (Klass, method)
+ # pairs to avoid duplicate definitions.
     @cls_method_adapters = "".split(",")
 
-    # Proc closure support (Phase 2)
+ # Proc closure support (Phase 2)
     @in_proc_body = 0
     @proc_captures = "".split(",")
     @proc_capture_types = "".split(",")
 
-    # Fiber support
+ # Fiber support
     @needs_fiber = 0
     @needs_bigint = 0
     @fiber_counter = 0
@@ -469,51 +469,51 @@ class Compiler
     @heap_promoted_names = "".split(",")
     @heap_promoted_cells = "".split(",")
 
-    # Global variables ($x)
+ # Global variables ($x)
     @gvar_names = "".split(",")
     @gvar_types = "".split(",")
 
-    # Poly tracking: functions with params called with different types
+ # Poly tracking: functions with params called with different types
     @poly_funcs = "".split(",")
     @poly_param_types = "".split(",")
 
-    # Method reference tracking: var_name -> method_name
+ # Method reference tracking: var_name -> method_name
     @method_ref_vars = "".split(",")
     @method_ref_names = "".split(",")
 
-    # Open class tracking for built-in types
+ # Open class tracking for built-in types
     @open_class_names = "".split(",")
 
-    # Module tracking: module_name -> body node id
+ # Module tracking: module_name -> body node id
     @module_names = "".split(",")
     @module_body_ids = []
-    # Module-level singleton accessors (issue #126):
-    #   `class << self; attr_accessor :foo; end` inside `module M`.
-    # `@module_acc_consts[i]` is a `;`-separated list of distinct
-    # constant names assigned to this slot (Stage 1: single name →
-    # inline; Stage 2: multiple names → runtime sentinel switch).
-    # Empty string means at least one write was non-constant — the
-    # slot falls through to the un-folded path.
+ # Module-level singleton accessors :
+ # `class << self; attr_accessor :foo; end` inside `module M`.
+ # `@module_acc_consts[i]` is a `;`-separated list of distinct
+ # constant names assigned to this slot (Stage 1: single name →
+ # inline; Stage 2: multiple names → runtime sentinel switch).
+ # Empty string means at least one write was non-constant — the
+ # slot falls through to the un-folded path.
     @module_acc_keys = "".split(",")
     @module_acc_consts = "".split(",")
 
-    # ---- FFI state (parallel arrays, populated by scan_ffi_decl) ----
-    # Per-module registry:
+ # ---- FFI state (parallel arrays, populated by scan_ffi_decl) ----
+ # Per-module registry:
     @ffi_modules = "".split(",")          # module names that declared FFI
     @ffi_module_libs = "".split(",")      # ";"-joined -l names
     @ffi_module_cflags = "".split(",")    # ";"-joined cc flag strings
-    # Function registry (one entry per ffi_func decl):
+ # Function registry (one entry per ffi_func decl):
     @ffi_func_modules = "".split(",")     # owning module name
     @ffi_func_names = "".split(",")       # C symbol name
     @ffi_func_arg_types = "".split(",")   # ";"-joined Spinel type tokens
     @ffi_func_ret_types = "".split(",")   # single Spinel type token
     @ffi_func_arg_specs = "".split(",")   # ";"-joined original specs (uint32, str, …)
     @ffi_func_ret_specs = "".split(",")   # original return spec
-    # Buffer registry (one entry per ffi_buffer decl):
+ # Buffer registry (one entry per ffi_buffer decl):
     @ffi_buf_modules = "".split(",")
     @ffi_buf_names = "".split(",")
     @ffi_buf_sizes = []                   # int sizes in bytes
-    # Reader registry (one entry per ffi_read_* decl):
+ # Reader registry (one entry per ffi_read_* decl):
     @ffi_reader_modules = "".split(",")
     @ffi_reader_names = "".split(",")
     @ffi_reader_kinds = "".split(",")     # "u32", "i32", "ptr"
@@ -527,39 +527,39 @@ class Compiler
     @lambda_insert_pos = 0
     @cls_method_adapters = "".split(",")
 
-    # Proc closure support (Phase 2)
+ # Proc closure support (Phase 2)
     @in_proc_body = 0
     @proc_captures = "".split(",")
     @proc_capture_types = "".split(",")
 
-    # Symbol type Phase 2 Step 1: intern table (infrastructure only; unused yet).
+ # Symbol type Phase 2 Step 1: intern table (infrastructure only; unused yet).
     @sym_names = "".split(",")
 
-    # instance_eval block hoisting: parallel arrays indexed by synthetic
-    # function id N. Each lifted block becomes a file-scope static
-    # function `sp_ieval_<N>` that takes a typed `self` parameter.
+ # instance_eval block hoisting: parallel arrays indexed by synthetic
+ # function id N. Each lifted block becomes a file-scope static
+ # function `sp_ieval_<N>` that takes a typed `self` parameter.
     @ieval_counter = 0
     @ieval_class_idxs = []
     @ieval_body_ids = []
   end
 
-  # Backslash-n for C string literals - bootstrap-safe (avoids escape level issues)
+ # Backslash-n for C string literals - bootstrap-safe (avoids escape level issues)
   def bsl_n
     92.chr + "n"
   end
 
-  # Backslash for C char literals - bootstrap-safe
+ # Backslash for C char literals - bootstrap-safe
   def bsl
     92.chr
   end
 
 
-  # Parse comma-sep node IDs into IntArray. Manually walks bytes to avoid
-  # allocating the intermediate StrArray + substrings that `String#split`
-  # would produce — this is called ~100 K times during bootstrap.
-  # Results are cached by input string: AST fields are immutable once
-  # parsed, so the same IntArray can be shared across callers. Callers
-  # must treat the result as read-only.
+ # Parse comma-sep node IDs into IntArray. Manually walks bytes to avoid
+ # allocating the intermediate StrArray + substrings that `String#split`
+ # would produce — this is called ~100 K times during bootstrap.
+ # Results are cached by input string: AST fields are immutable once
+ # parsed, so the same IntArray can be shared across callers. Callers
+ # must treat the result as read-only.
   def parse_id_list(s)
     if s == ""
       return []
@@ -588,7 +588,7 @@ class Compiler
     result
   end
 
-  # ---- AST reader ----
+ # ---- AST reader ----
   def alloc_node
     nid = @nd_count
     @nd_type.push("")
@@ -646,7 +646,7 @@ class Compiler
 
   def read_text_ast(data)
     lines = data.split(10.chr)
-    # Pass 1: find max node ID
+ # Pass 1: find max node ID
     max_id = 0
     i = 0
     while i < lines.length
@@ -667,13 +667,13 @@ class Compiler
       end
       i = i + 1
     end
-    # Allocate nodes
+ # Allocate nodes
     j = 0
     while j <= max_id
       alloc_node
       j = j + 1
     end
-    # Pass 2: populate fields
+ # Pass 2: populate fields
     i = 0
     while i < lines.length
       line = lines[i]
@@ -804,8 +804,8 @@ class Compiler
       @nd_unescaped[nid] = val
     end
     if field == "kind"
-      # UnsupportedNode carries the Prism node-type name here so
-      # codegen can surface a precise compile error.
+ # UnsupportedNode carries the Prism node-type name here so
+ # codegen can surface a precise compile error.
       @nd_content[nid] = val
     end
   end
@@ -827,8 +827,8 @@ class Compiler
       @nd_value[nid] = val
     end
     if field == "source_line"
-      # UnsupportedNode carries the source line so codegen can cite
-      # location in the compile error.
+ # UnsupportedNode carries the source line so codegen can cite
+ # location in the compile error.
       @nd_value[nid] = val
     end
   end
@@ -919,8 +919,8 @@ class Compiler
       @nd_receiver[nid] = ref_id
     end
     if field == "new_name"
-      # AliasMethodNode / AliasGlobalVariableNode -- the new-name slot
-      # (a SymbolNode for methods, GlobalVariableReadNode for globals).
+ # AliasMethodNode / AliasGlobalVariableNode -- the new-name slot
+ # (a SymbolNode for methods, GlobalVariableReadNode for globals).
       @nd_new_name[nid] = ref_id
     end
     if field == "old_name"
@@ -969,21 +969,21 @@ class Compiler
       @nd_posts[nid] = ids_str
     end
     if field == "names"
-      # UndefNode -- list of SymbolNode names to undef.
+ # UndefNode -- list of SymbolNode names to undef.
       @nd_names[nid] = ids_str
     end
   end
 
-  # ---- Convenience: get stmts of a body node ----
+ # ---- Convenience: get stmts of a body node ----
   def get_stmts(nid)
     if nid < 0
       return []
     end
-    # If it's a StatementsNode, return its stmts
+ # If it's a StatementsNode, return its stmts
     if @nd_type[nid] == "StatementsNode"
       return parse_id_list(@nd_stmts[nid])
     end
-    # Otherwise return single-element array
+ # Otherwise return single-element array
     result = []
     result.push(nid)
     result
@@ -998,7 +998,7 @@ class Compiler
   end
 
   def get_args(nid)
-    # nid is an ArgumentsNode
+ # nid is an ArgumentsNode
     if nid < 0
       return []
     end
@@ -1010,48 +1010,48 @@ class Compiler
     result
   end
 
-  # Returns 1 if @nd_block[nid] is a literal BlockNode (do/end body),
-  # 0 otherwise. Pairs with find_block_arg to dispatch correctly at
-  # &block-forwarding call sites (literal block vs. `&proc_var`).
+ # Returns 1 if @nd_block[nid] is a literal BlockNode (do/end body),
+ # 0 otherwise. Pairs with find_block_arg to dispatch correctly at
+ # &block-forwarding call sites (literal block vs. `&proc_var`).
 
-  # Returns the inner expression of a BlockArgumentNode whose payload
-  # is a captured proc local (the `&block` form). Returns -1 for
-  # absent block-arg, or for shapes the codegen doesn't yet forward
-  # — `&:sym` (SymbolNode) and `&nil` (NilNode), which would need
-  # symbol-to-proc / nil-as-no-block lowering. Call sites fall
-  # through to the no-block path in those cases.
+ # Returns the inner expression of a BlockArgumentNode whose payload
+ # is a captured proc local (the `&block` form). Returns -1 for
+ # absent block-arg, or for shapes the codegen doesn't yet forward
+ # — `&:sym` (SymbolNode) and `&nil` (NilNode), which would need
+ # symbol-to-proc / nil-as-no-block lowering. Call sites fall
+ # through to the no-block path in those cases.
 
-  # Resolves the call-site block-forwarding expression: returns the C
-  # expression for the proc to forward at a `&block`-taking call site
-  # (a literal block compiles to sp_proc_new(...); a `&proc_var` is
-  # the captured `sp_Proc *` local), or "" if the call site provides
-  # no block.
+ # Resolves the call-site block-forwarding expression: returns the C
+ # expression for the proc to forward at a `&block`-taking call site
+ # (a literal block compiles to sp_proc_new(...); a `&proc_var` is
+ # the captured `sp_Proc *` local), or "" if the call site provides
+ # no block.
 
-  # Returns the body node id for class ci's midx'th method, or -1
-  # if midx is out of range or the body id is invalid. Centralises
-  # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
-  # don't have to inline it.
+ # Returns the body node id for class ci's midx'th method, or -1
+ # if midx is out of range or the body id is invalid. Centralises
+ # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
+ # don't have to inline it.
 
-  # Returns the name of the class method's single proc-typed param
-  # (its `&block` slot), or "" if the signature isn't exactly one
-  # proc param. Used by detectors that match the
-  # `def m(&b); ...; end` shape (instance_eval trampoline today;
-  # extensible to instance_exec, tap, etc.).
+ # Returns the name of the class method's single proc-typed param
+ # (its `&block` slot), or "" if the signature isn't exactly one
+ # proc param. Used by detectors that match the
+ # `def m(&b); ...; end` shape (instance_eval trampoline today;
+ # extensible to instance_exec, tap, etc.).
 
-  # Detects the exact arity-0 instance_eval trampoline shape:
-  # `def m(&b); instance_eval(&b); end`. Returns 1 when the
-  # (ci, midx) method body is a single CallNode of `instance_eval`
-  # forwarded the method's sole proc-typed param via &-arg, 0
-  # otherwise. Spinel inlines these at the call site (yield-style)
-  # with self rebound to the receiver — full Ruby instance_eval is
-  # dynamic, but this AOT compromise covers the common DSL-trampoline
-  # shape. Anything wider falls through to today's silent no-op.
+ # Detects the exact arity-0 instance_eval trampoline shape:
+ # `def m(&b); instance_eval(&b); end`. Returns 1 when the
+ # (ci, midx) method body is a single CallNode of `instance_eval`
+ # forwarded the method's sole proc-typed param via &-arg, 0
+ # otherwise. Spinel inlines these at the call site (yield-style)
+ # with self rebound to the receiver — full Ruby instance_eval is
+ # dynamic, but this AOT compromise covers the common DSL-trampoline
+ # shape. Anything wider falls through to today's silent no-op.
 
-  # Flatten a constant reference into an internal name.
-  #   C       -> C
-  #   ::C     -> C
-  #   M::C    -> M_C
-  #   A::B::C -> A_B_C
+ # Flatten a constant reference into an internal name.
+ # C -> C
+ # ::C -> C
+ # M::C -> M_C
+ # A::B::C -> A_B_C
   def const_ref_flat_name(nid)
     if nid < 0
       return ""
@@ -1138,12 +1138,12 @@ class Compiler
     0
   end
 
-  # Constant names the codegen recognises as legitimate even when no
-  # user-defined class / module / constant of the same name exists.
-  # These are dispatcher-handled module-like receivers (Math, File,
-  # ENV, Dir, Time, Process, IO), the global ARGV, the built-in type
-  # names used in `is_a?` / `case`/`when` arms, and a handful of
-  # exception classes referenced by `raise` / `rescue` patterns.
+ # Constant names the codegen recognises as legitimate even when no
+ # user-defined class / module / constant of the same name exists.
+ # These are dispatcher-handled module-like receivers (Math, File,
+ # ENV, Dir, Time, Process, IO), the global ARGV, the built-in type
+ # names used in `is_a?` / `case`/`when` arms, and a handful of
+ # exception classes referenced by `raise` / `rescue` patterns.
 
   def current_lexical_scope_name
     if @current_lexical_scope != ""
@@ -1157,7 +1157,7 @@ class Compiler
     end
     if @current_method_name != ""
       cls_idx = @current_method_name.index("_cls_")
-      # CRuby returns nil when not found; spinel runtime returns -1.
+ # CRuby returns nil when not found; spinel runtime returns -1.
       if cls_idx != nil && cls_idx >= 0
         return @current_method_name[0, cls_idx]
       end
@@ -1170,8 +1170,8 @@ class Compiler
       return ""
     end
     idx = name.rindex("_")
-    # CRuby returns nil when not found; spinel runtime returns -1.
-    # Treat both as "no underscore — root scope".
+ # CRuby returns nil when not found; spinel runtime returns -1.
+ # Treat both as "no underscore — root scope".
     if idx == nil || idx < 0
       return ""
     end
@@ -1213,7 +1213,7 @@ class Compiler
     ""
   end
 
-  # ---- Scope management ----
+ # ---- Scope management ----
   def push_scope
     @scope_names.push("---")
     @scope_types.push("---")
@@ -1243,9 +1243,9 @@ class Compiler
     0
   end
 
-  # Returns the snapshot class-name C variable for an exception
-  # variable currently bound by an enclosing `rescue => name`, or
-  # empty string if `name` is not an active exception binding.
+ # Returns the snapshot class-name C variable for an exception
+ # variable currently bound by an enclosing `rescue => name`, or
+ # empty string if `name` is not an active exception binding.
   def find_exc_var_cls(name)
     i = @exc_var_names.length - 1
     while i >= 0
@@ -1257,13 +1257,13 @@ class Compiler
     ""
   end
 
-  # Emit a bare `raise` (no message arg). Inside a rescue body the
-  # snapshotted class+message is re-raised; outside any rescue it
-  # falls back to a fresh RuntimeError, matching CRuby.
+ # Emit a bare `raise` (no message arg). Inside a rescue body the
+ # snapshotted class+message is re-raised; outside any rescue it
+ # falls back to a fresh RuntimeError, matching CRuby.
 
-  # Record / clear an ivar alias for a local variable. Walks the
-  # `@scope_*` parallel stacks like `set_var_type` does. `iname` is
-  # the source ivar name (e.g. `@fetch`); pass `""` to clear.
+ # Record / clear an ivar alias for a local variable. Walks the
+ # `@scope_*` parallel stacks like `set_var_type` does. `iname` is
+ # the source ivar name (e.g. `@fetch`); pass `""` to clear.
 
   def find_var_ivar_alias(name)
     i = @scope_names.length - 1
@@ -1277,9 +1277,9 @@ class Compiler
   end
 
   def find_var_type(name)
-    # Type-narrow override (issue #207): walk top-down so the
-    # innermost is_a? guard wins. Skipped for the unscoped global
-    # call (e.g. ivar lookups) — narrows are about local var typing.
+ # Type-narrow override : walk top-down so the
+ # innermost is_a? guard wins. Skipped for the unscoped global
+ # call (e.g. ivar lookups) — narrows are about local var typing.
     i = @type_narrow_names.length - 1
     while i >= 0
       if @type_narrow_names[i] == name
@@ -1297,13 +1297,13 @@ class Compiler
     ""
   end
 
-  # ---- is_a? type narrowing ----
-  # `<expr>.is_a?(<Class>)` (or kind_of?) used as the predicate of
-  # an if / ternary lets us treat <expr> as <Class>'s type inside
-  # the then-arm. The four entry points (push, pop,
-  # narrow_type_for_class, parse_is_a_predicate) are called from
-  # both inference and codegen sides — keep the API tiny so the
-  # narrow context can be plumbed through without leaking state.
+ # ---- is_a? type narrowing ----
+ # `<expr>.is_a?(<Class>)` (or kind_of?) used as the predicate of
+ # an if / ternary lets us treat <expr> as <Class>'s type inside
+ # the then-arm. The four entry points (push, pop,
+ # narrow_type_for_class, parse_is_a_predicate) are called from
+ # both inference and codegen sides — keep the API tiny so the
+ # narrow context can be plumbed through without leaking state.
 
   def push_type_narrow(var_name, narrow_type)
     @type_narrow_names.push(var_name)
@@ -1315,14 +1315,14 @@ class Compiler
     @type_narrow_types.pop
   end
 
-  # Map a Ruby class name to spinel's static type tag for narrowing.
-  # Returns "" when the class doesn't have a concrete spinel type
-  # we can narrow to (and the call site should leave the var type
-  # alone). The first set is concrete primitives — narrow gives a
-  # real type win. The Hash / Array group widens to the catch-all
-  # poly_* variant since spinel doesn't track a single "any hash"
-  # type, but `poly_hash` / `poly_array` reaches every receiver-
-  # method dispatch the narrowed var participates in.
+ # Map a Ruby class name to spinel's static type tag for narrowing.
+ # Returns "" when the class doesn't have a concrete spinel type
+ # we can narrow to (and the call site should leave the var type
+ # alone). The first set is concrete primitives — narrow gives a
+ # real type win. The Hash / Array group widens to the catch-all
+ # poly_* variant since spinel doesn't track a single "any hash"
+ # type, but `poly_hash` / `poly_array` reaches every receiver-
+ # method dispatch the narrowed var participates in.
   def narrow_type_for_class(cname)
     if cname == "Symbol"
       return "symbol"
@@ -1342,46 +1342,46 @@ class Compiler
     if cname == "NilClass"
       return "nil"
     end
-    # Hash / Array narrow intentionally omitted: spinel has many
-    # concrete hash/array variants (sym_int_hash, str_str_hash,
-    # int_array, ...) and no single "any hash" type that supports
-    # iteration. Narrowing to a generic "poly_hash" widens callee
-    # params via unify_call_types to "poly", which makes the body's
-    # `each` loop drop out (no overload for poly recv). The
-    # symbolize_keys-style recursive repro in #207 hits this: better
-    # to leave the C compile error visible than emit a silently-
-    # empty body. Concrete-class narrow (Symbol, Integer, ...)
-    # below is unaffected.
+ # Hash / Array narrow intentionally omitted: spinel has many
+ # concrete hash/array variants (sym_int_hash, str_str_hash,
+ # int_array, ...) and no single "any hash" type that supports
+ # iteration. Narrowing to a generic "poly_hash" widens callee
+ # params via unify_call_types to "poly", which makes the body's
+ # `each` loop drop out (no overload for poly recv). The
+ # symbolize_keys-style recursive repro in hits this: better
+ # to leave the C compile error visible than emit a silently-
+ # empty body. Concrete-class narrow (Symbol, Integer, ...)
+ # below is unaffected.
     if cname == "Proc"
       return "proc"
     end
     if cname == "Range"
       return "range"
     end
-    # User-defined class: narrow to obj_<C> when the class is
-    # registered. Otherwise return "" — narrow is a no-op.
+ # User-defined class: narrow to obj_<C> when the class is
+ # registered. Otherwise return "" — narrow is a no-op.
     if find_class_idx(cname) >= 0
       return "obj_" + cname
     end
     ""
   end
 
-  # Static evaluation of `<expr>.is_a?(<Class>)` /
-  # `.kind_of?(<Class>)` when expr's static type already proves the
-  # answer. Returns "TRUE" / "FALSE" / "" (= dynamic). Used at
-  # IfNode emit sites to skip the dead arm so the C compiler doesn't
-  # type-check a recursion call whose argument types don't match.
+ # Static evaluation of `<expr>.is_a?(<Class>)` /
+ # `.kind_of?(<Class>)` when expr's static type already proves the
+ # answer. Returns "TRUE" / "FALSE" / "" (= dynamic). Used at
+ # IfNode emit sites to skip the dead arm so the C compiler doesn't
+ # type-check a recursion call whose argument types don't match.
 
 
-  # When the receiver's static type is a non-poly concrete tag, we
-  # can safely declare any non-matching is_a? as FALSE. Used by the
-  # primitive class branches above.
+ # When the receiver's static type is a non-poly concrete tag, we
+ # can safely declare any non-matching is_a? as FALSE. Used by the
+ # primitive class branches above.
 
-  # Decode `<expr>.is_a?(<Class>)` / `.kind_of?(<Class>)` into
-  # `(var_name, narrow_type)` when expr is a LocalVariableReadNode
-  # and the argument is a constant naming a known class. Returns
-  # `["", ""]` if the predicate isn't a narrowable shape (the empty
-  # var name is the sentinel; the caller skips the push).
+ # Decode `<expr>.is_a?(<Class>)` / `.kind_of?(<Class>)` into
+ # `(var_name, narrow_type)` when expr is a LocalVariableReadNode
+ # and the argument is a constant naming a known class. Returns
+ # `["", ""]` if the predicate isn't a narrowable shape (the empty
+ # var name is the sentinel; the caller skips the push).
   def parse_is_a_predicate(pred_id)
     if pred_id < 0
       return ["", ""]
@@ -1422,13 +1422,13 @@ class Compiler
     [@nd_name[expr], nt]
   end
 
-  # Try to evaluate a predicate expression at compile time. Returns
-  # "TRUE" / "FALSE" when the result is known statically; "" when it
-  # depends on runtime state. Currently handles `<typed>.is_a?(Klass)` /
-  # `kind_of?(Klass)` / `instance_of?(Klass)` where the receiver's
-  # static type clearly does or does not match the queried class —
-  # this lets compile_if_expr / infer_type(IfNode) skip the dead arm
-  # so the typed-friendly arm doesn't get widened to poly via unify.
+ # Try to evaluate a predicate expression at compile time. Returns
+ # "TRUE" / "FALSE" when the result is known statically; "" when it
+ # depends on runtime state. Currently handles `<typed>.is_a?(Klass)` /
+ # `kind_of?(Klass)` / `instance_of?(Klass)` where the receiver's
+ # static type clearly does or does not match the queried class —
+ # this lets compile_if_expr / infer_type(IfNode) skip the dead arm
+ # so the typed-friendly arm doesn't get widened to poly via unify.
 
   def set_var_type(name, vtype)
     i = @scope_names.length - 1
@@ -1441,22 +1441,22 @@ class Compiler
     end
   end
 
-  # ---- Class/Method lookup (all parallel arrays) ----
+ # ---- Class/Method lookup (all parallel arrays) ----
 
-  # Returns a C expression evaluating to a `mrb_regexp_pattern *`, or "" if
-  # the node isn't a regex source. Static literals resolve to their
-  # pre-compiled `sp_re_pat_<i>` global; InterpolatedRegularExpressionNode
-  # gets a runtime `sp_re_runtime_compile(...)` call. Centralizes the
-  # dispatch so each =~/match?/match/gsub/sub/scan/split call site doesn't
-  # have to repeat the InterpolatedRegex check.
+ # Returns a C expression evaluating to a `mrb_regexp_pattern *`, or "" if
+ # the node isn't a regex source. Static literals resolve to their
+ # pre-compiled `sp_re_pat_<i>` global; InterpolatedRegularExpressionNode
+ # gets a runtime `sp_re_runtime_compile(...)` call. Centralizes the
+ # dispatch so each =~/match?/match/gsub/sub/scan/split call site doesn't
+ # have to repeat the InterpolatedRegex check.
 
-  # Maps Prism's regex flag bits to the engine's `RE_FLAG_*` values and
-  # returns a C bitwise-OR string ("0", "1", "1|6", etc.). Single source
-  # of truth used by both the static-regex collector arm in scan_features
-  # and the per-call-site helper emitted by emit_dyn_regex_helpers.
-  # Prism: IGNORE_CASE=4, EXTENDED=8, MULTI_LINE=16.
-  # Engine: IGNORECASE=1, MULTILINE=2, DOTALL=4, EXTENDED=8.
-  # Ruby's /m (dot-matches-newline) maps to MULTILINE|DOTALL = 6.
+ # Maps Prism's regex flag bits to the engine's `RE_FLAG_*` values and
+ # returns a C bitwise-OR string ("0", "1", "1|6", etc.). Single source
+ # of truth used by both the static-regex collector arm in scan_features
+ # and the per-call-site helper emitted by emit_dyn_regex_helpers.
+ # Prism: IGNORE_CASE=4, EXTENDED=8, MULTI_LINE=16.
+ # Engine: IGNORECASE=1, MULTILINE=2, DOTALL=4, EXTENDED=8.
+ # Ruby's /m (dot-matches-newline) maps to MULTILINE|DOTALL = 6.
   def regex_engine_flags(nid)
     if @nd_flags[nid] == 0
       return "0"
@@ -1478,9 +1478,9 @@ class Compiler
     parts.join("|")
   end
 
-  # Index of an InterpolatedRegularExpressionNode in @dyn_regex_node_ids,
-  # or -1 if scan_features hasn't registered it (defensive — should not
-  # happen for any reachable node).
+ # Index of an InterpolatedRegularExpressionNode in @dyn_regex_node_ids,
+ # or -1 if scan_features hasn't registered it (defensive — should not
+ # happen for any reachable node).
 
   def find_class_idx(name)
     i = 0
@@ -1493,11 +1493,11 @@ class Compiler
     -1
   end
 
-  # Walk @cls_parents starting from `child_idx` and return 1 if we
-  # ever land on `ancestor_idx`. Used by `is_a?(<Klass>)` on poly
-  # receivers to enumerate descendant cls_ids — `recv.is_a?(C)` is
-  # true when recv's class is C or any subclass of C, so we OR
-  # together every cls_id whose parent chain reaches C.
+ # Walk @cls_parents starting from `child_idx` and return 1 if we
+ # ever land on `ancestor_idx`. Used by `is_a?(<Klass>)` on poly
+ # receivers to enumerate descendant cls_ids — `recv.is_a?(C)` is
+ # true when recv's class is C or any subclass of C, so we OR
+ # together every cls_id whose parent chain reaches C.
 
   def find_method_idx(name)
     i = 0
@@ -1528,10 +1528,10 @@ class Compiler
     -1
   end
 
-  # ---- Class variable helpers ----
-  # Qualified name for a class-var slot: `<ClassName>_<var>` where
-  # <var> drops the leading @@. Codegen emits one C global named
-  # `cvar_<qname>` per registered cvar.
+ # ---- Class variable helpers ----
+ # Qualified name for a class-var slot: `<ClassName>_<var>` where
+ # <var> drops the leading @@. Codegen emits one C global named
+ # `cvar_<qname>` per registered cvar.
   def cvar_qname(class_idx, var_name)
     cls = "Toplevel"
     if class_idx >= 0
@@ -1555,14 +1555,14 @@ class Compiler
     -1
   end
 
-  # Register or update a cvar's inferred type. Called from
-  # collect_cvars during the pre-pass and (defensively) again from
-  # compile_stmt when the write fires.
+ # Register or update a cvar's inferred type. Called from
+ # collect_cvars during the pre-pass and (defensively) again from
+ # compile_stmt when the write fires.
   def register_cvar(qname, t)
     ci = find_cvar_idx(qname)
     if ci >= 0
-      # Widen on type disagreement: int + string -> poly. Conservative
-      # for v1 -- when the gap matters we'll revisit.
+ # Widen on type disagreement: int + string -> poly. Conservative
+ # for v1 -- when the gap matters we'll revisit.
       if @cvar_types[ci] != t && @cvar_types[ci] != "poly" && t != ""
         @cvar_types[ci] = "poly"
       end
@@ -1574,13 +1574,13 @@ class Compiler
     @cvar_names.length - 1
   end
 
-  # Try to compile-time fold a class-body cvar initializer. If the
-  # value is a simple literal (Integer/Float/String/Symbol/True/
-  # False/Nil), capture it as the static decl's initializer so the
-  # cvar enters the program with the source's value rather than the
-  # type default. Spinel doesn't run class-body statements at
-  # startup, so without this fold a `class C; @@x = 42; end` leaves
-  # cvar_C_x at 0 until the first write fires.
+ # Try to compile-time fold a class-body cvar initializer. If the
+ # value is a simple literal (Integer/Float/String/Symbol/True/
+ # False/Nil), capture it as the static decl's initializer so the
+ # cvar enters the program with the source's value rather than the
+ # type default. Spinel doesn't run class-body statements at
+ # startup, so without this fold a `class C; @@x = 42; end` leaves
+ # cvar_C_x at 0 until the first write fires.
   def try_fold_cvar_init(qname, value_id)
     if value_id < 0
       return
@@ -1617,12 +1617,12 @@ class Compiler
     end
   end
 
-  # If the constant's initializer is a simple literal, return the
-  # corresponding C expression.  Otherwise return "" so callers fall
-  # back to cst_<name> lookup.  Enables propagation of:
-  #   N = 10  →  10 at use sites
+ # If the constant's initializer is a simple literal, return the
+ # corresponding C expression. Otherwise return "" so callers fall
+ # back to cst_<name> lookup. Enables propagation of:
+ # N = 10 → 10 at use sites
 
-  # Find method in class (search parent chain)
+ # Find method in class (search parent chain)
   def cls_find_method(ci, mname)
     names = @cls_meth_names[ci].split(";")
     j = 0
@@ -1632,7 +1632,7 @@ class Compiler
       end
       j = j + 1
     end
-    # Check parent
+ # Check parent
     if @cls_parents[ci] != ""
       pi = find_class_idx(@cls_parents[ci])
       if pi >= 0
@@ -1642,19 +1642,19 @@ class Compiler
     -1
   end
 
-  # Walk the parent chain looking for a class method
-  # (`def self.<mname>`) named `mname`. Returns the class index that
-  # defines it, or -1 if not found. Lets `Leaf.all` resolve to
-  # `Base.all` (and emit `sp_Base_cls_all(...)`) when Leaf inherits
-  # from Base without overriding `.all`. Mirrors cls_method_return's
-  # parent walk for instance methods.
-  # Walks @cls_parents from `child` looking for `ancestor`.
-  # Mirrors codegen's `cls_is_descendant` so the analyze-side
-  # divergence check at the `<obj>.class.<m>` inference site
-  # can enumerate the recv's descendants without the helper
-  # being out of sync. (Codegen has its own copy with the same
-  # name; the two diverge only if one side is rebuilt while
-  # the other isn't -- the bootstrap fixpoint catches that.)
+ # Walk the parent chain looking for a class method
+ # (`def self.<mname>`) named `mname`. Returns the class index that
+ # defines it, or -1 if not found. Lets `Leaf.all` resolve to
+ # `Base.all` (and emit `sp_Base_cls_all(...)`) when Leaf inherits
+ # from Base without overriding `.all`. Mirrors cls_method_return's
+ # parent walk for instance methods.
+ # Walks @cls_parents from `child` looking for `ancestor`.
+ # Mirrors codegen's `cls_is_descendant` so the analyze-side
+ # divergence check at the `<obj>.class.<m>` inference site
+ # can enumerate the recv's descendants without the helper
+ # being out of sync. (Codegen has its own copy with the same
+ # name; the two diverge only if one side is rebuilt while
+ # the other isn't -- the bootstrap fixpoint catches that.)
   def cls_is_descendant(child, ancestor)
     ck = child
     while ck >= 0
@@ -1695,11 +1695,11 @@ class Compiler
     -1
   end
 
-  # `<arr>.method(:op)` for built-in array types: which (recv_type,
-  # mname) pairs we can lower into a Method-dispatch adapter. Limited
-  # to int_array's bracket ops + push for now (the optcarrot CPU
-  # memory-mapping shape `@ram.method(:[]=)`); extend the body to
-  # cover more (recv_type, mname) pairs as workloads need them.
+ # `<arr>.method(:op)` for built-in array types: which (recv_type,
+ # mname) pairs we can lower into a Method-dispatch adapter. Limited
+ # to int_array's bracket ops + push for now (the optcarrot CPU
+ # memory-mapping shape `@ram.method(:[]=)`); extend the body to
+ # cover more (recv_type, mname) pairs as workloads need them.
   def builtin_array_method_supported(recv_type, mname)
     if recv_type == "int_array"
       if mname == "[]" || mname == "[]=" || mname == "push"
@@ -1710,20 +1710,20 @@ class Compiler
   end
 
 
-  # Emit a per-(array_type, mname) trampoline that fits the Method
-  # dispatch ABI `(void *self, mrb_int...) -> mrb_int`. The body
-  # forwards to the corresponding `sp_<Pfx>_<op>` runtime function;
-  # write-style ops (`[]=`, `push`) return the rhs the way Ruby's
-  # bracket-write does. Idempotent: re-emitting the same key is a
-  # no-op. Reuses @cls_method_adapters with a `@@`-prefixed key so
-  # it cannot collide with a user-class method adapter entry.
+ # Emit a per-(array_type, mname) trampoline that fits the Method
+ # dispatch ABI `(void *self, mrb_int...) -> mrb_int`. The body
+ # forwards to the corresponding `sp_<Pfx>_<op>` runtime function;
+ # write-style ops (`[]=`, `push`) return the rhs the way Ruby's
+ # bracket-write does. Idempotent: re-emitting the same key is a
+ # no-op. Reuses @cls_method_adapters with a `@@`-prefixed key so
+ # it cannot collide with a user-class method adapter entry.
 
-  # Emit a one-off adapter that wraps `sp_<Klass>_cls_<mname>` so the
-  # Method dispatch ABI `(void *self, mrb_int...)` works on a class
-  # method (which has no self param). Idempotent: re-emitting the
-  # same (Klass, mname) pair is a no-op. Buffered into @lambda_funcs
-  # so the function lands at the same insertion point as lambdas
-  # (before main, after forward declarations of every cls method).
+ # Emit a one-off adapter that wraps `sp_<Klass>_cls_<mname>` so the
+ # Method dispatch ABI `(void *self, mrb_int...)` works on a class
+ # method (which has no self param). Idempotent: re-emitting the
+ # same (Klass, mname) pair is a no-op. Buffered into @lambda_funcs
+ # so the function lands at the same insertion point as lambdas
+ # (before main, after forward declarations of every cls method).
 
   def cls_cmethod_return_inherited(ci, mname)
     owner = cls_cmethod_owner(ci, mname)
@@ -1776,7 +1776,7 @@ class Compiler
     "int"
   end
 
-  # Get ivar type from class
+ # Get ivar type from class
   def cls_ivar_type(ci, iname)
     if @cls_ivar_type_cache_version != @cls_ivar_types_version
       @cls_ivar_type_cache = {}
@@ -1818,51 +1818,51 @@ class Compiler
     result
   end
 
-  # ---- Emit helpers ----
+ # ---- Emit helpers ----
 
 
 
-  # ---- Type inference ----
-  # `node_type` is the codegen's interface to per-AST-node types.
-  # When the cache has been pre-filled (analyze→codegen split path)
-  # this is an O(1) array read. Otherwise it's a transparent forward
-  # to infer_type. We do NOT lazily fill the cache from emission paths
-  # because emission can mutate analysis state (auto_register_attr_*,
-  # @needs_* side-flags, etc.) and a cached value would freeze before
-  # those mutations land.
+ # ---- Type inference ----
+ # `node_type` is the codegen's interface to per-AST-node types.
+ # When the cache has been pre-filled (analyze→codegen split path)
+ # this is an O(1) array read. Otherwise it's a transparent forward
+ # to infer_type. We do NOT lazily fill the cache from emission paths
+ # because emission can mutate analysis state (auto_register_attr_*,
+ # @needs_* side-flags, etc.) and a cached value would freeze before
+ # those mutations land.
 
   def infer_type(nid)
     if nid < 0
       return "void"
     end
-    # During analyze fixpoint, types are still converging; reading
-    # the cache would freeze callers on stale values from earlier
-    # iterations. Cache lookup is gated by @analysis_frozen so it
-    # only kicks in during annotate_all_node_types' bottom-up walk
-    # (which runs once after fixpoint converges and benefits from
-    # short-circuiting subtree-rewalks via cached children).
+ # During analyze fixpoint, types are still converging; reading
+ # the cache would freeze callers on stale values from earlier
+ # iterations. Cache lookup is gated by @analysis_frozen so it
+ # only kicks in during annotate_all_node_types' bottom-up walk
+ # (which runs once after fixpoint converges and benefits from
+ # short-circuiting subtree-rewalks via cached children).
     if @analysis_frozen == 1
       cached = @nd_inferred_type[nid]
       if cached != ""
         return cached
       end
     end
-    # NOTE: lazy caching during emission is unsafe. Several emit_*
-    # methods (emit_global_constants, emit_class_structs, …) call
-    # infer_type on nodes whose lexical scope isn't set up yet
-    # (emit_main only push_scopes at its top). A cached miss-then-
-    # compute under an empty scope freezes in the wrong type
-    # (e.g. LocalVariableReadNode falls through to "int" because
-    # find_var_type returns ""), and later emit_main calls then
-    # see the stale cache. Until annotate_all_node_types mirrors
-    # emit_main's three-pass scope refinement so we can pre-fill
-    # the cache once with correct context, infer_type stays
-    # uncached during emission.
+ # NOTE: lazy caching during emission is unsafe. Several emit_*
+ # methods (emit_global_constants, emit_class_structs, …) call
+ # infer_type on nodes whose lexical scope isn't set up yet
+ # (emit_main only push_scopes at its top). A cached miss-then-
+ # compute under an empty scope freezes in the wrong type
+ # (e.g. LocalVariableReadNode falls through to "int" because
+ # find_var_type returns ""), and later emit_main calls then
+ # see the stale cache. Until annotate_all_node_types mirrors
+ # emit_main's three-pass scope refinement so we can pre-fill
+ # the cache once with correct context, infer_type stays
+ # uncached during emission.
     t = @nd_type[nid]
     if t == "SuperNode" || t == "ForwardingSuperNode"
-      # `super` returns whatever the parent's same-named method
-      # returns. Walk to the parent's `find_method_owner`-resolved
-      # method and read its return type.
+ # `super` returns whatever the parent's same-named method
+ # returns. Walk to the parent's `find_method_owner`-resolved
+ # method and read its return type.
       if @current_class_idx >= 0 && @current_method_name != ""
         parent_name_st = @cls_parents[@current_class_idx]
         if parent_name_st != ""
@@ -1908,15 +1908,15 @@ class Compiler
       return "string"
     end
     if t == "InterpolatedSymbolNode"
-      # Spinel doesn't intern dynamic symbols; the runtime value is
-      # the assembled string. Use sites that need symbol-typed
-      # behaviour (sym_int_hash keys, ===) won't work, but puts/==/
-      # string interpolation/regex match all do.
+ # Spinel doesn't intern dynamic symbols; the runtime value is
+ # the assembled string. Use sites that need symbol-typed
+ # behaviour (sym_int_hash keys, ===) won't work, but puts/==/
+ # string interpolation/regex match all do.
       return "string"
     end
     if t == "BackReferenceReadNode"
-      # `$&`, `$`, `$'`, `$~` -- all return the matched-string
-      # form. Same shape as NumberedReferenceReadNode at line 1474.
+ # `$&`, `$`, `$'`, `$~` -- all return the matched-string
+ # form. Same shape as NumberedReferenceReadNode at line 1474.
       return "string"
     end
     if t == "TrueNode"
@@ -1947,10 +1947,10 @@ class Compiler
       return "range"
     end
     if t == "RescueModifierNode"
-      # `expr rescue fallback` — unify the types of the two branches.
-      # The fallback always runs on error, so prefer its type when the
-      # main branch is a noreturn-shaped expression like a bare `raise`
-      # (whose compile_expr returns the int literal `0`).
+ # `expr rescue fallback` — unify the types of the two branches.
+ # The fallback always runs on error, so prefer its type when the
+ # main branch is a noreturn-shaped expression like a bare `raise`
+ # (whose compile_expr returns the int literal `0`).
       t1 = infer_type(@nd_expression[nid])
       t2 = infer_type(@nd_else_clause[nid])
       if t1 == t2
@@ -1969,12 +1969,12 @@ class Compiler
       return "int"
     end
     if t == "LocalVariableWriteNode"
-      # `var = expr` used as an expression — the value of the
-      # expression is the assigned slot's value (after any boxing
-      # done by the LocalVariableWriteNode emit path). Reporting the
-      # slot type lets compile_cond_expr know to wrap with
-      # sp_poly_truthy when the slot is poly (e.g.
-      # `if (sprite = arr[i])` where sprite is a sp_RbVal local).
+ # `var = expr` used as an expression — the value of the
+ # expression is the assigned slot's value (after any boxing
+ # done by the LocalVariableWriteNode emit path). Reporting the
+ # slot type lets compile_cond_expr know to wrap with
+ # sp_poly_truthy when the slot is poly (e.g.
+ # `if (sprite = arr[i])` where sprite is a sp_RbVal local).
       vt = find_var_type(@nd_name[nid])
       if vt != ""
         return vt
@@ -1982,10 +1982,10 @@ class Compiler
       return infer_type(@nd_expression[nid])
     end
     if t == "IndexOrWriteNode" || t == "IndexAndWriteNode" || t == "IndexOperatorWriteNode"
-      # `recv[k] ||= v` (etc.) as an expression value. The result type
-      # is the recv's element type — same shape as Hash#[] / Array#[]
-      # — so callers like LocalVariableWriteNode can pick the right
-      # local slot type via the same lookup that `recv[k]` would use.
+ # `recv[k] ||= v` (etc.) as an expression value. The result type
+ # is the recv's element type — same shape as Hash#[] / Array#[]
+ # — so callers like LocalVariableWriteNode can pick the right
+ # local slot type via the same lookup that `recv[k]` would use.
       iow_recv_t = @nd_receiver[nid]
       if iow_recv_t >= 0
         rt_iow_t = infer_type(iow_recv_t)
@@ -1996,10 +1996,10 @@ class Compiler
         if rt_iow_t == "int_array" || rt_iow_t == "float_array" || rt_iow_t == "str_array" || rt_iow_t == "sym_array"
           return elem_type_of_array(rt_iow_t)
         end
-        # poly_array elements are sp_RbVal; chained IndexOrWriteNode
-        # over a poly_array recv (or a poly-typed recv that carries a
-        # poly_array at runtime) returns the element value as poly so
-        # the next chain link sees an sp_RbVal, not the int default.
+ # poly_array elements are sp_RbVal; chained IndexOrWriteNode
+ # over a poly_array recv (or a poly-typed recv that carries a
+ # poly_array at runtime) returns the element value as poly so
+ # the next chain link sees an sp_RbVal, not the int default.
         if rt_iow_t == "poly_array" || rt_iow_t == "poly"
           return "poly"
         end
@@ -2007,9 +2007,9 @@ class Compiler
       return "int"
     end
     if t == "GlobalVariableReadNode"
-      # `alias $copy $orig` -- a $copy read must look up $orig's
-      # registered type so the C codegen sees the correct format
-      # specifier when interpolating or printing.
+ # `alias $copy $orig` -- a $copy read must look up $orig's
+ # registered type so the C codegen sees the correct format
+ # specifier when interpolating or printing.
       gname = resolve_gvar_alias(@nd_name[nid])
       gi = 0
       while gi < @gvar_names.length
@@ -2021,10 +2021,10 @@ class Compiler
       return "int"
     end
     if t == "InstanceVariableOrWriteNode" || t == "InstanceVariableAndWriteNode"
-      # `(@x ||= expr)` / `(@x &&= expr)` evaluates to @x's slot type
-      # (union of the prior value and the rhs, but Spinel widens those
-      # via update_ivar_type already, so reading the slot type is the
-      # same answer).
+ # `(@x ||= expr)` / `(@x &&= expr)` evaluates to @x's slot type
+ # (union of the prior value and the rhs, but Spinel widens those
+ # via update_ivar_type already, so reading the slot type is the
+ # same answer).
       if @current_class_idx >= 0
         return cls_ivar_type(@current_class_idx, @nd_name[nid])
       end
@@ -2034,14 +2034,14 @@ class Compiler
       if @current_class_idx >= 0
         return cls_ivar_type(@current_class_idx, @nd_name[nid])
       end
-      # Inside a module class method (`def self.foo` in `module M`,
-      # compiled as the top-level `M_cls_foo`), an ivar read like
-      # `@slots` resolves to `cst_M_slots` — already handled by
-      # compile_expr's matching arm. Mirror that resolution here so
-      # infer_type returns the slot's recorded hash/array type
-      # instead of the "int" default, which would otherwise route
-      # `@slots[k]` through the int-bit-extract codegen even though
-      # the storage is a hash.
+ # Inside a module class method (`def self.foo` in `module M`,
+ # compiled as the top-level `M_cls_foo`), an ivar read like
+ # `@slots` resolves to `cst_M_slots` — already handled by
+ # compile_expr's matching arm. Mirror that resolution here so
+ # infer_type returns the slot's recorded hash/array type
+ # instead of the "int" default, which would otherwise route
+ # `@slots[k]` through the int-bit-extract codegen even though
+ # the storage is a hash.
       mi3 = 0
       while mi3 < @module_names.length
         mmod = @module_names[mi3]
@@ -2070,13 +2070,13 @@ class Compiler
       return "int"
     end
     if t == "ClassVariableWriteNode"
-      # `@@x = expr` as an expression returns the assigned value, so
-      # the static type is the rhs's type. Without this case the
-      # caller's `infer_type` falls through to the default (int) and
-      # surrounding code -- e.g. a method whose body's last
-      # expression is `@@x = v` -- gets `mrb_int` as the inferred
-      # return, producing a const char* / mrb_int mismatch when v
-      # is a string.
+ # `@@x = expr` as an expression returns the assigned value, so
+ # the static type is the rhs's type. Without this case the
+ # caller's `infer_type` falls through to the default (int) and
+ # surrounding code -- e.g. a method whose body's last
+ # expression is `@@x = v` -- gets `mrb_int` as the inferred
+ # return, producing a const char* / mrb_int mismatch when v
+ # is a string.
       return infer_type(@nd_expression[nid])
     end
     if t == "ConstantReadNode"
@@ -2090,16 +2090,16 @@ class Compiler
       end
       cx = find_class_idx(rname)
       if cx >= 0
-        # Issue #404 Phase 1: class constant in value position.
-        # Class constants used as method-call receivers go through
-        # find_class_idx directly via constructor_class_name and
-        # never call infer_type on the receiver.
+ # class constant in value position.
+ # Class constants used as method-call receivers go through
+ # find_class_idx directly via constructor_class_name and
+ # never call infer_type on the receiver.
         return "class"
       end
-      # Issue #404 Phase 3 Tier 2: module constant in value
-      # position. Modules share the sp_Class representation; the
-      # codegen mapping to the unified cls_id space happens on the
-      # emit side.
+ # module constant in value
+ # position. Modules share the sp_Class representation; the
+ # codegen mapping to the unified cls_id space happens on the
+ # emit side.
       mx = 0
       while mx < @module_names.length
         if @module_names[mx] == rname
@@ -2107,9 +2107,9 @@ class Compiler
         end
         mx = mx + 1
       end
-      # Issue #404 Phase 3 Tier 4: built-in class const in value
-      # position (Integer, String, Array, ...). Same sp_Class
-      # representation; codegen maps to the reserved cls_id 0..20.
+ # built-in class const in value
+ # position (Integer, String, Array, ...). Same sp_Class
+ # representation; codegen maps to the reserved cls_id 0..20.
       if is_builtin_class_const_name(rname) == 1
         return "class"
       end
@@ -2124,7 +2124,7 @@ class Compiler
         end
         cx = find_class_idx(cpname)
         if cx >= 0
-          # Issue #404 Phase 1: class constant in value position.
+ # class constant in value position.
           return "class"
         end
       end
@@ -2164,7 +2164,7 @@ class Compiler
             end
           end
         else
-          # elsif chain — recurse
+ # elsif chain — recurse
           else_type = infer_type(sub)
         end
       end
@@ -2264,7 +2264,7 @@ class Compiler
       return "int"
     end
     if t == "LambdaNode"
-      # Record return type if inside a variable assignment context
+ # Record return type if inside a variable assignment context
       lbody = @nd_body[nid]
       if lbody >= 0
         lbs = get_stmts(lbody)
@@ -2282,15 +2282,15 @@ class Compiler
     infer_array_elem_type_from_ids(parse_id_list(@nd_elements[nid]))
   end
 
-  # Body of infer_array_elem_type, parameterised on the list of value
-  # node ids. Lets a {0=>v0,1=>v1,...} HashNode lowered to an Array
-  # share the same type-inference logic by feeding in [v0, v1, ...]
-  # without needing an actual ArrayNode to host them.
+ # Body of infer_array_elem_type, parameterised on the list of value
+ # node ids. Lets a {0=>v0,1=>v1,...} HashNode lowered to an Array
+ # share the same type-inference logic by feeding in [v0, v1, ...]
+ # without needing an actual ArrayNode to host them.
   def infer_array_elem_type_from_ids(elems)
     if elems.length > 0
       et = infer_type(elems[0])
       if et == "symbol"
-        # Check if ALL elements are symbols
+ # Check if ALL elements are symbols
         all_sym = 1
         k = 1
         while k < elems.length
@@ -2305,7 +2305,7 @@ class Compiler
         return "poly_array"
       end
       if et == "string"
-        # Check if ALL elements are strings
+ # Check if ALL elements are strings
         all_str = 1
         k = 1
         while k < elems.length
@@ -2320,7 +2320,7 @@ class Compiler
         return "poly_array"
       end
       if et == "float"
-        # Check if ALL elements are float
+ # Check if ALL elements are float
         all_float = 1
         k = 1
         while k < elems.length
@@ -2333,7 +2333,7 @@ class Compiler
           return "float_array"
         end
       end
-      # Check if all elements are the same obj type → ptr_array
+ # Check if all elements are the same obj type → ptr_array
       if is_obj_type(et) == 1
         all_same = 1
         k = 1
@@ -2349,7 +2349,7 @@ class Compiler
         end
         return "poly_array"
       end
-      # Check if all elements are the same array type → array of arrays
+ # Check if all elements are the same array type → array of arrays
       if et == "int_array" || et == "str_array" || et == "float_array" || et == "sym_array"
         all_same = 1
         k = 1
@@ -2365,33 +2365,33 @@ class Compiler
         end
         return "poly_array"
       end
-      # Nested-deeper case: elements are themselves a typed
-      # ptr_array (`int_array_ptr_array`, etc.) or already
-      # poly_array. Spinel doesn't have a typed
-      # `<X>_ptr_array_ptr_array` slot, so box each level via
-      # poly_array — sp_box_*_array on each push, and the
-      # poly-builtin dispatch on `[]` recurses into the next
-      # level.
+ # Nested-deeper case: elements are themselves a typed
+ # ptr_array (`int_array_ptr_array`, etc.) or already
+ # poly_array. Spinel doesn't have a typed
+ # `<X>_ptr_array_ptr_array` slot, so box each level via
+ # poly_array — sp_box_*_array on each push, and the
+ # poly-builtin dispatch on `[]` recurses into the next
+ # level.
       if is_ptr_array_type(et) == 1 || et == "poly_array"
         @needs_gc = 1
         @needs_rb_value = 1
         return "poly_array"
       end
-      # Hash literals as elements (`[{n: 3}, {n: 1}]`): each
-      # element is a heap-allocated hash pointer. Spinel has no
-      # typed `<hash>_ptr_array` slot, so box via poly_array;
-      # sp_box_hash_to_poly is called on each push and the
-      # poly-builtin dispatch on `arr[i]` recovers the hash.
-      # Without this arm, the array's inferred type fell back to
-      # `int_array` (the bottom of this function), and
-      # `sp_IntArray_push` was called with a hash pointer —
-      # int-from-pointer C-compile error.
+ # Hash literals as elements (`[{n: 3}, {n: 1}]`): each
+ # element is a heap-allocated hash pointer. Spinel has no
+ # typed `<hash>_ptr_array` slot, so box via poly_array;
+ # sp_box_hash_to_poly is called on each push and the
+ # poly-builtin dispatch on `arr[i]` recovers the hash.
+ # Without this arm, the array's inferred type fell back to
+ # `int_array` (the bottom of this function), and
+ # `sp_IntArray_push` was called with a hash pointer —
+ # int-from-pointer C-compile error.
       if is_hash_type(et) == 1
         @needs_gc = 1
         @needs_rb_value = 1
         return "poly_array"
       end
-      # Check if elements have mixed types
+ # Check if elements have mixed types
       k = 1
       while k < elems.length
         et2 = infer_type(elems[k])
@@ -2404,14 +2404,14 @@ class Compiler
     "int_array"
   end
 
-  # Detects a Hash literal whose keys are the consecutive non-negative
-  # integers 0, 1, ..., N-1 in source order. Such a literal is
-  # semantically equivalent to the Array `[v0, v1, ..., vN-1]` for the
-  # common `H[k]` lookup pattern, so we lower it to an Array
-  # internally — no `int_<X>_hash` runtime type needed. Detection is
-  # AST-shape only (IntegerNode key with literal value `k` at index
-  # `k`); any deviation (gap, duplicate, non-integer key, splat) opts
-  # back into the regular hash codegen.
+ # Detects a Hash literal whose keys are the consecutive non-negative
+ # integers 0, 1, ..., N-1 in source order. Such a literal is
+ # semantically equivalent to the Array `[v0, v1, ..., vN-1]` for the
+ # common `H[k]` lookup pattern, so we lower it to an Array
+ # internally — no `int_<X>_hash` runtime type needed. Detection is
+ # AST-shape only (IntegerNode key with literal value `k` at index
+ # `k`); any deviation (gap, duplicate, non-integer key, splat) opts
+ # back into the regular hash codegen.
   def is_int_array_lowered_hash(nid)
     if @nd_type[nid] != "HashNode"
       return 0
@@ -2438,8 +2438,8 @@ class Compiler
     1
   end
 
-  # Returns the array type the lowered HashNode evaluates to. Same
-  # logic as infer_array_elem_type but reads each AssocNode's value.
+ # Returns the array type the lowered HashNode evaluates to. Same
+ # logic as infer_array_elem_type but reads each AssocNode's value.
   def infer_int_keyed_hash_as_array_type(nid)
     elems = parse_id_list(@nd_elements[nid])
     vids = []
@@ -2453,12 +2453,12 @@ class Compiler
 
   def infer_hash_val_type(nid)
     rt = infer_hash_val_type_raw(nid)
-    # Issue #415: every observed hash variant must flag its template
-    # need so emit_hash_runtime instantiates the typedef + helpers.
-    # Without this the `{ sym: @ivar }` shape — where the value's
-    # concrete type is only resolved on a later inference iteration
-    # via the value cache — emits `sp_SymStrHash *` references with
-    # no matching typedef in the translation unit.
+ # every observed hash variant must flag its template
+ # need so emit_hash_runtime instantiates the typedef + helpers.
+ # Without this the `{ sym: @ivar }` shape — where the value's
+ # concrete type is only resolved on a later inference iteration
+ # via the value cache — emits `sp_SymStrHash *` references with
+ # no matching typedef in the translation unit.
     mark_hash_needs(rt)
     rt
   end
@@ -2469,7 +2469,7 @@ class Compiler
       eid = elems[0]
       if @nd_type[eid] == "AssocNode"
         first_vt = infer_type(@nd_expression[eid])
-        # Check if all values have the same type
+ # Check if all values have the same type
         all_same = 1
         k = 1
         while k < elems.length
@@ -2482,9 +2482,9 @@ class Compiler
           end
           k = k + 1
         end
-        # Detect all-symbol keys → sym_int_hash variant for int-valued
-        # hashes. (sym_str_hash etc. not yet implemented; they fall
-        # through to str_str_hash with sym_to_s wrapping at hash sites.)
+ # Detect all-symbol keys → sym_int_hash variant for int-valued
+ # hashes. (sym_str_hash etc. not yet implemented; they fall
+ # through to str_str_hash with sym_to_s wrapping at hash sites.)
         all_sym_keys = 1
         kk = 0
         while kk < elems.length
@@ -2522,20 +2522,20 @@ class Compiler
           if all_sym_keys == 1 && (first_vt == "int" || first_vt == "bool" || first_vt == "nil")
             return "sym_int_hash"
           end
-          # Every value already inferred as poly (the slot was
-          # widened upstream — typically an ivar that
-          # finalize_ivar_heterogeneity widened on a sibling-writer
-          # disagreement). Use the same poly-hash storage as the
-          # mixed-types `else` branch — every value carries its
-          # own tag.
+ # Every value already inferred as poly (the slot was
+ # widened upstream — typically an ivar that
+ # finalize_ivar_heterogeneity widened on a sibling-writer
+ # disagreement). Use the same poly-hash storage as the
+ # mixed-types `else` branch — every value carries its
+ # own tag.
           if first_vt == "poly"
             if all_sym_keys == 1
               return "sym_poly_hash"
             end
             return "str_poly_hash"
           end
-          # Inner hash/array values need a poly outer so each pointer
-          # can carry its own cls_id through SP_TAG_OBJ.
+ # Inner hash/array values need a poly outer so each pointer
+ # can carry its own cls_id through SP_TAG_OBJ.
           if is_hash_type(first_vt) == 1 || is_array_type(first_vt) == 1
             if all_sym_keys == 1
               return "sym_poly_hash"
@@ -2545,8 +2545,8 @@ class Compiler
             end
           end
         else
-          # Mixed value types: use a *_poly_hash so each slot carries its
-          # own tag (sp_RbVal) rather than coercing everything to one type.
+ # Mixed value types: use a *_poly_hash so each slot carries its
+ # own tag (sp_RbVal) rather than coercing everything to one type.
           if all_sym_keys == 1
             return "sym_poly_hash"
           end
@@ -2558,38 +2558,38 @@ class Compiler
   end
 
 
-  # Returns the inferred C type ("int", "string", "poly", "obj_<Cname>",
-  # ...) for the value a CallNode evaluates to.
-  #
-  # Symmetric with `compile_call_expr` (which returns the C expression
-  # for the same node). The two walk identical branch structure:
-  #
-  #   infer_call_type        compile_call_expr
-  #   infer_operator_type  ↔ compile_operator_expr
-  #   infer_constructor_   ↔ compile_constructor_expr
-  #     type
-  #   infer_constant_recv_ ↔ compile_constant_recv_expr
-  #     type
-  #
-  # The non-paired helpers (infer_comparison_type, infer_method_name_
-  # type, infer_recv_method_type, infer_open_class_type) recognise call
-  # shapes whose codegen is inlined into compile_call_expr directly
-  # rather than factored out, but the dispatch order matches.
-  #
-  # Maintenance rule: when you add a new call shape, you almost always
-  # need both. Forgetting the inference half is the failure mode in
-  # #127 — the dispatch emitted the right C function call, but the LHS
-  # local was typed `mrb_int` because no inference branch claimed the
-  # shape, so `lv_s = sp_M_cls_greet()` mis-typed an `const char *`
-  # return. Mirror new cases in both functions, in the same order, with
-  # the same recogniser logic.
+ # Returns the inferred C type ("int", "string", "poly", "obj_<Cname>",
+ # ...) for the value a CallNode evaluates to.
+ #
+ # Symmetric with `compile_call_expr` (which returns the C expression
+ # for the same node). The two walk identical branch structure:
+ #
+ # infer_call_type compile_call_expr
+ # infer_operator_type ↔ compile_operator_expr
+ # infer_constructor_ ↔ compile_constructor_expr
+ # type
+ # infer_constant_recv_ ↔ compile_constant_recv_expr
+ # type
+ #
+ # The non-paired helpers (infer_comparison_type, infer_method_name_
+ # type, infer_recv_method_type, infer_open_class_type) recognise call
+ # shapes whose codegen is inlined into compile_call_expr directly
+ # rather than factored out, but the dispatch order matches.
+ #
+ # Maintenance rule: when you add a new call shape, you almost always
+ # need both. Forgetting the inference half is the failure mode in
+ # — the dispatch emitted the right C function call, but the LHS
+ # local was typed `mrb_int` because no inference branch claimed the
+ # shape, so `lv_s = sp_M_cls_greet()` mis-typed an `const char *`
+ # return. Mirror new cases in both functions, in the same order, with
+ # the same recogniser logic.
   def infer_call_type(nid)
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
 
-    # Methods on a `rescue => e` bound exception variable. The variable
-    # itself is string-typed but .class / .message / .to_s / .inspect /
-    # .full_message return strings; .backtrace returns nil for now.
+ # Methods on a `rescue => e` bound exception variable. The variable
+ # itself is string-typed but .class / .message / .to_s / .inspect /
+ # .full_message return strings; .backtrace returns nil for now.
     if recv >= 0 && @nd_type[recv] == "LocalVariableReadNode"
       if find_exc_var_cls(@nd_name[recv]) != ""
         if mname == "message" || mname == "to_s" || mname == "class" || mname == "inspect" || mname == "full_message"
@@ -2601,19 +2601,19 @@ class Compiler
       end
     end
 
-    # `recv.__sp_ieval_<N>(...)`: the rewritten form of an
-    # `recv.instance_eval { ... }` call. v1 only fired on top-level call
-    # sites, where the call's value was always discarded — so its return
-    # type didn't matter and the warn-fallback "int" was harmless. Now
-    # that the rewrite can land inside a class method body whose tail
-    # expression IS the instance_eval call, the enclosing method's
-    # signature has to match the value the lift actually emits:
-    # `compile_ieval_call_expr` returns the receiver via a comma
-    # expression, so the type is recv's class. Read the synthetic id's
-    # registered class directly from `@ieval_class_idxs` rather than
-    # re-inferring recv — by the time this runs (compile-side type
-    # iteration), recv's type may have been refined and the registered
-    # class is the canonical answer.
+ # `recv.__sp_ieval_<N>(...)`: the rewritten form of an
+ # `recv.instance_eval { ... }` call. v1 only fired on top-level call
+ # sites, where the call's value was always discarded — so its return
+ # type didn't matter and the warn-fallback "int" was harmless. Now
+ # that the rewrite can land inside a class method body whose tail
+ # expression IS the instance_eval call, the enclosing method's
+ # signature has to match the value the lift actually emits:
+ # `compile_ieval_call_expr` returns the receiver via a comma
+ # expression, so the type is recv's class. Read the synthetic id's
+ # registered class directly from `@ieval_class_idxs` rather than
+ # re-inferring recv — by the time this runs (compile-side type
+ # iteration), recv's type may have been refined and the registered
+ # class is the canonical answer.
     if is_ieval_call_name(mname) == 1
       suffix = mname[11, mname.length - 11]
       n = suffix.to_i
@@ -2622,12 +2622,12 @@ class Compiler
       end
     end
 
-    # Chain return type for `Module.accessor.<method>`. All resolved
-    # candidates' class methods should agree on a return type; if
-    # they disagree the chain becomes poly. Returning early only
-    # when we have a confident answer means the existing
-    # operator/comparison/etc paths still get to chime in for shapes
-    # that don't match this chain.
+ # Chain return type for `Module.accessor.<method>`. All resolved
+ # candidates' class methods should agree on a return type; if
+ # they disagree the chain becomes poly. Returning early only
+ # when we have a confident answer means the existing
+ # operator/comparison/etc paths still get to chime in for shapes
+ # that don't match this chain.
     if recv >= 0 && @nd_type[recv] == "CallNode"
       inner_recv = @nd_receiver[recv]
       inner_mname = @nd_name[recv]
@@ -2657,10 +2657,10 @@ class Compiler
       end
     end
 
-    # FFI dispatch must come before operator/comparison resolution: an
-    # FFI function name can collide with a Ruby operator (e.g. a C
-    # function literally named `pow`), and we want the declared FFI
-    # signature to win.
+ # FFI dispatch must come before operator/comparison resolution: an
+ # FFI function name can collide with a Ruby operator (e.g. a C
+ # function literally named `pow`), and we want the declared FFI
+ # signature to win.
     if recv >= 0
       r = infer_ffi_call_type(nid, mname, recv)
       if r != ""
@@ -2668,19 +2668,19 @@ class Compiler
       end
     end
 
-    # Operators
+ # Operators
     r = infer_operator_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # Comparison operators
+ # Comparison operators
     r = infer_comparison_type(mname)
     if r != ""
       return r
     end
 
-    # Lambda call return type
+ # Lambda call return type
     if mname == "call" || mname == "[]"
       if recv >= 0
         rt = infer_type(recv)
@@ -2693,26 +2693,26 @@ class Compiler
           end
           return "int"
         end
-        # Method#call / Method#[]: the C-level signature lowers to
-        # `(void *self, mrb_int...) -> mrb_int`, so the inferred
-        # return is `int`. Non-int returns (string, obj, etc.) from
-        # the bound underlying method are out of scope. Ref #215.
+ # Method#call / Method#[]: the C-level signature lowers to
+ # `(void *self, mrb_int...) -> mrb_int`, so the inferred
+ # return is `int`. Non-int returns (string, obj, etc.) from
+ # the bound underlying method are out of scope. .
         if rt == "obj_Method"
           return "int"
         end
       end
     end
 
-    # `method(:foo)` produces a heap-allocated Method (the synthetic
-    # class registered in register_builtin_classes). Two captured
-    # forms produce a real Method:
-    #   - no receiver, inside a class body → bound to `self`.
-    #   - obj-typed receiver (e.g. `@foo.method(:bar)`) → bound to
-    #     the inferred receiver, regardless of where the call sits.
-    # Top-level `method(:foo)` with no receiver keeps the legacy
-    # static-alias placeholder; LocalVariableWriteNode then records
-    # the binding and `m.call(x)` rewrites to a direct `sp_<foo>(x)`
-    # call. Ref #215.
+ # `method(:foo)` produces a heap-allocated Method (the synthetic
+ # class registered in register_builtin_classes). Two captured
+ # forms produce a real Method:
+ # - no receiver, inside a class body → bound to `self`.
+ # - obj-typed receiver (e.g. `@foo.method(:bar)`) → bound to
+ # the inferred receiver, regardless of where the call sits.
+ # Top-level `method(:foo)` with no receiver keeps the legacy
+ # static-alias placeholder; LocalVariableWriteNode then records
+ # the binding and `m.call(x)` rewrites to a direct `sp_<foo>(x)`
+ # call. .
     if mname == "method"
       if recv < 0 && @current_class_idx >= 0
         return "obj_Method"
@@ -2722,9 +2722,9 @@ class Compiler
         if is_obj_type(rt_meth) == 1
           return "obj_Method"
         end
-        # `<arr>.method(:op)` on a supported built-in array type
-        # also produces a Method (lowered through a per-(type, op)
-        # adapter — see emit_builtin_array_method_adapter).
+ # `<arr>.method(:op)` on a supported built-in array type
+ # also produces a Method (lowered through a per-(type, op)
+ # adapter — see emit_builtin_array_method_adapter).
         args_id_meth = @nd_arguments[nid]
         if args_id_meth >= 0
           arg_ids_meth = get_args(args_id_meth)
@@ -2741,12 +2741,12 @@ class Compiler
       end
     end
 
-    # `obj.attr = val` (attr-writer call) — Ruby semantics: the
-    # assignment expression evaluates to the rhs value, so the
-    # inferred type is the rhs argument's type. Without this, a
-    # chain like `@a = obj.attr = val` mistypes the outer `@a`
-    # as int because the inner call falls through to the int
-    # default.
+ # `obj.attr = val` (attr-writer call) — Ruby semantics: the
+ # assignment expression evaluates to the rhs value, so the
+ # inferred type is the rhs argument's type. Without this, a
+ # chain like `@a = obj.attr = val` mistypes the outer `@a`
+ # as int because the inner call falls through to the int
+ # default.
     if mname.length > 1 && mname[mname.length - 1] == "=" &&
        mname != "==" && mname != "!=" && mname != "<=" && mname != ">="
       if recv >= 0
@@ -2769,66 +2769,66 @@ class Compiler
       end
     end
 
-    # User-defined top-level method (bare call): take precedence over
-    # name-based builtin inference so `def minmax(a,b); ... end; minmax(1,2)`
-    # binds to the user def instead of Array#minmax's tuple return.
+ # User-defined top-level method (bare call): take precedence over
+ # name-based builtin inference so `def minmax(a,b); ... end; minmax(1,2)`
+ # binds to the user def instead of Array#minmax's tuple return.
     if recv < 0
       mi_user = find_method_idx(mname)
       if mi_user >= 0
         return @meth_return_types[mi_user]
       end
-      # Issue #405: bare call inside a `def self.X` body resolves to
-      # a sibling cmeth on the same class/module. Two signals reach
-      # here at different stages: inference sets @current_method_name
-      # to "<Class>_cls_<m>" (so the marker scan succeeds); emission
-      # sets only @current_method_has_self == 0 + @current_class_idx
-      # for real-class cmeths (with @current_method_name = plain
-      # mname, no marker).
+ # bare call inside a `def self.X` body resolves to
+ # a sibling cmeth on the same class/module. Two signals reach
+ # here at different stages: inference sets @current_method_name
+ # to "<Class>_cls_<m>" (so the marker scan succeeds); emission
+ # sets only @current_method_has_self == 0 + @current_class_idx
+ # for real-class cmeths (with @current_method_name = plain
+ # mname, no marker).
       if @current_method_name != ""
-        mark_cm_405 = @current_method_name.index("_cls_")
-        if mark_cm_405 != nil && mark_cm_405 >= 0
-          owning_cm_405 = @current_method_name[0, mark_cm_405]
-          if module_name_exists(owning_cm_405) == 1
-            synth_cm_405 = owning_cm_405 + "_cls_" + mname
-            mi_cm_405 = find_method_idx(synth_cm_405)
-            if mi_cm_405 >= 0
-              return @meth_return_types[mi_cm_405]
+        mark_cm = @current_method_name.index("_cls_")
+        if mark_cm != nil && mark_cm >= 0
+          owning_cm = @current_method_name[0, mark_cm]
+          if module_name_exists(owning_cm) == 1
+            synth_cm = owning_cm + "_cls_" + mname
+            mi_cm = find_method_idx(synth_cm)
+            if mi_cm >= 0
+              return @meth_return_types[mi_cm]
             end
           end
-          cci_cm_405 = find_class_idx(owning_cm_405)
-          if cci_cm_405 >= 0
-            cmnames_cm_405 = @cls_cmeth_names[cci_cm_405].split(";")
-            cmreturns_cm_405 = @cls_cmeth_returns[cci_cm_405].split(";")
-            cmidx_cm_405 = 0
-            while cmidx_cm_405 < cmnames_cm_405.length
-              if cmnames_cm_405[cmidx_cm_405] == mname && cmidx_cm_405 < cmreturns_cm_405.length
-                return cmreturns_cm_405[cmidx_cm_405]
+          cci_cm = find_class_idx(owning_cm)
+          if cci_cm >= 0
+            cmnames_cm = @cls_cmeth_names[cci_cm].split(";")
+            cmreturns_cm = @cls_cmeth_returns[cci_cm].split(";")
+            cmidx_cm = 0
+            while cmidx_cm < cmnames_cm.length
+              if cmnames_cm[cmidx_cm] == mname && cmidx_cm < cmreturns_cm.length
+                return cmreturns_cm[cmidx_cm]
               end
-              cmidx_cm_405 = cmidx_cm_405 + 1
+              cmidx_cm = cmidx_cm + 1
             end
           end
         end
       end
       if @current_class_idx >= 0 && @current_method_has_self == 0
-        cmnames_cm_405r = @cls_cmeth_names[@current_class_idx].split(";")
-        cmreturns_cm_405r = @cls_cmeth_returns[@current_class_idx].split(";")
-        cmidx_cm_405r = 0
-        while cmidx_cm_405r < cmnames_cm_405r.length
-          if cmnames_cm_405r[cmidx_cm_405r] == mname && cmidx_cm_405r < cmreturns_cm_405r.length
-            return cmreturns_cm_405r[cmidx_cm_405r]
+        cmnames_cm_r = @cls_cmeth_names[@current_class_idx].split(";")
+        cmreturns_cm_r = @cls_cmeth_returns[@current_class_idx].split(";")
+        cmidx_cm_r = 0
+        while cmidx_cm_r < cmnames_cm_r.length
+          if cmnames_cm_r[cmidx_cm_r] == mname && cmidx_cm_r < cmreturns_cm_r.length
+            return cmreturns_cm_r[cmidx_cm_r]
           end
-          cmidx_cm_405r = cmidx_cm_405r + 1
+          cmidx_cm_r = cmidx_cm_r + 1
         end
       end
     end
 
-    # Method name-based type inference
+ # Method name-based type inference
     r = infer_method_name_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # puts/print
+ # puts/print
     if mname == "puts"
       return "void"
     end
@@ -2839,47 +2839,47 @@ class Compiler
       return "bool"
     end
 
-    # Constructor .new
+ # Constructor .new
     r = infer_constructor_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # Constant receiver (File, ENV, Dir) and StringIO
+ # Constant receiver (File, ENV, Dir) and StringIO
     r = infer_constant_recv_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # Math functions, backtick, freeze, to_a
+ # Math functions, backtick, freeze, to_a
     r = infer_math_and_misc_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # Method call on poly/int/obj receiver
+ # Method call on poly/int/obj receiver
     r = infer_recv_method_type(nid, mname, recv)
     if r != ""
       return r
     end
 
-    # Top-level method
+ # Top-level method
     mi = find_method_idx(mname)
     if mi >= 0
       return @meth_return_types[mi]
     end
 
-    # Bare (no-receiver) method call resolved against the enclosing
-    # class's method table. Only for `recv < 0` — without that guard,
-    # a `Fiber.yield ...` (which has a receiver) inside a class body
-    # would short-circuit here returning the int default and never
-    # reach the Fiber.yield → poly branch further down.
+ # Bare (no-receiver) method call resolved against the enclosing
+ # class's method table. Only for `recv < 0` — without that guard,
+ # a `Fiber.yield ...` (which has a receiver) inside a class body
+ # would short-circuit here returning the int default and never
+ # reach the Fiber.yield → poly branch further down.
     if recv < 0 && @current_class_idx >= 0
       mr = cls_method_return(@current_class_idx, mname)
       return mr
     end
 
-    # proc / Proc.new
+ # proc / Proc.new
     if mname == "proc"
       return "proc"
     end
@@ -2894,7 +2894,7 @@ class Compiler
         end
       end
     end
-    # fiber.resume returns poly
+ # fiber.resume returns poly
     if mname == "resume"
       if recv >= 0
         rt = base_type(infer_type(recv))
@@ -2903,7 +2903,7 @@ class Compiler
         end
       end
     end
-    # Fiber.yield returns poly
+ # Fiber.yield returns poly
     if mname == "yield"
       if recv >= 0
         rcname = constructor_class_name(recv)
@@ -2912,7 +2912,7 @@ class Compiler
         end
       end
     end
-    # fiber.alive? returns bool
+ # fiber.alive? returns bool
     if mname == "alive?"
       if recv >= 0
         rt = base_type(infer_type(recv))
@@ -2921,7 +2921,7 @@ class Compiler
         end
       end
     end
-    # fiber.transfer returns poly
+ # fiber.transfer returns poly
     if mname == "transfer"
       if recv >= 0
         rt = base_type(infer_type(recv))
@@ -2930,7 +2930,7 @@ class Compiler
         end
       end
     end
-    # Fiber.current returns fiber
+ # Fiber.current returns fiber
     if mname == "current"
       if recv >= 0
         rcname = constructor_class_name(recv)
@@ -2940,7 +2940,7 @@ class Compiler
       end
     end
 
-    # Open class method dispatch
+ # Open class method dispatch
     r = infer_open_class_type(nid, mname, recv)
     if r != ""
       return r
@@ -2950,7 +2950,7 @@ class Compiler
   end
 
   def infer_operator_type(nid, mname, recv)
-    # Receiver type is consulted by nearly every branch below; compute once.
+ # Receiver type is consulted by nearly every branch below; compute once.
     lt = ""
     if recv >= 0
       lt = infer_type(recv)
@@ -2962,7 +2962,7 @@ class Compiler
           return "poly"
         end
       end
-      # Bigint operators return bigint
+ # Bigint operators return bigint
       if lt == "bigint"
         if mname == "+" || mname == "-" || mname == "*" || mname == "/" || mname == "%"
           return "bigint"
@@ -2998,7 +2998,7 @@ class Compiler
         if lt == "complex"
           return "complex"
         end
-        # Check RHS for float promotion
+ # Check RHS for float promotion
         args_id = @nd_arguments[nid]
         if args_id >= 0
           aargs = get_args(args_id)
@@ -3023,7 +3023,7 @@ class Compiler
         if is_typed_array_type(lt)
           return lt
         end
-        # Check RHS for float promotion
+ # Check RHS for float promotion
         args_id = @nd_arguments[nid]
         if args_id >= 0
           aargs = get_args(args_id)
@@ -3049,13 +3049,13 @@ class Compiler
           return "poly"
         end
         if is_array_type(lt) == 1
-          # Array#* (repeat) yields another array of the same element type.
+ # Array#* (repeat) yields another array of the same element type.
           return lt
         end
         if lt == "complex"
           return "complex"
         end
-        # Check RHS for float promotion
+ # Check RHS for float promotion
         args_id = @nd_arguments[nid]
         if args_id >= 0
           aargs = get_args(args_id)
@@ -3074,7 +3074,7 @@ class Compiler
         if lt == "float"
           return "float"
         end
-        # Check RHS for float promotion
+ # Check RHS for float promotion
         args_id = @nd_arguments[nid]
         if args_id >= 0
           aargs = get_args(args_id)
@@ -3096,7 +3096,7 @@ class Compiler
         if lt == "mutable_str"
           return "mutable_str"
         end
-        # Array `<<` returns the recv (so `(arr << x) << y` chains).
+ # Array `<<` returns the recv (so `(arr << x) << y` chains).
         if is_array_type(lt) == 1
           return lt
         end
@@ -3112,9 +3112,9 @@ class Compiler
       return "int"
     end
     if mname == "%"
-      # String#% returns "string" when the LHS is a string (and the RHS
-      # is a str_array or a single primitive value). Otherwise the
-      # operator is integer modulo.
+ # String#% returns "string" when the LHS is a string (and the RHS
+ # is a str_array or a single primitive value). Otherwise the
+ # operator is integer modulo.
       if recv >= 0
         rt = infer_type(recv)
         if rt == "string" || rt == "mutable_str"
@@ -3169,20 +3169,20 @@ class Compiler
     ""
   end
 
-  # Issue #407: does any user class declare `mname` as an
-  # instance method? Used by the hardcoded name-based inference
-  # arms below to defer when the recv's type isn't pinned yet
-  # but a user-class definition exists that could win at runtime.
-  # Falling through to infer_recv_method_type lets the
-  # cls_method_return path pick up the user's return type while
-  # still terminating at "int" if no obj_<C> resolution lands.
+ # does any user class declare `mname` as an
+ # instance method? Used by the hardcoded name-based inference
+ # arms below to defer when the recv's type isn't pinned yet
+ # but a user-class definition exists that could win at runtime.
+ # Falling through to infer_recv_method_type lets the
+ # cls_method_return path pick up the user's return type while
+ # still terminating at "int" if no obj_<C> resolution lands.
   def any_user_class_defines_imeth(mname)
     ck = 0
     while ck < @cls_names.length
-      names_407 = @cls_meth_names[ck].split(";")
+      names = @cls_meth_names[ck].split(";")
       kk = 0
-      while kk < names_407.length
-        if names_407[kk] == mname
+      while kk < names.length
+        if names[kk] == mname
           return 1
         end
         kk = kk + 1
@@ -3192,64 +3192,64 @@ class Compiler
     0
   end
 
-  # Issue #407: recv is plausibly a user-class instance at runtime
-  # even when its current inferred type is "int" or "" (because the
-  # var-type table hasn't been populated yet during the iterative
-  # inference loop). Returns 1 for LocalVariableReadNode /
-  # CallNode / InstanceVariableReadNode whose actual runtime type
-  # is obj_<C>. False for literal nodes (IntegerNode, StringNode,
-  # etc.) where the recv is statically a primitive.
+ # recv is plausibly a user-class instance at runtime
+ # even when its current inferred type is "int" or "" (because the
+ # var-type table hasn't been populated yet during the iterative
+ # inference loop). Returns 1 for LocalVariableReadNode /
+ # CallNode / InstanceVariableReadNode whose actual runtime type
+ # is obj_<C>. False for literal nodes (IntegerNode, StringNode,
+ # etc.) where the recv is statically a primitive.
   def recv_could_be_obj(recv)
     if recv < 0
       return 0
     end
-    t_407rc = @nd_type[recv]
-    if t_407rc == "IntegerNode" || t_407rc == "StringNode" || t_407rc == "FloatNode" || t_407rc == "SymbolNode" || t_407rc == "TrueNode" || t_407rc == "FalseNode" || t_407rc == "NilNode" || t_407rc == "ArrayNode" || t_407rc == "HashNode" || t_407rc == "RangeNode"
+    t_rc = @nd_type[recv]
+    if t_rc == "IntegerNode" || t_rc == "StringNode" || t_rc == "FloatNode" || t_rc == "SymbolNode" || t_rc == "TrueNode" || t_rc == "FalseNode" || t_rc == "NilNode" || t_rc == "ArrayNode" || t_rc == "HashNode" || t_rc == "RangeNode"
       return 0
     end
     1
   end
 
   def infer_method_name_type(nid, mname, recv)
-    # Issue #407: when recv is a class/module constant ref whose
-    # class/module defines a class method of the given name, defer
-    # to the receiver-aware resolution that
-    # infer_constant_recv_type runs later. Without this guard, the
-    # name-based hardcodes below (`hash -> int`, `to_s -> string`,
-    # etc.) would pre-empt user-defined `def self.hash(plain) ->
-    # String` cmeths, widening downstream local types to int and
-    # cascading into incompatible-pointer C errors at the next
-    # use site. Return "" so the caller falls through to
-    # infer_constant_recv_type, which already does the
-    # cls_cmethod_return_inherited / `<Mod>_cls_<m>` lookup.
-    #
-    # Symmetric instance-method case: when recv is a statically
-    # typed obj_<C> instance and C (or any ancestor) defines an
-    # instance method named mname, defer to infer_recv_method_type
-    # so its cls_method_return path returns the user's type
-    # instead of the hardcoded Object#... default. Mirrors the
-    # cmeth defer above; both target the imeth shape Ori called
-    # out (`Item#hash` shadowed by Object#hash returning int).
+ # when recv is a class/module constant ref whose
+ # class/module defines a class method of the given name, defer
+ # to the receiver-aware resolution that
+ # infer_constant_recv_type runs later. Without this guard, the
+ # name-based hardcodes below (`hash -> int`, `to_s -> string`,
+ # etc.) would pre-empt user-defined `def self.hash(plain) ->
+ # String` cmeths, widening downstream local types to int and
+ # cascading into incompatible-pointer C errors at the next
+ # use site. Return "" so the caller falls through to
+ # infer_constant_recv_type, which already does the
+ # cls_cmethod_return_inherited / `<Mod>_cls_<m>` lookup.
+ #
+ # Symmetric instance-method case: when recv is a statically
+ # typed obj_<C> instance and C (or any ancestor) defines an
+ # instance method named mname, defer to infer_recv_method_type
+ # so its cls_method_return path returns the user's type
+ # instead of the hardcoded Object#... default. Mirrors the
+ # cmeth defer above; both target the imeth shape Ori called
+ # out (`Item#hash` shadowed by Object#hash returning int).
     if recv >= 0
-      rt_407i = infer_type(recv)
-      if is_obj_type(rt_407i) == 1
-        bt_407i = base_type(rt_407i)
-        cname_407i = bt_407i[4, bt_407i.length - 4]
-        ci_407i = find_class_idx(cname_407i)
-        if ci_407i >= 0 && cls_find_method(ci_407i, mname) >= 0
+      rt_i = infer_type(recv)
+      if is_obj_type(rt_i) == 1
+        bt_i = base_type(rt_i)
+        cname_i = bt_i[4, bt_i.length - 4]
+        ci_i = find_class_idx(cname_i)
+        if ci_i >= 0 && cls_find_method(ci_i, mname) >= 0
           return ""
         end
       end
     end
     if recv >= 0 && (@nd_type[recv] == "ConstantReadNode" || @nd_type[recv] == "ConstantPathNode")
-      rcname_407 = constructor_class_name(recv)
-      if rcname_407 != ""
-        ci_407 = find_class_idx(rcname_407)
-        if ci_407 >= 0 && cls_cmethod_owner(ci_407, mname) >= 0
+      rcname = constructor_class_name(recv)
+      if rcname != ""
+        ci = find_class_idx(rcname)
+        if ci >= 0 && cls_cmethod_owner(ci, mname) >= 0
           return ""
         end
-        if module_name_exists(rcname_407) == 1
-          if find_method_idx(rcname_407 + "_cls_" + mname) >= 0
+        if module_name_exists(rcname) == 1
+          if find_method_idx(rcname + "_cls_" + mname) >= 0
             return ""
           end
         end
@@ -3270,18 +3270,18 @@ class Compiler
     if mname == "inspect"
       return "string"
     end
-    # Issue #404 Phase 2: Class#name -- the class's source name as
-    # a string. Aliases `.to_s` at the runtime helper level
-    # (sp_class_to_s), so the return type is the same.
+ # Class#name -- the class's source name as
+ # a string. Aliases `.to_s` at the runtime helper level
+ # (sp_class_to_s), so the return type is the same.
     if mname == "name"
       if recv >= 0 && infer_type(recv) == "class"
         return "string"
       end
     end
-    # Issue #404 Phase 3: hierarchy queries on a Class value.
-    #   .superclass  -> class (the parent or sp_Class{-1})
-    #   .ancestors   -> poly_array of boxed sp_Class
-    #   <, <=, >, >=  -> bool
+ # hierarchy queries on a Class value.
+ # .superclass -> class (the parent or sp_Class{-1})
+ # .ancestors -> poly_array of boxed sp_Class
+ # <, <=, >, >= -> bool
     if mname == "superclass"
       if recv >= 0 && infer_type(recv) == "class"
         return "class"
@@ -3297,17 +3297,17 @@ class Compiler
         return "bool"
       end
     end
-    # Issue #404 Tier 5: `<sp_Class>.new` returns a poly value
-    # (boxed user instance) only when the recv is a *dynamic*
-    # sp_Class -- a local / param / ivar carrying a class value.
-    # Constant-path receivers (Foo, M::Sub, etc.) still go through
-    # the static constructor path so `obj = Foo.new(args)` stays
-    # typed obj_Foo and the existing argful-construction emit
-    # works unchanged.
+ # Tier 5: `<sp_Class>.new` returns a poly value
+ # (boxed user instance) only when the recv is a *dynamic*
+ # sp_Class -- a local / param / ivar carrying a class value.
+ # Constant-path receivers (Foo, M::Sub, etc.) still go through
+ # the static constructor path so `obj = Foo.new(args)` stays
+ # typed obj_Foo and the existing argful-construction emit
+ # works unchanged.
     if mname == "new"
       if recv >= 0 && infer_type(recv) == "class"
-        rty_404n = @nd_type[recv]
-        if rty_404n != "ConstantReadNode" && rty_404n != "ConstantPathNode"
+        rty_n = @nd_type[recv]
+        if rty_n != "ConstantReadNode" && rty_n != "ConstantPathNode"
           return "poly"
         end
       end
@@ -3324,129 +3324,129 @@ class Compiler
       end
       return "float"
     end
-    # Issue #414: Time#iso8601 and Time#strftime — both return a
-    # formatted string. Gated on recv_type so unrelated user-class
-    # methods sharing the names (rare in idiomatic Ruby; possible
-    # if a class wraps date arithmetic) still flow through normal
-    # resolution.
+ # Time#iso8601 and Time#strftime — both return a
+ # formatted string. Gated on recv_type so unrelated user-class
+ # methods sharing the names (rare in idiomatic Ruby; possible
+ # if a class wraps date arithmetic) still flow through normal
+ # resolution.
     if mname == "iso8601" || mname == "strftime"
       if recv >= 0 && infer_type(recv) == "time"
         return "string"
       end
     end
-    # Issue #418: Time#utc — same instant with UTC presentation
-    # flag set. Returns a Time so chained calls (`Time.now.utc.iso8601`)
-    # type as the chained method's result.
+ # Time#utc — same instant with UTC presentation
+ # flag set. Returns a Time so chained calls (`Time.now.utc.iso8601`)
+ # type as the chained method's result.
     if mname == "utc"
       if recv >= 0 && infer_type(recv) == "time"
         return "time"
       end
     end
-    # Issue #419: `obj.class` on a statically-typed instance returns
-    # a sp_Class value. The codegen-side mirror in
-    # compile_object_method_expr emits the matching compound literal
-    # (`((sp_Class){<cls_idx>LL})`).
+ # `obj.class` on a statically-typed instance returns
+ # a sp_Class value. The codegen-side mirror in
+ # compile_object_method_expr emits the matching compound literal
+ # (`((sp_Class){<cls_idx>LL})`).
     if mname == "class"
       if recv >= 0
-        rt_419 = infer_type(recv)
-        if is_obj_type(rt_419) == 1
+        rt = infer_type(recv)
+        if is_obj_type(rt) == 1
           return "class"
         end
       end
     end
-    # Issue #419: `<obj>.class.<cmeth>` chained dispatch. When the
-    # recv is itself a `class` CallNode whose own recv is
-    # statically-typed obj_<C>, the chain resolves to <C>.<cmeth>
-    # and the return type is whatever the cmeth returns. Same
-    # detection shape as the codegen lowering.
+ # `<obj>.class.<cmeth>` chained dispatch. When the
+ # recv is itself a `class` CallNode whose own recv is
+ # statically-typed obj_<C>, the chain resolves to <C>.<cmeth>
+ # and the return type is whatever the cmeth returns. Same
+ # detection shape as the codegen lowering.
     if recv >= 0 && @nd_type[recv] == "CallNode" && @nd_name[recv] == "class"
-      inner_recv_419 = @nd_receiver[recv]
-      if inner_recv_419 >= 0
-        inner_t_419 = infer_type(inner_recv_419)
-        if is_obj_type(inner_t_419) == 1
-          inner_bt_419 = base_type(inner_t_419)
-          inner_cname_419 = inner_bt_419[4, inner_bt_419.length - 4]
-          inner_ci_419 = find_class_idx(inner_cname_419)
-          if inner_ci_419 >= 0
-            owner_419 = cls_cmethod_owner(inner_ci_419, mname)
-            if owner_419 >= 0
-              cmnames_419 = @cls_cmeth_names[owner_419].split(";")
-              cmreturns_419 = @cls_cmeth_returns[owner_419].split(";")
-              base_rt_419 = ""
-              cmidx_419 = 0
-              while cmidx_419 < cmnames_419.length
-                if cmnames_419[cmidx_419] == mname && cmidx_419 < cmreturns_419.length
-                  base_rt_419 = cmreturns_419[cmidx_419]
-                  cmidx_419 = cmnames_419.length
+      inner_recv = @nd_receiver[recv]
+      if inner_recv >= 0
+        inner_t = infer_type(inner_recv)
+        if is_obj_type(inner_t) == 1
+          inner_bt = base_type(inner_t)
+          inner_cname = inner_bt[4, inner_bt.length - 4]
+          inner_ci = find_class_idx(inner_cname)
+          if inner_ci >= 0
+            owner = cls_cmethod_owner(inner_ci, mname)
+            if owner >= 0
+              cmnames = @cls_cmeth_names[owner].split(";")
+              cmreturns = @cls_cmeth_returns[owner].split(";")
+              base_rt = ""
+              cmidx = 0
+              while cmidx < cmnames.length
+                if cmnames[cmidx] == mname && cmidx < cmreturns.length
+                  base_rt = cmreturns[cmidx]
+                  cmidx = cmnames.length
                 else
-                  cmidx_419 = cmidx_419 + 1
+                  cmidx = cmidx + 1
                 end
               end
-              if base_rt_419 != ""
-                # Issue #431: when descendants of inner_ci override
-                # mname and any override's return type diverges from
-                # the base owner's, the codegen-side chained dispatch
-                # boxes each arm to sp_RbVal so the unified result
-                # temp has a single C type. Widen the inferred type
-                # to "poly" so consumers see the boxed value through
-                # the poly-dispatch machinery.
-                diverged_419 = 0
-                ck_419 = 0
-                while ck_419 < @cls_names.length
-                  if ck_419 != inner_ci_419 && cls_is_descendant(ck_419, inner_ci_419) == 1
-                    own_419 = cls_cmethod_owner(ck_419, mname)
-                    if own_419 == ck_419
-                      ck_cmnames = @cls_cmeth_names[ck_419].split(";")
-                      ck_cmreturns = @cls_cmeth_returns[ck_419].split(";")
-                      ki_419 = 0
-                      while ki_419 < ck_cmnames.length
-                        if ck_cmnames[ki_419] == mname && ki_419 < ck_cmreturns.length
-                          if ck_cmreturns[ki_419] != base_rt_419
-                            diverged_419 = 1
+              if base_rt != ""
+ # when descendants of inner_ci override
+ # mname and any override's return type diverges from
+ # the base owner's, the codegen-side chained dispatch
+ # boxes each arm to sp_RbVal so the unified result
+ # temp has a single C type. Widen the inferred type
+ # to "poly" so consumers see the boxed value through
+ # the poly-dispatch machinery.
+                diverged = 0
+                ck = 0
+                while ck < @cls_names.length
+                  if ck != inner_ci && cls_is_descendant(ck, inner_ci) == 1
+                    own = cls_cmethod_owner(ck, mname)
+                    if own == ck
+                      ck_cmnames = @cls_cmeth_names[ck].split(";")
+                      ck_cmreturns = @cls_cmeth_returns[ck].split(";")
+                      ki = 0
+                      while ki < ck_cmnames.length
+                        if ck_cmnames[ki] == mname && ki < ck_cmreturns.length
+                          if ck_cmreturns[ki] != base_rt
+                            diverged = 1
                           end
-                          ki_419 = ck_cmnames.length
+                          ki = ck_cmnames.length
                         else
-                          ki_419 = ki_419 + 1
+                          ki = ki + 1
                         end
                       end
                     end
                   end
-                  ck_419 = ck_419 + 1
+                  ck = ck + 1
                 end
-                if diverged_419 == 1
+                if diverged == 1
                   return "poly"
                 end
-                return base_rt_419
+                return base_rt
               end
             end
           end
         end
       end
     end
-    # Kernel coercion methods: Integer(x) / Float(x) return their class.
-    # Only treat as a Kernel call when there's no explicit receiver — with
-    # a receiver, "Integer" / "Float" would be ConstantReadNode lookups,
-    # not method calls, and wouldn't reach this name dispatch anyway.
+ # Kernel coercion methods: Integer(x) / Float(x) return their class.
+ # Only treat as a Kernel call when there's no explicit receiver — with
+ # a receiver, "Integer" / "Float" would be ConstantReadNode lookups,
+ # not method calls, and wouldn't reach this name dispatch anyway.
     if recv < 0 && mname == "Integer"
       return "int"
     end
     if recv < 0 && mname == "Float"
       return "float"
     end
-    # Float#ceil(n)/floor(n)/round(n)/truncate(n) with n given return
-    # Float; zero-arg / Integer#ceil etc. return Integer. (truncate's arm
-    # used to live next to nan?/infinite? — folded in here for one place
-    # to update.)
-    #
-    # Gate on a Float receiver only — `rt == "float"` exclusively,
-    # not "int". A user-defined module method like
-    # `ViewHelpers.truncate(s, length: 100)` reaches infer_type
-    # with the module's ConstantReadNode receiver, which falls
-    # back to "int", so a permissive gate would match purely by
-    # name and emit `sp_box_float(...)` against a `const char *`
-    # return value. Integer ceil/floor/round/truncate-with-arg are
-    # rare in practice; if the codebase needs them later, a
-    # future call-site-type-narrowing pass can claim them.
+ # Float#ceil(n)/floor(n)/round(n)/truncate(n) with n given return
+ # Float; zero-arg / Integer#ceil etc. return Integer. (truncate's arm
+ # used to live next to nan?/infinite? — folded in here for one place
+ # to update.)
+ #
+ # Gate on a Float receiver only — `rt == "float"` exclusively,
+ # not "int". A user-defined module method like
+ # `ViewHelpers.truncate(s, length: 100)` reaches infer_type
+ # with the module's ConstantReadNode receiver, which falls
+ # back to "int", so a permissive gate would match purely by
+ # name and emit `sp_box_float(...)` against a `const char *`
+ # return value. Integer ceil/floor/round/truncate-with-arg are
+ # rare in practice; if the codebase needs them later, a
+ # future call-site-type-narrowing pass can claim them.
     if mname == "ceil" || mname == "floor" || mname == "round" || mname == "truncate"
       if recv >= 0 && infer_type(recv) == "float"
         if @nd_arguments[nid] >= 0
@@ -3550,9 +3550,9 @@ class Compiler
       end
       return "int"
     end
-    # String#each_byte returns the receiver per CRuby. The block-bearing
-    # form is handled in compile_string_method_expr; the inference rule
-    # here is what makes `ret = "hi".each_byte { ... }` typed as string.
+ # String#each_byte returns the receiver per CRuby. The block-bearing
+ # form is handled in compile_string_method_expr; the inference rule
+ # here is what makes `ret = "hi".each_byte { ... }` typed as string.
     if mname == "each_byte"
       if recv >= 0 && @nd_block[nid] >= 0
         rt = infer_type(recv)
@@ -3562,9 +3562,9 @@ class Compiler
       end
     end
     if mname == "then" || mname == "yield_self"
-      # Return type is the block's return type. Bind the block param to
-      # the receiver's type so infer_type sees the inner shadow, not any
-      # outer same-named local of a different type.
+ # Return type is the block's return type. Bind the block param to
+ # the receiver's type so infer_type sees the inner shadow, not any
+ # outer same-named local of a different type.
       if recv >= 0
         blk = @nd_block[nid]
         if blk >= 0
@@ -3623,8 +3623,8 @@ class Compiler
       return "int_array"
     end
     if mname == "slice!"
-      # Mirrors Array#slice (with !) — returns an array of the same
-      # element type as the receiver.
+ # Mirrors Array#slice (with !) — returns an array of the same
+ # element type as the receiver.
       if recv >= 0
         return infer_type(recv)
       end
@@ -3697,9 +3697,9 @@ class Compiler
           return "string"
         end
       end
-      # Don't claim "int" for fetch on receivers we don't recognize
-      # as a built-in collection — let later dispatch resolve a
-      # user-defined `def fetch` against the receiver class.
+ # Don't claim "int" for fetch on receivers we don't recognize
+ # as a built-in collection — let later dispatch resolve a
+ # user-defined `def fetch` against the receiver class.
       return ""
     end
     if mname == "dig"
@@ -3816,11 +3816,11 @@ class Compiler
         if rt == "float_array"
           return "float"
         end
-        # User-class ptr_array: `arr.delete_at(i)` returns the
-        # popped instance pointer, typed to the array's element
-        # class. Without this branch the assignment target
-        # (`v = arr.delete_at(i)`) defaults to int and the C
-        # compile fails on the implicit ptr-to-int cast.
+ # User-class ptr_array: `arr.delete_at(i)` returns the
+ # popped instance pointer, typed to the array's element
+ # class. Without this branch the assignment target
+ # (`v = arr.delete_at(i)`) defaults to int and the C
+ # compile fails on the implicit ptr-to-int cast.
         if is_ptr_array_type(rt) == 1
           return ptr_array_elem_type(rt)
         end
@@ -3867,10 +3867,10 @@ class Compiler
           return "string"
         end
       end
-      # Same fall-through logic as fetch above: a user-defined
-      # `def find` (the canonical ActiveRecord finder shape) wins
-      # over the built-in collection dispatch when the receiver
-      # isn't a recognized built-in collection.
+ # Same fall-through logic as fetch above: a user-defined
+ # `def find` (the canonical ActiveRecord finder shape) wins
+ # over the built-in collection dispatch when the receiver
+ # isn't a recognized built-in collection.
       return ""
     end
     if mname == "keys"
@@ -3900,9 +3900,9 @@ class Compiler
         if rt == "int_array"
           return "int"
         end
-        # Not an array — recv has a user-defined `sample`. Defer to
-        # the user-class dispatch path instead of returning the
-        # Array#sample default of int.
+ # Not an array — recv has a user-defined `sample`. Defer to
+ # the user-class dispatch path instead of returning the
+ # Array#sample default of int.
         return ""
       end
       return "int"
@@ -3984,19 +3984,19 @@ class Compiler
       end
       return "int_array"
     end
-    # `replace(other)` returns the receiver, not a fresh array;
-    # the inferred result must therefore preserve the receiver's
-    # array type so that an expression-form `c = a.replace(b)`
-    # still tags `c` as `int_array` (or whatever `a` is) rather
-    # than falling through to `int`.
+ # `replace(other)` returns the receiver, not a fresh array;
+ # the inferred result must therefore preserve the receiver's
+ # array type so that an expression-form `c = a.replace(b)`
+ # still tags `c` as `int_array` (or whatever `a` is) rather
+ # than falling through to `int`.
     if mname == "replace"
       if recv >= 0
         return infer_type(recv)
       end
     end
-    # `clear` mutates in place and returns the now-empty receiver.
-    # Same shape as `replace`: preserve the receiver's array/string
-    # type so chained or `||=`-style usage doesn't fall back to int.
+ # `clear` mutates in place and returns the now-empty receiver.
+ # Same shape as `replace`: preserve the receiver's array/string
+ # type so chained or `||=`-style usage doesn't fall back to int.
     if mname == "clear"
       if recv >= 0
         rt_clr = infer_type(recv)
@@ -4050,7 +4050,7 @@ class Compiler
     if mname == "first" || mname == "last"
       if recv >= 0
         rt = infer_type(recv)
-        # With arg → returns array of same type
+ # With arg → returns array of same type
         if @nd_arguments[nid] >= 0
           aargs = get_args(@nd_arguments[nid])
           if aargs.length > 0
@@ -4066,13 +4066,13 @@ class Compiler
         if rt == "float_array"
           return "float"
         end
-        # `<X>_ptr_array.first` / `.last` returns an `<X>` (e.g.
-        # `int_array_ptr_array.first` → `int_array`). Without this,
-        # downstream typed-array consumers (notably the slice-assign
-        # `arr[i, n] = banks.first` path in compile_bracket_assign,
-        # which needs `infer_type(arg_ids[2]) == "int_array"` to fire)
-        # see "int" and silently fall through to element-assign,
-        # silently lowering `arr[i, n] = src` to `arr[i] = n`.
+ # `<X>_ptr_array.first` / `.last` returns an `<X>` (e.g.
+ # `int_array_ptr_array.first` → `int_array`). Without this,
+ # downstream typed-array consumers (notably the slice-assign
+ # `arr[i, n] = banks.first` path in compile_bracket_assign,
+ # which needs `infer_type(arg_ids[2]) == "int_array"` to fire)
+ # see "int" and silently fall through to element-assign,
+ # silently lowering `arr[i, n] = src` to `arr[i] = n`.
         if is_ptr_array_type(rt) == 1
           return ptr_array_elem_type(rt)
         end
@@ -4128,10 +4128,10 @@ class Compiler
       return "int_array"
     end
     if mname == "transpose"
-      # Transposing a matrix preserves its shape type — `[[Int]]` stays
-      # `[[Int]]` (issue #156). Only ptr_array-of-T_array receivers are
-      # currently supported by codegen; other shapes fall through to
-      # the unresolved-call warning at emit time.
+ # Transposing a matrix preserves its shape type — `[[Int]]` stays
+ # `[[Int]]` . Only ptr_array-of-T_array receivers are
+ # currently supported by codegen; other shapes fall through to
+ # the unresolved-call warning at emit time.
       if recv >= 0
         rt = infer_type(recv)
         if is_ptr_array_type(rt) == 1
@@ -4141,7 +4141,7 @@ class Compiler
     end
     if mname == "flat_map"
       if recv >= 0
-        # Block returns an array; result type matches block return type
+ # Block returns an array; result type matches block return type
         blk = @nd_block[nid]
         if blk >= 0
           bbody = @nd_body[blk]
@@ -4149,7 +4149,7 @@ class Compiler
             bbs = get_stmts(bbody)
             if bbs.length > 0
               bret = infer_type(bbs.last)
-              # If block returns an array type, use it as result type
+ # If block returns an array type, use it as result type
               if is_array_type(bret) == 1
                 return bret
               end
@@ -4199,7 +4199,7 @@ class Compiler
     if mname == "zip"
       if recv >= 0
         rt = infer_type(recv)
-        # Check if all zip arguments have the same element type
+ # Check if all zip arguments have the same element type
         heterogeneous = 0
         multi_arg = 0
         args_id = @nd_arguments[nid]
@@ -4218,7 +4218,7 @@ class Compiler
           end
         end
         if heterogeneous == 1 || multi_arg == 1
-          # Build tuple type: receiver elem + each arg elem
+ # Build tuple type: receiver elem + each arg elem
           parts = "".split(",")
           parts.push(elem_type_of_array(rt))
           aargs2 = get_args(args_id)
@@ -4248,7 +4248,7 @@ class Compiler
     end
     if mname == "map"
       if recv >= 0
-        # Declare bp inside a scope so infer_type sees the inner element type, not a shadowed outer local.
+ # Declare bp inside a scope so infer_type sees the inner element type, not a shadowed outer local.
         blk = @nd_block[nid]
         if blk >= 0
           bbody = @nd_body[blk]
@@ -4275,52 +4275,52 @@ class Compiler
               if is_obj_type(bret) == 1
                 return bret + "_ptr_array"
               end
-              # Block returns a 1D array (e.g.
-              # `[1, 6].map { (0..n).map { i } }` or
-              # `(0..3).map { |i| (0..3).map { ... } }`) — each
-              # outer element is itself a 1D typed array. Encode
-              # as `<inner>_ptr_array` for the standard
-              # `arr[i][j]` dispatch shape.
+ # Block returns a 1D array (e.g.
+ # `[1, 6].map { (0..n).map { i } }` or
+ # `(0..3).map { |i| (0..3).map { ... } }`) — each
+ # outer element is itself a 1D typed array. Encode
+ # as `<inner>_ptr_array` for the standard
+ # `arr[i][j]` dispatch shape.
               if bret == "int_array" || bret == "float_array" || bret == "str_array" || bret == "sym_array"
                 return bret + "_ptr_array"
               end
-              # Block returns a deeper-nested array
-              # (`int_array_ptr_array`, `poly_array`). Encode as
-              # `poly_array` — cls_id tagging chain on the inner
-              # PolyArray pushes preserves elem type for
-              # `arr[i][j][k]` 3D dispatch.
+ # Block returns a deeper-nested array
+ # (`int_array_ptr_array`, `poly_array`). Encode as
+ # `poly_array` — cls_id tagging chain on the inner
+ # PolyArray pushes preserves elem type for
+ # `arr[i][j][k]` 3D dispatch.
               if is_ptr_array_type(bret) == 1 || bret == "poly_array"
                 return "poly_array"
               end
-              # Block returns a generic `poly` (e.g. `entries[key]`
-              # where `entries` is `str_poly_hash`) — the resulting
-              # array is heterogeneous, so encode as poly_array. The
-              # @needs_rb_value bookkeeping stays in scan-pass
-              # widening; this branch only types the .map result.
+ # Block returns a generic `poly` (e.g. `entries[key]`
+ # where `entries` is `str_poly_hash`) — the resulting
+ # array is heterogeneous, so encode as poly_array. The
+ # @needs_rb_value bookkeeping stays in scan-pass
+ # widening; this branch only types the .map result.
               if bret == "poly"
                 @needs_rb_value = 1
                 return "poly_array"
               end
-              # poly_array bret intentionally falls through. Returning
-              # poly_array_ptr_array would be more accurate, but ivars
-              # holding the result (and the corresponding `[nil] *
-              # n` companions) often haven't been widened to the
-              # ptr_array shape by the type-inference pass yet.
-              # Letting it fall through to int_array preserves the
-              # pre-fix typing that those companion ivars match.
-              # Block returns a non-trivial type (poly value, etc.).
-              # The map's overall result is still an Array — fall
-              # through to the recv-based default below only when
-              # recv is already array-shaped, otherwise return
-              # int_array as a generic placeholder.
+ # poly_array bret intentionally falls through. Returning
+ # poly_array_ptr_array would be more accurate, but ivars
+ # holding the result (and the corresponding `[nil] *
+ # n` companions) often haven't been widened to the
+ # ptr_array shape by the type-inference pass yet.
+ # Letting it fall through to int_array preserves the
+ # pre-fix typing that those companion ivars match.
+ # Block returns a non-trivial type (poly value, etc.).
+ # The map's overall result is still an Array — fall
+ # through to the recv-based default below only when
+ # recv is already array-shaped, otherwise return
+ # int_array as a generic placeholder.
             end
           end
         end
         rt_recv = infer_type(recv)
-        # Range#map / Integer#step.map / non-array recv → result is
-        # an Array, not a Range/IntArray. Without this, an
-        # `@x = (0...n).map {...}` recorded the ivar as `range` and
-        # later `@x = something_else` writes failed to type-check.
+ # Range#map / Integer#step.map / non-array recv → result is
+ # an Array, not a Range/IntArray. Without this, an
+ # `@x = (0...n).map {...}` recorded the ivar as `range` and
+ # later `@x = something_else` writes failed to type-check.
         if rt_recv == "range" || rt_recv == "int"
           return "int_array"
         end
@@ -4341,7 +4341,7 @@ class Compiler
       return "int_array"
     end
     if mname == "reduce" || mname == "inject" || mname == "each_with_object"
-      # Return type is the accumulator type, inferred from initial value
+ # Return type is the accumulator type, inferred from initial value
       args_id = @nd_arguments[nid]
       if args_id >= 0
         aargs = get_args(args_id)
@@ -4353,11 +4353,11 @@ class Compiler
     end
     if mname == "[]"
       if recv >= 0
-        # ENV["X"] returns `const char *` (sp_str_dup_external of
-        # getenv). The plain receiver-type dispatch below would
-        # leave ENV at the default "int" (unknown constant) and
-        # miss every branch, so claim string here directly.
-        # Mirrors the codegen site's ENV check.
+ # ENV["X"] returns `const char *` (sp_str_dup_external of
+ # getenv). The plain receiver-type dispatch below would
+ # leave ENV at the default "int" (unknown constant) and
+ # miss every branch, so claim string here directly.
+ # Mirrors the codegen site's ENV check.
         if @nd_type[recv] == "ConstantReadNode" && @nd_name[recv] == "ENV"
           return "string"
         end
@@ -4369,18 +4369,18 @@ class Compiler
           return "string"
         end
         if rt == "poly"
-          # Approach 2: narrow `<poly>[k]` to int when the receiver
-          # came from a poly_array whose observed element kinds all
-          # imply int-returning `[]`. Mirrors the codegen-side
-          # narrowing in `compile_poly_method_call`.
+ # Approach 2: narrow `<poly>[k]` to int when the receiver
+ # came from a poly_array whose observed element kinds all
+ # imply int-returning `[]`. Mirrors the codegen-side
+ # narrowing in `compile_poly_method_call`.
           if poly_index_narrow_int(nid) == 1
             return "int"
           end
           return "poly"
         end
         if rt == "int_array"
-          # a[range] / a[start, len] returns a slice (still int_array);
-          # bare a[i] returns the element.
+ # a[range] / a[start, len] returns a slice (still int_array);
+ # bare a[i] returns the element.
           args_id = @nd_arguments[nid]
           if args_id >= 0
             a = get_args(args_id)
@@ -4397,7 +4397,7 @@ class Compiler
           return "symbol"
         end
         if rt == "float_array"
-          # a[range] / a[start, len] returns a slice (still float_array).
+ # a[range] / a[start, len] returns a slice (still float_array).
           args_id = @nd_arguments[nid]
           if args_id >= 0
             a = get_args(args_id)
@@ -4411,7 +4411,7 @@ class Compiler
           return "float"
         end
         if rt == "str_array"
-          # a[range] / a[start, len] returns a slice (still str_array).
+ # a[range] / a[start, len] returns a slice (still str_array).
           args_id = @nd_arguments[nid]
           if args_id >= 0
             a = get_args(args_id)
@@ -4441,7 +4441,7 @@ class Compiler
           return ptr_array_elem_type(rt)
         end
         if is_tuple_type(rt) == 1
-          # Infer element type from constant index
+ # Infer element type from constant index
           args_id = @nd_arguments[nid]
           if args_id >= 0
             aargs = get_args(args_id)
@@ -4483,11 +4483,11 @@ class Compiler
         if rt == "lambda"
           return "lambda"
         end
-        # User-defined `def [](k)` on an obj recv. Walk the class's
-        # method table the same way infer_recv_method_type does for
-        # arbitrary mname; otherwise the fallback at the tail of
-        # this branch returns "int" and downstream `.to_i` /
-        # `.length` etc. dispatch on the wrong recv type.
+ # User-defined `def [](k)` on an obj recv. Walk the class's
+ # method table the same way infer_recv_method_type does for
+ # arbitrary mname; otherwise the fallback at the tail of
+ # this branch returns "int" and downstream `.to_i` /
+ # `.length` etc. dispatch on the wrong recv type.
         if is_obj_type(rt) == 1
           bt = base_type(rt)
           cname = bt[4, bt.length - 4]
@@ -4521,9 +4521,9 @@ class Compiler
 
   def infer_constructor_type(nid, mname, recv)
     if mname == "new"
-      # Implicit recv-less `new` in a class method body resolves
-      # to `obj_<CurrentClass>` so subsequent attr_writer calls
-      # and ivar widening see the right type.
+ # Implicit recv-less `new` in a class method body resolves
+ # to `obj_<CurrentClass>` so subsequent attr_writer calls
+ # and ivar widening see the right type.
       if recv < 0
         implicit = current_class_method_owning_class
         if implicit != ""
@@ -4534,23 +4534,23 @@ class Compiler
         rn = constructor_class_name(recv)
         if rn != ""
           if rn == "Array"
-            # Block form `Array.new(n) { ... }` — infer the container
-            # from the block's tail expression, same shape as the
-            # compile_constructor_expr emit. Without this branch
-            # ivar widening saw `int_array` and the actual emit's
-            # PtrArray / PolyArray clashed.
+ # Block form `Array.new(n) { ... }` — infer the container
+ # from the block's tail expression, same shape as the
+ # compile_constructor_expr emit. Without this branch
+ # ivar widening saw `int_array` and the actual emit's
+ # PtrArray / PolyArray clashed.
             blk_an = @nd_block[nid]
             if blk_an >= 0
               body_an = @nd_body[blk_an]
               if body_an >= 0
                 stmts_an = get_stmts(body_an)
                 if stmts_an.length > 0
-                  # `[]` / `[].dup` block tail: the inner element type
-                  # is statically ambiguous. Use poly_array (a
-                  # PolyArray-of-PolyArray) for the result so later
-                  # pushes of pointer-typed values (3-tuples,
-                  # IntArrays, etc.) survive — the sp_poly_shl runtime
-                  # dispatch handles any push kind via cls_id.
+ # `[]` / `[].dup` block tail: the inner element type
+ # is statically ambiguous. Use poly_array (a
+ # PolyArray-of-PolyArray) for the result so later
+ # pushes of pointer-typed values (3-tuples,
+ # IntArrays, etc.) survive — the sp_poly_shl runtime
+ # dispatch handles any push kind via cls_id.
                   if is_empty_array_or_dup(stmts_an.last) == 1
                     @needs_rb_value = 1
                     @needs_gc = 1
@@ -4581,9 +4581,9 @@ class Compiler
                 end
               end
             end
-            # Check fill value type. Pointer-type fills must produce a typed
-            # PtrArray; falling through to int_array would leave the
-            # elements unscanned by GC.
+ # Check fill value type. Pointer-type fills must produce a typed
+ # PtrArray; falling through to int_array would leave the
+ # elements unscanned by GC.
             args_id = @nd_arguments[nid]
             if args_id >= 0
               aargs = get_args(args_id)
@@ -4614,9 +4614,9 @@ class Compiler
             return "str_int_hash"
           end
           if rn == "String"
-            # `String.new` / `String.new("...")` returns a fresh
-            # mutable string buffer (sp_String *), the same type
-            # that `s = ""; s << ...` widens a string local into.
+ # `String.new` / `String.new("...")` returns a fresh
+ # mutable string buffer (sp_String *), the same type
+ # that `s = ""; s << ...` widens a string local into.
             return "mutable_str"
           end
           if rn == "Proc"
@@ -4636,7 +4636,7 @@ class Compiler
   end
 
   def infer_constant_recv_type(nid, mname, recv)
-    # File operations
+ # File operations
     if recv >= 0
       if @nd_type[recv] == "ConstantReadNode"
         rcname = @nd_name[recv]
@@ -4692,7 +4692,7 @@ class Compiler
         end
       end
     end
-    # User-defined class methods
+ # User-defined class methods
     if recv >= 0
       rcname = constructor_class_name(recv)
       if rcname != ""
@@ -4706,11 +4706,11 @@ class Compiler
           if mname == "new"
             return "obj_" + rcname
           end
-          # `Klass.method(:cls_meth)` — bind to a class method.
-          # Returns a Method object exactly like the instance-recv
-          # form. The compile path below emits an adapter trampoline
-          # so the Method's `(void *, mrb_int...)` ABI absorbs the
-          # missing self.
+ # `Klass.method(:cls_meth)` — bind to a class method.
+ # Returns a Method object exactly like the instance-recv
+ # form. The compile path below emits an adapter trampoline
+ # so the Method's `(void *, mrb_int...)` ABI absorbs the
+ # missing self.
           if mname == "method"
             args_idm = @nd_arguments[nid]
             if args_idm >= 0
@@ -4726,20 +4726,20 @@ class Compiler
               end
             end
           end
-          # Walk the parent chain so an inherited
-          # `def self.<mname>` on a base class resolves correctly
-          # when called on the subclass (e.g. `Leaf.all` →
-          # `Base.all`'s return type).
+ # Walk the parent chain so an inherited
+ # `def self.<mname>` on a base class resolves correctly
+ # when called on the subclass (e.g. `Leaf.all` →
+ # `Base.all`'s return type).
           inherited_rt = cls_cmethod_return_inherited(ci2, mname)
           if inherited_rt != "" && inherited_rt != "int"
             return inherited_rt
           end
         end
-        # Same lookup for module class methods. They live in the
-        # top-level @meth_* table as `<Mod>_cls_<method>`, not in
-        # @cls_cmeth_* (which is class-only) — so `Module.cls_method`
-        # call sites need this branch to find the method's return
-        # type and assign call-site locals correctly.
+ # Same lookup for module class methods. They live in the
+ # top-level @meth_* table as `<Mod>_cls_<method>`, not in
+ # @cls_cmeth_* (which is class-only) — so `Module.cls_method`
+ # call sites need this branch to find the method's return
+ # type and assign call-site locals correctly.
         if module_name_exists(rcname) == 1
           mfi = find_method_idx(rcname + "_cls_" + mname)
           if mfi >= 0 && mfi < @meth_return_types.length
@@ -4751,7 +4751,7 @@ class Compiler
         end
       end
     end
-    # StringIO methods
+ # StringIO methods
     if recv >= 0
       rt = infer_type(recv)
       if rt == "stringio"
@@ -4773,7 +4773,7 @@ class Compiler
   end
 
   def infer_math_and_misc_type(nid, mname, recv)
-    # backtick
+ # backtick
     if mname == "`"
       return "string"
     end
@@ -4792,11 +4792,11 @@ class Compiler
     if mname == "acos" || mname == "asin" || mname == "atan"
       return "float"
     end
-    # Hyperbolic + inverse hyperbolic — same C99 libm wrappers as the
-    # circular ones above. Issue: returning "float" here lets call sites
-    # that lift `Math.tanh(x)` into a non-Float context (e.g. into an
-    # IntArray slot via `arr[i] = Math.tanh(x)`) get caught at type-
-    # check time instead of silently emitting `0`.
+ # Hyperbolic + inverse hyperbolic — same C99 libm wrappers as the
+ # circular ones above. Issue: returning "float" here lets call sites
+ # that lift `Math.tanh(x)` into a non-Float context (e.g. into an
+ # IntArray slot via `arr[i] = Math.tanh(x)`) get caught at type-
+ # check time instead of silently emitting `0`.
     if mname == "sinh" || mname == "cosh" || mname == "tanh"
       return "float"
     end
@@ -4846,10 +4846,10 @@ class Compiler
   end
 
   def infer_recv_method_type(nid, mname, recv)
-    # Method call on poly
+ # Method call on poly
     if recv >= 0
       rt = infer_type(recv)
-      # Complex value-type methods.
+ # Complex value-type methods.
       if rt == "complex"
         if mname == "real" || mname == "imaginary" || mname == "imag"
           return "float"
@@ -4863,64 +4863,64 @@ class Compiler
           return "bool"
         end
         if mname == "[]"
-          # Narrow `<poly>[k]` to int when the receiver came from a
-          # poly_array whose observed slot-type history all imply
-          # int-returning element kinds (IntArray, Method). Keep this
-          # in sync with `compile_poly_method_call`'s codegen-side
-          # narrowing — divergence widens the consuming slot to poly
-          # while emit produces int.
+ # Narrow `<poly>[k]` to int when the receiver came from a
+ # poly_array whose observed slot-type history all imply
+ # int-returning element kinds (IntArray, Method). Keep this
+ # in sync with `compile_poly_method_call`'s codegen-side
+ # narrowing — divergence widens the consuming slot to poly
+ # while emit produces int.
           if poly_index_narrow_int(nid) == 1
             return "int"
           end
           return "poly"
         end
-        # Scan every user class that defines this method. If they all
-        # agree on the return type, the call has that concrete type.
-        # If they disagree, the call is genuinely polymorphic.
+ # Scan every user class that defines this method. If they all
+ # agree on the return type, the call has that concrete type.
+ # If they disagree, the call is genuinely polymorphic.
         return poly_dispatch_return_type(mname)
       end
-      # Method call on int (possible IntArray element storing object pointers)
-      # Issue #429: when recv is a LocalVariableReadNode whose
-      # var-type table entry hasn't been pinned yet (find_var_type
-      # returns ""), `rt` defaults to "int" via infer_type's
-      # LocalVariableReadNode fallback. The cross-class widening
-      # below would then pick the FIRST user class with a non-int
-      # `<mname>` return, silently widening `r = c.get(...)` to the
-      # wrong type when `c` is statically obj_<Other> but its type
-      # hasn't propagated through the iterative loop yet. Bail out
-      # of the int-recv path in that case ONLY when the candidates
-      # disagree -- if every class defining mname returns the same
-      # type, the widening's result is correct regardless of which
-      # one the recv actually points at. A single matching class
-      # (the multi_return_bare shape, where every callsite's recv
-      # is the same class) keeps the widening intact too.
-      recv_is_unresolved_local_429 = 0
+ # Method call on int (possible IntArray element storing object pointers)
+ # when recv is a LocalVariableReadNode whose
+ # var-type table entry hasn't been pinned yet (find_var_type
+ # returns ""), `rt` defaults to "int" via infer_type's
+ # LocalVariableReadNode fallback. The cross-class widening
+ # below would then pick the FIRST user class with a non-int
+ # `<mname>` return, silently widening `r = c.get(...)` to the
+ # wrong type when `c` is statically obj_<Other> but its type
+ # hasn't propagated through the iterative loop yet. Bail out
+ # of the int-recv path in that case ONLY when the candidates
+ # disagree -- if every class defining mname returns the same
+ # type, the widening's result is correct regardless of which
+ # one the recv actually points at. A single matching class
+ # (the multi_return_bare shape, where every callsite's recv
+ # is the same class) keeps the widening intact too.
+      recv_is_unresolved_local = 0
       if recv >= 0 && @nd_type[recv] == "LocalVariableReadNode" && find_var_type(@nd_name[recv]) == ""
-        unique_rt_429 = ""
-        diverged_429 = 0
-        ci_429 = 0
-        while ci_429 < @cls_names.length
-          if cls_find_method_direct(ci_429, mname) >= 0
-            mr_429 = cls_method_return(ci_429, mname)
-            if mr_429 != "int" && mr_429 != ""
-              if unique_rt_429 == ""
-                unique_rt_429 = mr_429
-              elsif unique_rt_429 != mr_429
-                diverged_429 = 1
-                ci_429 = @cls_names.length
+        unique_rt = ""
+        diverged = 0
+        ci = 0
+        while ci < @cls_names.length
+          if cls_find_method_direct(ci, mname) >= 0
+            mr = cls_method_return(ci, mname)
+            if mr != "int" && mr != ""
+              if unique_rt == ""
+                unique_rt = mr
+              elsif unique_rt != mr
+                diverged = 1
+                ci = @cls_names.length
               end
             end
           end
-          ci_429 = ci_429 + 1
+          ci = ci + 1
         end
-        if diverged_429 == 1
-          recv_is_unresolved_local_429 = 1
+        if diverged == 1
+          recv_is_unresolved_local = 1
         end
       end
-      if rt == "int" && recv_is_unresolved_local_429 == 0
+      if rt == "int" && recv_is_unresolved_local == 0
         ci = 0
         while ci < @cls_names.length
-          # Check zero-arg methods (getters)
+ # Check zero-arg methods (getters)
           ci2_mnames = @cls_meth_names[ci].split(";")
           ci2_mparams = @cls_meth_params[ci].split("|")
           mi2 = 0
@@ -4931,7 +4931,7 @@ class Compiler
                 mp2 = ci2_mparams[mi2]
               end
               if mp2 == ""
-                # Found zero-arg method match
+ # Found zero-arg method match
                 mr = cls_method_return(ci, mname)
                 if mr != "int"
                   return mr
@@ -4940,7 +4940,7 @@ class Compiler
             end
             mi2 = mi2 + 1
           end
-          # Check attr_readers
+ # Check attr_readers
           readers2 = @cls_attr_readers[ci].split(";")
           j2 = 0
           while j2 < readers2.length
@@ -4952,7 +4952,7 @@ class Compiler
             end
             j2 = j2 + 1
           end
-          # Check methods with args
+ # Check methods with args
           midx = cls_find_method_direct(ci, mname)
           if midx >= 0
             mr = cls_method_return(ci, mname)
@@ -4968,7 +4968,7 @@ class Compiler
         cname = bt_rt[4, bt_rt.length - 4]
         ci = find_class_idx(cname)
         if ci >= 0
-          # Check attr_reader
+ # Check attr_reader
           readers = @cls_attr_readers[ci].split(";")
           j = 0
           while j < readers.length
@@ -4977,12 +4977,12 @@ class Compiler
             end
             j = j + 1
           end
-          # Check method
+ # Check method
           mr = cls_method_return(ci, mname)
           if mr != "int"
             return mr
           end
-          # If method exists, return its return type
+ # If method exists, return its return type
           mi = cls_find_method(ci, mname)
           if mi >= 0
             return cls_method_return(ci, mname)
@@ -4994,7 +4994,7 @@ class Compiler
   end
 
   def infer_open_class_type(nid, mname, recv)
-    # Check open class methods for receiver type
+ # Check open class methods for receiver type
     if recv >= 0
       rt = infer_type(recv)
       oc_prefix = ""
@@ -5039,7 +5039,7 @@ class Compiler
     0
   end
 
-  # Check if type is a ptr_array (e.g., "obj_Planet_ptr_array")
+ # Check if type is a ptr_array (e.g., "obj_Planet_ptr_array")
   def is_ptr_array_type(t)
     if t != nil && t.length > 10
       if t.end_with?("_ptr_array")
@@ -5049,7 +5049,7 @@ class Compiler
     0
   end
 
-  # Get element class type from ptr_array type (e.g., "obj_Planet_ptr_array" → "obj_Planet")
+ # Get element class type from ptr_array type (e.g., "obj_Planet_ptr_array" → "obj_Planet")
   def elem_type_of_array(t)
     if t == "int_array"
       return "int"
@@ -5079,11 +5079,11 @@ class Compiler
     ""
   end
 
-  # ---- Tuple type helpers ----
+ # ---- Tuple type helpers ----
   def is_tuple_type(t)
     if t != nil && t.length > 6
       if t[0] == "t" && t[1] == "u" && t[2] == "p" && t[3] == "l" && t[4] == "e" && t[5] == ":"
-        # Exclude ptr_array of tuples
+ # Exclude ptr_array of tuples
         if is_ptr_array_type(t) == 1
           return 0
         end
@@ -5094,7 +5094,7 @@ class Compiler
   end
 
   def tuple_elem_types_str(t)
-    # "tuple:int,string" → "int,string"
+ # "tuple:int,string" → "int,string"
     t[6, t.length - 6]
   end
 
@@ -5108,13 +5108,13 @@ class Compiler
 
 
 
-  # Whether a tuple element type must be traced by the GC scan function.
-  # Scalars (int/float/bool/symbol) are pure values; pointer-to-GC-object
-  # element types must be marked, otherwise the GC frees the inner object
-  # while the tuple keeps a dangling pointer.
+ # Whether a tuple element type must be traced by the GC scan function.
+ # Scalars (int/float/bool/symbol) are pure values; pointer-to-GC-object
+ # element types must be marked, otherwise the GC frees the inner object
+ # while the tuple keeps a dangling pointer.
 
-  # Returns the scan function name for the tuple, or "NULL" if no field
-  # requires marking.
+ # Returns the scan function name for the tuple, or "NULL" if no field
+ # requires marking.
 
   def register_tuple_type(t)
     if is_tuple_type(t) == 1
@@ -5132,7 +5132,7 @@ class Compiler
     end
   end
 
-  # Build "tuple:T0,T1,..." from a list of element node ids and register it.
+ # Build "tuple:T0,T1,..." from a list of element node ids and register it.
   def tuple_type_from_elems(elems)
     parts = "".split(",")
     k = 0
@@ -5145,9 +5145,9 @@ class Compiler
     tt
   end
 
-  # Inferred C type of the i-th lvalue in `a, b, c = rhs`.  Tuple RHS gives
-  # per-position types; everything else falls back to "int" (matching the
-  # legacy default — only the homogeneous int_array case is in wide use).
+ # Inferred C type of the i-th lvalue in `a, b, c = rhs`. Tuple RHS gives
+ # per-position types; everything else falls back to "int" (matching the
+ # legacy default — only the homogeneous int_array case is in wide use).
   def multi_write_target_type(val_id, ti)
     if val_id < 0
       return "int"
@@ -5156,9 +5156,9 @@ class Compiler
     if is_tuple_type(rt) == 1
       return tuple_elem_type_at(rt, ti)
     end
-    # Array literal RHS: each target gets the precise element type so a
-    # heterogeneous literal like [1, "x", 2.0] doesn't force everything
-    # through the poly boxer.
+ # Array literal RHS: each target gets the precise element type so a
+ # heterogeneous literal like [1, "x", 2.0] doesn't force everything
+ # through the poly boxer.
     if @nd_type[val_id] == "ArrayNode"
       elems = parse_id_list(@nd_elements[val_id])
       if ti < elems.length
@@ -5181,19 +5181,19 @@ class Compiler
       return "poly"
     end
     if rt == "poly"
-      # RHS evaluates to sp_RbVal (e.g. `@h[k][i]` where @h is a
-      # poly_poly_hash whose values are poly_arrays of inner poly
-      # elements).  Mirror compile_multi_write's `val_t_local == "poly"`
-      # arm: unbox to sp_PolyArray * at runtime, fetch each slot via
-      # sp_PolyArray_get returning sp_RbVal, so each target slot is
-      # typed `poly` and stays boxed for downstream poly dispatch.
+ # RHS evaluates to sp_RbVal (e.g. `@h[k][i]` where @h is a
+ # poly_poly_hash whose values are poly_arrays of inner poly
+ # elements). Mirror compile_multi_write's `val_t_local == "poly"`
+ # arm: unbox to sp_PolyArray * at runtime, fetch each slot via
+ # sp_PolyArray_get returning sp_RbVal, so each target slot is
+ # typed `poly` and stays boxed for downstream poly dispatch.
       return "poly"
     end
     "int"
   end
 
-  # Type for the splat target in `a, *b = rhs`. Returns the rhs's array
-  # type (so `b` is a typed-array of the same element type).
+ # Type for the splat target in `a, *b = rhs`. Returns the rhs's array
+ # type (so `b` is a typed-array of the same element type).
   def splat_rest_type(val_id)
     if val_id < 0
       return "int_array"
@@ -5225,8 +5225,8 @@ class Compiler
     if is_nullable_type(t) == 1
       t = base_type(t)
     end
-    # Raw C pointer (FFI). Intentionally NOT a GC pointer — foreign
-    # pointers are user-managed and the GC must not trace or free them.
+ # Raw C pointer (FFI). Intentionally NOT a GC pointer — foreign
+ # pointers are user-managed and the GC must not trace or free them.
     if t == "ptr"
       return 0
     end
@@ -5301,7 +5301,7 @@ class Compiler
     0
   end
 
-  # Check if evaluating an expression might trigger GC allocation
+ # Check if evaluating an expression might trigger GC allocation
 
   def is_nullable_type(t)
     if t.length > 1 && t[t.length - 1] == "?"
@@ -5310,11 +5310,11 @@ class Compiler
     0
   end
 
-  # Empty `[]` / `{}` literals need deferred element-type resolution
-  # — the type can only be settled by later writes. This helper
-  # distinguishes `[]` from `[1, 2, 3]` so the promotion machinery
-  # can recognize "writes haven't fixed the element type yet, so a
-  # later push can still pick it".
+ # Empty `[]` / `{}` literals need deferred element-type resolution
+ # — the type can only be settled by later writes. This helper
+ # distinguishes `[]` from `[1, 2, 3]` so the promotion machinery
+ # can recognize "writes haven't fixed the element type yet, so a
+ # later push can still pick it".
   def is_empty_hash_literal(nid)
     if nid < 0
       return 0
@@ -5343,15 +5343,15 @@ class Compiler
     0
   end
 
-  # `[]` / `[].dup` — an empty array whose static element type is
-  # ambiguous. When this is the tail of a block whose result becomes
-  # the inner storage of a nested array (`Array.new(N) { [].dup }`,
-  # `(0..N).map { [].dup }`), defaulting to `int_array` is unsafe:
-  # later pushes of pointer-typed values (3-tuples, IntArrays, etc.)
-  # silently truncate the pointer to mrb_int. Use `poly_array` for
-  # the inner container instead so push goes through sp_PolyArray
-  # (with sp_RbVal slots) and the runtime cls_id dispatch in
-  # sp_poly_shl handles any pushed kind correctly.
+ # `[]` / `[].dup` — an empty array whose static element type is
+ # ambiguous. When this is the tail of a block whose result becomes
+ # the inner storage of a nested array (`Array.new(N) { [].dup }`,
+ # `(0..N).map { [].dup }`), defaulting to `int_array` is unsafe:
+ # later pushes of pointer-typed values (3-tuples, IntArrays, etc.)
+ # silently truncate the pointer to mrb_int. Use `poly_array` for
+ # the inner container instead so push goes through sp_PolyArray
+ # (with sp_RbVal slots) and the runtime cls_id dispatch in
+ # sp_poly_shl handles any pushed kind correctly.
   def is_empty_array_or_dup(nid)
     if is_empty_array_literal(nid) == 1
       return 1
@@ -5372,11 +5372,11 @@ class Compiler
     is_empty_array_literal(recv)
   end
 
-  # `[nil] * N` / `[0] * N` is a sized empty default — the elements
-  # come from `nil`/`0`, so the array's effective element type is the
-  # same as `[]`'s default (int_array). Used by writer-scan and the
-  # expected-type-aware compile path so a later typed `arr[i] = obj`
-  # write can promote / direct-allocate the right kind of container.
+ # `[nil] * N` / `[0] * N` is a sized empty default — the elements
+ # come from `nil`/`0`, so the array's effective element type is the
+ # same as `[]`'s default (int_array). Used by writer-scan and the
+ # expected-type-aware compile path so a later typed `arr[i] = obj`
+ # write can promote / direct-allocate the right kind of container.
 
   def base_type(t)
     if t.length > 1 && t[t.length - 1] == "?"
@@ -5386,7 +5386,7 @@ class Compiler
   end
 
   def is_nullable_pointer_type(t)
-    # Pointer types that can represent nil as NULL
+ # Pointer types that can represent nil as NULL
     bt = base_type(t)
     if bt == "ptr"
       return 1
@@ -5424,9 +5424,9 @@ class Compiler
     0
   end
 
-  # True when class `ci` (or any of its parents) has registered `bname` as
-  # an attr_writer / attr_accessor or a struct field — i.e. `obj.bname = v`
-  # may safely become a direct field write.
+ # True when class `ci` (or any of its parents) has registered `bname` as
+ # an attr_writer / attr_accessor or a struct field — i.e. `obj.bname = v`
+ # may safely become a direct field write.
   def cls_has_attr_writer(ci, bname)
     if ci < 0
       return 0
@@ -5449,11 +5449,11 @@ class Compiler
   end
 
 
-  # ---- C type mapping ----
+ # ---- C type mapping ----
 
 
 
-  # PM_RANGE_FLAGS_EXCLUDE_END = 4: bit 2 set means `...` (exclusive).
+ # PM_RANGE_FLAGS_EXCLUDE_END = 4: bit 2 set means `...` (exclusive).
 
 
 
@@ -5468,7 +5468,7 @@ class Compiler
     ""
   end
 
-  # `iv_<name>` at toplevel (no self), `self->iv_<name>` inside a class.
+ # `iv_<name>` at toplevel (no self), `self->iv_<name>` inside a class.
 
   def register_toplevel_ivar(name, type)
     if type == ""
@@ -5489,10 +5489,10 @@ class Compiler
     @toplevel_ivar_types.push(type)
   end
 
-  # Walk the program for ivar nodes at script scope. Class/Module bodies
-  # are skipped — their ivars belong to the enclosing class. Top-level
-  # `def` bodies ARE walked: in Ruby, `def foo; @x; end` at script scope
-  # shares the same `main` ivar that bare `@x` writes.
+ # Walk the program for ivar nodes at script scope. Class/Module bodies
+ # are skipped — their ivars belong to the enclosing class. Top-level
+ # `def` bodies ARE walked: in Ruby, `def foo; @x; end` at script scope
+ # shares the same `main` ivar that bare `@x` writes.
   def scan_toplevel_ivars(nid)
     if nid < 0 || nid >= @nd_count
       return
@@ -5527,12 +5527,12 @@ class Compiler
     name
   end
 
-  # ---- Array type helpers ----
+ # ---- Array type helpers ----
 
-  # The canonical "is this an array type?" check. Use this when you need
-  # to dispatch a method that's defined for every typed array — `+`,
-  # `concat`, `shuffle`, `each_with_object`, `flat_map`, etc. Covers the
-  # 5 typed arrays (int/str/float/sym/poly) and any *_ptr_array.
+ # The canonical "is this an array type?" check. Use this when you need
+ # to dispatch a method that's defined for every typed array — `+`,
+ # `concat`, `shuffle`, `each_with_object`, `flat_map`, etc. Covers the
+ # 5 typed arrays (int/str/float/sym/poly) and any *_ptr_array.
   def is_array_type(t)
     if is_nullable_type(t) == 1
       t = base_type(t)
@@ -5579,8 +5579,8 @@ class Compiler
     ""
   end
 
-  # CRuby returns nil for static mismatches (e.g. `{a: 1}.dig("a")`)
-  # since no key compares equal — Hash#dig short-circuits to nil here.
+ # CRuby returns nil for static mismatches (e.g. `{a: 1}.dig("a")`)
+ # since no key compares equal — Hash#dig short-circuits to nil here.
   def hash_key_matches_recv(recv_type, key_type)
     if recv_type.start_with?("sym_") && key_type == "symbol"
       return 1
@@ -5594,22 +5594,22 @@ class Compiler
     0
   end
 
-  # The four typed arrays that have set-op runtime helpers
-  # (sp_*_intersect / _union / _difference). poly_array and ptr_array
-  # are deliberately excluded — element equality isn't available there.
+ # The four typed arrays that have set-op runtime helpers
+ # (sp_*_intersect / _union / _difference). poly_array and ptr_array
+ # are deliberately excluded — element equality isn't available there.
   def is_typed_array_type(t)
     t == "int_array" || t == "sym_array" || t == "str_array" || t == "float_array"
   end
 
-  # Returns "" to fall through to the literal C operator; otherwise the
-  # typed-array helper call. `op` is one of "intersect"/"union"/"difference".
-  # `lt` is the pre-computed receiver type from the caller.
+ # Returns "" to fall through to the literal C operator; otherwise the
+ # typed-array helper call. `op` is one of "intersect"/"union"/"difference".
+ # `lt` is the pre-computed receiver type from the caller.
 
-  # Set the right @needs_<runtime> flag for the given array type.
+ # Set the right @needs_<runtime> flag for the given array type.
 
-  # ---- Collection pass ----
-  # Returns the module-singleton-accessor index for "<Module>.<accessor>",
-  # or -1 if not registered.
+ # ---- Collection pass ----
+ # Returns the module-singleton-accessor index for "<Module>.<accessor>",
+ # or -1 if not registered.
   def find_module_acc_idx(key)
     i = 0
     while i < @module_acc_keys.length
@@ -5621,16 +5621,16 @@ class Compiler
     -1
   end
 
-  # Walk the AST for `Module.accessor = RHS` writes where
-  # (Module, accessor) was registered in `collect_module` as a
-  # singleton accessor. Accumulates the set of distinct
-  # ConstantReadNode RHSes; the lowering paths read this list to
-  # choose:
-  #   - 0 entries: never written, falls through (un-folded)
-  #   - 1 entry:   Stage 1, inline `<resolved>.<method>` directly
-  #   - 2+ entries: Stage 2, sentinel switch over the union
-  # A non-constant RHS poisons the slot with a `?` sentinel marker
-  # so the lowering paths treat it as un-folded.
+ # Walk the AST for `Module.accessor = RHS` writes where
+ # (Module, accessor) was registered in `collect_module` as a
+ # singleton accessor. Accumulates the set of distinct
+ # ConstantReadNode RHSes; the lowering paths read this list to
+ # choose:
+ # - 0 entries: never written, falls through (un-folded)
+ # - 1 entry: Stage 1, inline `<resolved>.<method>` directly
+ # - 2+ entries: Stage 2, sentinel switch over the union
+ # A non-constant RHS poisons the slot with a `?` sentinel marker
+ # so the lowering paths treat it as un-folded.
   def resolve_module_singleton_accessors
     if @module_acc_keys.length == 0
       return
@@ -5663,7 +5663,7 @@ class Compiler
                       end
                     end
                   else
-                    # Non-constant RHS poisons the slot.
+ # Non-constant RHS poisons the slot.
                     @module_acc_consts[idx] = "?"
                   end
                 end
@@ -5676,9 +5676,9 @@ class Compiler
     end
   end
 
-  # Returns the resolved constant list for this (module, accessor):
-  # `<Name1>;<Name2>;...` for foldable, `""` if never written, `"?"`
-  # if poisoned (non-constant RHS).
+ # Returns the resolved constant list for this (module, accessor):
+ # `<Name1>;<Name2>;...` for foldable, `""` if never written, `"?"`
+ # if poisoned (non-constant RHS).
   def module_acc_resolved(mod_name, accessor)
     idx = find_module_acc_idx(mod_name + "." + accessor)
     if idx < 0
@@ -5687,45 +5687,45 @@ class Compiler
     @module_acc_consts[idx]
   end
 
-  # Sentinel value for Stage 2 switch dispatch. Each module's index in
-  # `@module_names` doubles as its sentinel id; reading `Module` as a
-  # value lowers to this integer.
+ # Sentinel value for Stage 2 switch dispatch. Each module's index in
+ # `@module_names` doubles as its sentinel id; reading `Module` as a
+ # value lowers to this integer.
 
-  # Look up the return type of a `<class_or_module>.<mname>`
-  # singleton method, walking @meth_* (module / synthetic top-level
-  # form) and @cls_cmeth_* (in-class `def self.X`). Returns "" when
-  # the method isn't registered. Used by the module-dispatch ternary
-  # default-tail and per-arm boxing paths.
+ # Look up the return type of a `<class_or_module>.<mname>`
+ # singleton method, walking @meth_* (module / synthetic top-level
+ # form) and @cls_cmeth_* (in-class `def self.X`). Returns "" when
+ # the method isn't registered. Used by the module-dispatch ternary
+ # default-tail and per-arm boxing paths.
 
 
-  # Print a stderr warning the first time we see an unresolved call to
-  # `mname` with the given receiver-type tag. Subsequent identical
-  # warnings are suppressed so a silent-fallthrough call inside a hot
-  # loop emits one line, not a torrent. The warning is informational
-  # only — codegen continues and emits `0` for the call's C expression
-  # (the historical silent-no-op behaviour) so existing tests/benches
-  # whose outputs happen to coincide with `0` keep compiling.
+ # Print a stderr warning the first time we see an unresolved call to
+ # `mname` with the given receiver-type tag. Subsequent identical
+ # warnings are suppressed so a silent-fallthrough call inside a hot
+ # loop emits one line, not a torrent. The warning is informational
+ # only — codegen continues and emits `0` for the call's C expression
+ # (the historical silent-no-op behaviour) so existing tests/benches
+ # whose outputs happen to coincide with `0` keep compiling.
 
-  # Same dedupe pattern as warn_unresolved_call but for unknown
-  # ConstantReadNode names. Reuses @unresolved_call_warnings so a
-  # single program with both an undefined method and an undefined
-  # constant produces two distinct warnings, not interleaved noise.
+ # Same dedupe pattern as warn_unresolved_call but for unknown
+ # ConstantReadNode names. Reuses @unresolved_call_warnings so a
+ # single program with both an undefined method and an undefined
+ # constant produces two distinct warnings, not interleaved noise.
 
-  # Walk every class's parent chain. A cycle anywhere on the chain is
-  # a fatal program error: bail with a clear message instead of letting
-  # the recursive helpers loop forever. Self-inheritance (`class A < A`)
-  # is detected as the trivial 1-step cycle.
+ # Walk every class's parent chain. A cycle anywhere on the chain is
+ # a fatal program error: bail with a clear message instead of letting
+ # the recursive helpers loop forever. Self-inheritance (`class A < A`)
+ # is detected as the trivial 1-step cycle.
 
-  # Copy each inherited class method (def self.<m> on a parent
-  # class) into every subclass's @cls_cmeth_* tables so the
-  # subclass gets its own synthetic copy. Each copy reuses the
-  # parent's AST body id; emit_class_methods then re-compiles the
-  # body under the subclass's @current_class_idx, so a bare `new`
-  # inside the body resolves to the subclass's constructor.
-  #
-  # Run after class collection so all parents are populated, and
-  # before infer_all_returns / call-site widening so the synthetic
-  # entries participate in regular type inference.
+ # Copy each inherited class method (def self.<m> on a parent
+ # class) into every subclass's @cls_cmeth_* tables so the
+ # subclass gets its own synthetic copy. Each copy reuses the
+ # parent's AST body id; emit_class_methods then re-compiles the
+ # body under the subclass's @current_class_idx, so a bare `new`
+ # inside the body resolves to the subclass's constructor.
+ #
+ # Run after class collection so all parents are populated, and
+ # before infer_all_returns / call-site widening so the synthetic
+ # entries participate in regular type inference.
   def propagate_inherited_class_methods
     ci = 0
     while ci < @cls_names.length
@@ -5792,8 +5792,8 @@ class Compiler
         visited.push(cur)
         pi = find_class_idx(cur)
         if pi < 0
-          # Unresolved parent — stop walking; this is a separate issue
-          # (the parent lookup falls through cleanly elsewhere).
+ # Unresolved parent — stop walking; this is a separate issue
+ # (the parent lookup falls through cleanly elsewhere).
           break
         end
         cur = @cls_parents[pi]
@@ -5802,48 +5802,48 @@ class Compiler
     end
   end
 
-  # ============================================================
-  # Pre-emission analysis
-  # ============================================================
-  #
-  # Two top-level drivers turn the parsed AST into the per-class /
-  # per-method / per-ivar tables that the emit phase consumes:
-  #
-  #   collect_all        — populates @cls_*, @meth_*, @const_*, @module_*
-  #                        tables; runs structural passes (Pass 0-3).
-  #   infer_all_returns  — refines the tables: param types from call
-  #                        sites, ivar types from writers, return types
-  #                        from method bodies.
-  #
-  # Pass-numbering convention used inside collect_all (mirrored in the
-  # `Pass N` comments on each call site):
-  #
-  #   Pass 0    collect_module                  modules first (used by
-  #                                             include lookup later)
-  #   Pass 1    collect_class                   class table + parents
-  #   Pass 1.5  detect_circular_inheritance     reject cycles before any
-  #                                             parent walker recurses
-  #                                             into them (issue #106)
-  #   Pass 2    collect_toplevel_method,        top-level defs, constants,
-  #             collect_constant,               and define_method
-  #             collect_define_method
-  #   Pass 2.5  infer_lambda_param_types        lambda call-site types
-  #                                             flow back into stored
-  #                                             lambda value's params
-  #   Pass 2.6  rewrite_instance_eval_calls     hoist `recv.instance_eval`
-  #                                             blocks into file-scope
-  #                                             functions with typed
-  #                                             self
-  #   Pass 2.7  resolve_module_singleton_       constant-fold module-
-  #             accessors                       level singleton accessors
-  #                                             (issue #126 stage 1)
-  #   Pass 3    infer_all_returns               return-type inference
-  #                                             with param/ivar refines
-  #
-  # Anything between this banner and `def emit_header` (the start of the
-  # emission phase) is part of pre-emission analysis: the various
-  # detect_*, resolve_*, rewrite_*, scan_*, infer_*, and collect_*
-  # helpers that the two drivers above call into.
+ # ============================================================
+ # Pre-emission analysis
+ # ============================================================
+ #
+ # Two top-level drivers turn the parsed AST into the per-class /
+ # per-method / per-ivar tables that the emit phase consumes:
+ #
+ # collect_all — populates @cls_*, @meth_*, @const_*, @module_*
+ # tables; runs structural passes (Pass 0-3).
+ # infer_all_returns — refines the tables: param types from call
+ # sites, ivar types from writers, return types
+ # from method bodies.
+ #
+ # Pass-numbering convention used inside collect_all (mirrored in the
+ # `Pass N` comments on each call site):
+ #
+ # Pass 0 collect_module modules first (used by
+ # include lookup later)
+ # Pass 1 collect_class class table + parents
+ # Pass 1.5 detect_circular_inheritance reject cycles before any
+ # parent walker recurses
+ # into them
+ # Pass 2 collect_toplevel_method, top-level defs, constants,
+ # collect_constant, and define_method
+ # collect_define_method
+ # Pass 2.5 infer_lambda_param_types lambda call-site types
+ # flow back into stored
+ # lambda value's params
+ # Pass 2.6 rewrite_instance_eval_calls hoist `recv.instance_eval`
+ # blocks into file-scope
+ # functions with typed
+ # self
+ # Pass 2.7 resolve_module_singleton_ constant-fold module-
+ # accessors level singleton accessors
+ # stage 1)
+ # Pass 3 infer_all_returns return-type inference
+ # with param/ivar refines
+ #
+ # Anything between this banner and `def emit_header` (the start of the
+ # emission phase) is part of pre-emission analysis: the various
+ # detect_*, resolve_*, rewrite_*, scan_*, infer_*, and collect_*
+ # helpers that the two drivers above call into.
   def collect_all
     root = @root_id
     if @nd_type[root] != "ProgramNode"
@@ -5851,49 +5851,49 @@ class Compiler
     end
     stmts = get_body_stmts(root)
 
-    # Pass 0: modules (must come before classes for include)
+ # Pass 0: modules (must come before classes for include)
     stmts.each { |sid|
       if @nd_type[sid] == "ModuleNode"
         collect_module(sid)
       end
     }
 
-    # Pass 1: classes
+ # Pass 1: classes
     stmts.each { |sid|
       if @nd_type[sid] == "ClassNode"
         collect_class(sid)
       end
     }
-    # Pass 1.3: synthetic built-in classes (Method). Appended AFTER
-    # user classes so existing user-class indices don't shift; the
-    # poly-dispatch BUILTIN_PTR_ARRAY branch in
-    # emit_poly_builtin_dispatch assumes `cls_id 0` is the first user
-    # class and would silently misroute every poly call if Method
-    # took that slot. Ref #215.
+ # Pass 1.3: synthetic built-in classes (Method). Appended AFTER
+ # user classes so existing user-class indices don't shift; the
+ # poly-dispatch BUILTIN_PTR_ARRAY branch in
+ # emit_poly_builtin_dispatch assumes `cls_id 0` is the first user
+ # class and would silently misroute every poly call if Method
+ # took that slot. .
     register_builtin_classes
-    # Pass 1.4: register class variables (@@var). Walks each class
-    # body for any ClassVariable*WriteNode (Write, Operator, Or, And,
-    # Target) and records the inferred type per (class, name). The
-    # static C globals are emitted in pass-emit alongside constants.
+ # Pass 1.4: register class variables (@@var). Walks each class
+ # body for any ClassVariable*WriteNode (Write, Operator, Or, And,
+ # Target) and records the inferred type per (class, name). The
+ # static C globals are emitted in pass-emit alongside constants.
     collect_cvars
-    # Pass 1.5: reject circular inheritance (`class A < B; class B < A`).
-    # Every parent-walking helper (cls_find_method, cls_ivar_type,
-    # is_class_or_ancestor, …) recurses through @cls_parents; a cycle
-    # would loop forever and hang the codegen instead of erroring out
-    # like CRuby. Issue #106.
+ # Pass 1.5: reject circular inheritance (`class A < B; class B < A`).
+ # Every parent-walking helper (cls_find_method, cls_ivar_type,
+ # is_class_or_ancestor, …) recurses through @cls_parents; a cycle
+ # would loop forever and hang the codegen instead of erroring out
+ # like CRuby. .
     detect_circular_inheritance
 
-    # Pass 1.6: copy inherited class methods (def self.<m>) into each
-    # subclass's @cls_cmeth_* table so the subclass gets its own
-    # synthetic copy of the parent's body. The copy compiles under
-    # the subclass's @current_class_idx, which means a bare `new`
-    # inside `def self.create; new; end` resolves to the subclass's
-    # constructor (issue #224). Without this, `new` statically binds
-    # to the lexical class — so `Article.create` returns a `Base`
-    # instance instead of an `Article`.
+ # Pass 1.6: copy inherited class methods (def self.<m>) into each
+ # subclass's @cls_cmeth_* table so the subclass gets its own
+ # synthetic copy of the parent's body. The copy compiles under
+ # the subclass's @current_class_idx, which means a bare `new`
+ # inside `def self.create; new; end` resolves to the subclass's
+ # constructor . Without this, `new` statically binds
+ # to the lexical class — so `Article.create` returns a `Base`
+ # instance instead of an `Article`.
     propagate_inherited_class_methods
 
-    # Pass 2: top-level methods, constants, define_method
+ # Pass 2: top-level methods, constants, define_method
     stmts.each { |sid|
       if @nd_type[sid] == "DefNode"
         collect_toplevel_method(sid)
@@ -5901,7 +5901,7 @@ class Compiler
       if @nd_type[sid] == "ConstantWriteNode"
         collect_constant(sid)
       end
-      # Top-level `A, B = expr` with constant targets.
+ # Top-level `A, B = expr` with constant targets.
       if @nd_type[sid] == "MultiWriteNode"
         collect_scoped_multi_const("", sid)
       end
@@ -5912,11 +5912,11 @@ class Compiler
       end
     }
 
-    # Top-level `alias $copy $orig` and BEGIN. Aliases are
-    # recorded into @galias_* (consulted by sanitize_gvar /
-    # scan_features / infer_type so $copy and $orig share
-    # storage). BEGIN bodies are queued for emit_main to hoist
-    # to the top of main() in source-encounter order.
+ # Top-level `alias $copy $orig` and BEGIN. Aliases are
+ # recorded into @galias_* (consulted by sanitize_gvar /
+ # scan_features / infer_type so $copy and $orig share
+ # storage). BEGIN bodies are queued for emit_main to hoist
+ # to the top of main() in source-encounter order.
     stmts.each { |sid|
       if @nd_type[sid] == "AliasGlobalVariableNode"
         nn = @nd_name[@nd_new_name[sid]]
@@ -5927,8 +5927,8 @@ class Compiler
         end
       end
       if @nd_type[sid] == "PreExecutionNode"
-        # Parser maps the "statements" field onto @nd_body via
-        # set_ref_field at line 706.
+ # Parser maps the "statements" field onto @nd_body via
+ # set_ref_field at line 706.
         bid = @nd_body[sid]
         if bid >= 0
           @pre_execution_blocks.push(bid)
@@ -5942,74 +5942,74 @@ class Compiler
       end
     }
 
-    # Pass 2.6: hoist `recv.instance_eval do ... end` blocks into
-    # file-scope static functions. Receiver-class flow analysis picks the
-    # receiver's class, the block body is later compiled as a function
-    # with a typed `self` parameter, and the call site is rewritten to
-    # invoke that function directly. v1: top-level locals previously
-    # assigned `ClassName.new`; no block params; no closures; no yield.
+ # Pass 2.6: hoist `recv.instance_eval do ... end` blocks into
+ # file-scope static functions. Receiver-class flow analysis picks the
+ # receiver's class, the block body is later compiled as a function
+ # with a typed `self` parameter, and the call site is rewritten to
+ # invoke that function directly. v1: top-level locals previously
+ # assigned `ClassName.new`; no block params; no closures; no yield.
     rewrite_instance_eval_calls
 
-    # Pass 2.7: resolve module-level singleton accessors via constant
-    # fold (issue #126, Stage 1). Single assignment of a constant
-    # name (typically a module/class) to `M.acc` or `@acc` inside
-    # `module M` is folded; reads later substitute the resolved
-    # constant.
+ # Pass 2.7: resolve module-level singleton accessors via constant
+ # fold , Stage 1). Single assignment of a constant
+ # name (typically a module/class) to `M.acc` or `@acc` inside
+ # `module M` is folded; reads later substitute the resolved
+ # constant.
     resolve_module_singleton_accessors
 
-    # Pass 2.5: infer lambda parameter types from call sites
+ # Pass 2.5: infer lambda parameter types from call sites
     infer_lambda_param_types
 
-    # Pass 3: infer return types
+ # Pass 3: infer return types
     infer_all_returns
   end
 
   def rewrite_instance_eval_calls
     @ieval_counter = 0
-    # Reset the registry too — codegen mode re-runs this pass after
-    # loading the IR (because the AST mutations don't survive the
-    # AST-file re-read), and without this reset the loaded entries
-    # from analyze get appended to instead of replaced.
+ # Reset the registry too — codegen mode re-runs this pass after
+ # loading the IR (because the AST mutations don't survive the
+ # AST-file re-read), and without this reset the loaded entries
+ # from analyze get appended to instead of replaced.
     @ieval_class_idxs = []
     @ieval_body_ids = []
-    # Widen class-method ptypes through obj-typed receivers before the
-    # walk so a method-param receiver (e.g. `def configure(app);
-    # app.instance_eval { } end` invoked as `cfg.configure(routes)`)
-    # has `app` typed as obj_<C>. Surgical fork — see the helper for
-    # why we don't just call scan_new_calls here.
+ # Widen class-method ptypes through obj-typed receivers before the
+ # walk so a method-param receiver (e.g. `def configure(app);
+ # app.instance_eval { } end` invoked as `cfg.configure(routes)`)
+ # has `app` typed as obj_<C>. Surgical fork — see the helper for
+ # why we don't just call scan_new_calls here.
     propagate_recv_method_arg_types_for_ieval
     local_class = {}
-    # Walk the AST recursively from the root, respecting scope boundaries.
-    # `local_class` maps `name -> class_idx` for the current scope only.
-    # Method/lambda/module/block bodies are NOT entered for local tracking:
-    # their locals belong to a different scope. A reassignment to a
-    # non-`Class.new` RHS poisons the mapping for that name. ClassNode
-    # bodies are visited for the side effect of walking each instance
-    # method's body with `@current_class_idx` set, so an `@ivar.instance_eval { }`
-    # site inside a class method can resolve its receiver class via
-    # `cls_ivar_type`. The local_class map is intentionally not threaded
-    # into method bodies — locals there are out of scope, and the
-    # ivar-only extension does not (yet) try to type method-local copies
-    # of class instances.
+ # Walk the AST recursively from the root, respecting scope boundaries.
+ # `local_class` maps `name -> class_idx` for the current scope only.
+ # Method/lambda/module/block bodies are NOT entered for local tracking:
+ # their locals belong to a different scope. A reassignment to a
+ # non-`Class.new` RHS poisons the mapping for that name. ClassNode
+ # bodies are visited for the side effect of walking each instance
+ # method's body with `@current_class_idx` set, so an `@ivar.instance_eval { }`
+ # site inside a class method can resolve its receiver class via
+ # `cls_ivar_type`. The local_class map is intentionally not threaded
+ # into method bodies — locals there are out of scope, and the
+ # ivar-only extension does not (yet) try to type method-local copies
+ # of class instances.
     ieval_walk(@root_id, local_class)
     ieval_walk_class_methods
   end
 
-  # Visit each class's instance-method bodies with `@current_class_idx`
-  # set, so `@ivar.instance_eval { ... }` resolves recv's class through
-  # `cls_ivar_type`. Class methods (singleton-side) are intentionally
-  # excluded: they don't see the instance's @ivars, and `self` rebinding
-  # against a class object would be a different (singleton-class) lift.
-  #
-  # Per-method scope: declare each method's params (with the ptypes
-  # widened by infer_param_types_from_callsites at Pass 2.55) and the
-  # body locals from scan_locals_first_type, so a LocalVariableReadNode
-  # receiver inside the body can resolve its class via find_var_type.
-  # That covers `def configure(app); app.instance_eval { } end` and
-  # also method-local copies whose RHS is statically classifiable
-  # (e.g., `routes = Routes.new`). Method returns whose call type
-  # depends on infer_all_returns having run are still out of reach
-  # at this Pass 2.6 timing — that's the next follow-up.
+ # Visit each class's instance-method bodies with `@current_class_idx`
+ # set, so `@ivar.instance_eval { ... }` resolves recv's class through
+ # `cls_ivar_type`. Class methods (singleton-side) are intentionally
+ # excluded: they don't see the instance's @ivars, and `self` rebinding
+ # against a class object would be a different (singleton-class) lift.
+ #
+ # Per-method scope: declare each method's params (with the ptypes
+ # widened by infer_param_types_from_callsites at Pass 2.55) and the
+ # body locals from scan_locals_first_type, so a LocalVariableReadNode
+ # receiver inside the body can resolve its class via find_var_type.
+ # That covers `def configure(app); app.instance_eval { } end` and
+ # also method-local copies whose RHS is statically classifiable
+ # (e.g., `routes = Routes.new`). Method returns whose call type
+ # depends on infer_all_returns having run are still out of reach
+ # at this Pass 2.6 timing — that's the next follow-up.
   def ieval_walk_class_methods
     ci = 0
     while ci < @cls_names.length
@@ -6031,10 +6031,10 @@ class Compiler
             declare_var(pnames[k], pt)
             k = k + 1
           end
-          # Body locals: scan_locals_first_type matches what
-          # infer_all_returns does in its class-methods preamble
-          # (Pass 3). Pulls in `routes = Routes.new` with type
-          # obj_Routes when the RHS is statically classifiable.
+ # Body locals: scan_locals_first_type matches what
+ # infer_all_returns does in its class-methods preamble
+ # (Pass 3). Pulls in `routes = Routes.new` with type
+ # obj_Routes when the RHS is statically classifiable.
           lnames = "".split(",")
           ltypes = "".split(",")
           scan_locals_first_type(bid, lnames, ltypes, pnames)
@@ -6091,7 +6091,7 @@ class Compiler
     if t == "CallNode"
       if @nd_name[nid] == "instance_eval"
         ieval_rewrite_call(nid, local_class)
-        # Don't descend into the lifted block body.
+ # Don't descend into the lifted block body.
         return
       end
       r = @nd_receiver[nid]
@@ -6102,7 +6102,7 @@ class Compiler
       if a >= 0
         ieval_walk(a, local_class)
       end
-      # Block bodies are a separate scope; don't recurse.
+ # Block bodies are a separate scope; don't recurse.
       return
     end
     if t == "ArgumentsNode"
@@ -6162,9 +6162,9 @@ class Compiler
       ieval_walk(@nd_ensure_clause[nid], local_class)
       return
     end
-    # DefNode, LambdaNode, ClassNode, ModuleNode, BlockNode: not entered.
-    # Their bodies introduce new scopes; the top-level map must not leak
-    # in. Anything else: stop. Conservative — we won't rewrite.
+ # DefNode, LambdaNode, ClassNode, ModuleNode, BlockNode: not entered.
+ # Their bodies introduce new scopes; the top-level map must not leak
+ # in. Anything else: stop. Conservative — we won't rewrite.
   end
 
   def ieval_expr_class_idx(nid)
@@ -6175,8 +6175,8 @@ class Compiler
           if @nd_type[recv] == "ConstantReadNode"
             return find_class_idx(@nd_name[recv])
           end
-          # `Foo::Bar.new`: Spinel's class registry is keyed by the leaf
-          # name, matching how `collect_class` records nested classes.
+ # `Foo::Bar.new`: Spinel's class registry is keyed by the leaf
+ # name, matching how `collect_class` records nested classes.
           if @nd_type[recv] == "ConstantPathNode"
             return find_class_idx(@nd_name[recv])
           end
@@ -6198,7 +6198,7 @@ class Compiler
     if blk < 0
       return
     end
-    # Skip blocks with parameters: lifted function takes only `self`.
+ # Skip blocks with parameters: lifted function takes only `self`.
     if @nd_parameters[blk] >= 0
       return
     end
@@ -6208,12 +6208,12 @@ class Compiler
       if local_class.key?(vname)
         ci = local_class[vname]
       else
-        # Inside a class instance method, the v1 top-level local_class
-        # map is intentionally empty. Fall back to find_var_type so a
-        # method param (or scan_locals-typed local) resolves through
-        # the scope chain that ieval_walk_class_methods sets up. The
-        # is_obj_type / base_type strip is the same shape used in the
-        # ivar branch and at every other obj_-prefix site in this file.
+ # Inside a class instance method, the v1 top-level local_class
+ # map is intentionally empty. Fall back to find_var_type so a
+ # method param (or scan_locals-typed local) resolves through
+ # the scope chain that ieval_walk_class_methods sets up. The
+ # is_obj_type / base_type strip is the same shape used in the
+ # ivar branch and at every other obj_-prefix site in this file.
         vt = find_var_type(vname)
         bt = base_type(vt)
         if is_obj_type(bt) == 1
@@ -6221,12 +6221,12 @@ class Compiler
         end
       end
     elsif @nd_type[recv] == "InstanceVariableReadNode"
-      # `@ivar.instance_eval { }` inside a class method. ieval_walk_class_methods
-      # sets @current_class_idx so cls_ivar_type returns the ivar's stored
-      # type — "obj_<Class>" when the ivar was bound to `Class.new` (and
-      # not since widened to poly). Strip the "obj_" prefix to look up
-      # the class index, the same shape `is_obj_type` / `base_type`
-      # gates use elsewhere in the codegen for object-typed values.
+ # `@ivar.instance_eval { }` inside a class method. ieval_walk_class_methods
+ # sets @current_class_idx so cls_ivar_type returns the ivar's stored
+ # type — "obj_<Class>" when the ivar was bound to `Class.new` (and
+ # not since widened to poly). Strip the "obj_" prefix to look up
+ # the class index, the same shape `is_obj_type` / `base_type`
+ # gates use elsewhere in the codegen for object-typed values.
       if @current_class_idx >= 0
         it = cls_ivar_type(@current_class_idx, @nd_name[recv])
         bt = base_type(it)
@@ -6239,10 +6239,10 @@ class Compiler
       return
     end
     body_id = @nd_body[blk]
-    # v1: bail if the block uses yield/block_given?. Lifting it as a
-    # plain function would lose the enclosing method's block plumbing.
-    # Spinel rejected such code before — leaving it rejected is no
-    # regression, and the support belongs in a follow-up.
+ # v1: bail if the block uses yield/block_given?. Lifting it as a
+ # plain function would lose the enclosing method's block plumbing.
+ # Spinel rejected such code before — leaving it rejected is no
+ # regression, and the support belongs in a follow-up.
     if body_id >= 0 && body_has_yield(body_id) == 1
       return
     end
@@ -6250,20 +6250,20 @@ class Compiler
     @ieval_counter = @ieval_counter + 1
     @ieval_class_idxs.push(ci)
     @ieval_body_ids.push(body_id)
-    # Mark the call site: the function name doubles as the synthetic id.
-    # compile_call_expr / compile_call_stmt recognise the prefix and
-    # emit a direct C call to `sp_ieval_<N>`.
+ # Mark the call site: the function name doubles as the synthetic id.
+ # compile_call_expr / compile_call_stmt recognise the prefix and
+ # emit a direct C call to `sp_ieval_<N>`.
     @nd_name[nid] = "__sp_ieval_" + n.to_s
     @nd_block[nid] = -1
   end
 
 
-  # Type inference: walk each lifted block body with `@current_class_idx`
-  # set to the receiver's class so bare self-calls inside the block
-  # propagate arg types to the class's methods. Without this pass, a
-  # block like `app.instance_eval { get("/") }` would fail to teach
-  # `Routes#get(path)` that `path` is a string. Sibling pass to
-  # `infer_class_body_call_types` for hoisted blocks.
+ # Type inference: walk each lifted block body with `@current_class_idx`
+ # set to the receiver's class so bare self-calls inside the block
+ # propagate arg types to the class's methods. Without this pass, a
+ # block like `app.instance_eval { get("/") }` would fail to teach
+ # `Routes#get(path)` that `path` is a string. Sibling pass to
+ # `infer_class_body_call_types` for hoisted blocks.
   def infer_ieval_body_call_types
     n = 0
     while n < @ieval_class_idxs.length
@@ -6292,12 +6292,12 @@ class Compiler
   end
 
 
-  # v1 lifts blocks into void-returning functions (Ruby's
-  # instance_eval-as-expression value isn't supported yet). When a
-  # call appears in expression position, return the recv pointer as a
-  # truthy default via a comma expression so callers like
-  # `if obj.instance_eval { ... }` still type-check. Real expression
-  # support — return the block's last expression — is a v2 follow-up.
+ # v1 lifts blocks into void-returning functions (Ruby's
+ # instance_eval-as-expression value isn't supported yet). When a
+ # call appears in expression position, return the recv pointer as a
+ # truthy default via a comma expression so callers like
+ # `if obj.instance_eval { ... }` still type-check. Real expression
+ # support — return the block's last expression — is a v2 follow-up.
 
 
   def is_builtin_type_name(name)
@@ -6313,9 +6313,9 @@ class Compiler
     0
   end
 
-  # Issue #404 Phase 3 Tier 4: built-in class / module names that
-  # get a reserved cls_id (0..20). Kept in sync with
-  # spinel_codegen.rb's @builtin_class_names array.
+ # built-in class / module names that
+ # get a reserved cls_id (0..20). Kept in sync with
+ # spinel_codegen.rb's @builtin_class_names array.
   def is_builtin_class_const_name(name)
     if name == "BasicObject" || name == "Object" || name == "Kernel" || name == "Comparable" || name == "Enumerable"
       return 1
@@ -6342,17 +6342,17 @@ class Compiler
     collect_class_with_prefix(nid, "")
   end
 
-  # Walk class bodies, module bodies, and the top-level statement
-  # list for class-var writes; register each (class-or-Toplevel,
-  # name) pair so the static-declaration pass can emit
-  # `static <type> cvar_<qname> = <default>;` ahead of the functions
-  # that touch it.
-  #
-  # Module-scope and top-level `@@x = ...` writes belong to the
-  # `Toplevel` namespace -- spinel models cvars per-class, modules
-  # don't have a cls_id of their own, and tying them to "Toplevel"
-  # matches what the read/write codegen already emits when
-  # `@current_class_idx == -1`.
+ # Walk class bodies, module bodies, and the top-level statement
+ # list for class-var writes; register each (class-or-Toplevel,
+ # name) pair so the static-declaration pass can emit
+ # `static <type> cvar_<qname> = <default>;` ahead of the functions
+ # that touch it.
+ #
+ # Module-scope and top-level `@@x = ...` writes belong to the
+ # `Toplevel` namespace -- spinel models cvars per-class, modules
+ # don't have a cls_id of their own, and tying them to "Toplevel"
+ # matches what the read/write codegen already emits when
+ # `@current_class_idx == -1`.
   def collect_cvars
     root = @root_id
     if @nd_type[root] != "ProgramNode"
@@ -6361,16 +6361,16 @@ class Compiler
     collect_cvars_in(root, -1)
   end
 
-  # Recursively scan `nid`'s subtree for ClassVariable*WriteNode and
-  # register each. Only the WriteNode form contributes a static type
-  # at this stage; the compound forms (Operator/Or/And) are
-  # registered when their parent ClassVariableWriteNode is seen, OR
-  # lazily during compile_stmt if no plain Write precedes them in
-  # the same class.
-  #
-  # When the walk crosses into a nested ClassNode or ModuleNode the
-  # context flips: nested ClassNode switches to that class's
-  # @cls_names index, ModuleNode keeps the Toplevel namespace.
+ # Recursively scan `nid`'s subtree for ClassVariable*WriteNode and
+ # register each. Only the WriteNode form contributes a static type
+ # at this stage; the compound forms (Operator/Or/And) are
+ # registered when their parent ClassVariableWriteNode is seen, OR
+ # lazily during compile_stmt if no plain Write precedes them in
+ # the same class.
+ #
+ # When the walk crosses into a nested ClassNode or ModuleNode the
+ # context flips: nested ClassNode switches to that class's
+ # @cls_names index, ModuleNode keeps the Toplevel namespace.
   def collect_cvars_in(nid, class_idx)
     if nid < 0
       return
@@ -6392,14 +6392,14 @@ class Compiler
       return
     end
     if t == "DefNode"
-      # Method bodies aren't walked at collect-time. A `@@x = v`
-      # inside a method writes during the call, but `v`'s type isn't
-      # yet resolved (LocalVariableReadNode falls back to "int" when
-      # the var-type table hasn't been populated), which would
-      # spuriously widen a class-body literal's `string`/`float`
-      # initialization to poly. The method-body write is registered
-      # defensively at compile_stmt time anyway, when v's call-site-
-      # resolved type is known.
+ # Method bodies aren't walked at collect-time. A `@@x = v`
+ # inside a method writes during the call, but `v`'s type isn't
+ # yet resolved (LocalVariableReadNode falls back to "int" when
+ # the var-type table hasn't been populated), which would
+ # spuriously widen a class-body literal's `string`/`float`
+ # initialization to poly. The method-body write is registered
+ # defensively at compile_stmt time anyway, when v's call-site-
+ # resolved type is known.
       return
     end
     if t == "ClassVariableWriteNode"
@@ -6408,10 +6408,10 @@ class Compiler
       register_cvar(qname, val_t)
       try_fold_cvar_init(qname, @nd_expression[nid])
     end
-    # `@@x op= val` / `@@x ||= val` / `@@x &&= val` — same
-    # storage as plain `@@x = ...`. Register the cvar so the
-    # static decl pass emits a slot, and seed its type from the
-    # rhs (or default int for `||=`/`&&=` reading nil).
+ # `@@x op= val` / `@@x ||= val` / `@@x &&= val` — same
+ # storage as plain `@@x = ...`. Register the cvar so the
+ # static decl pass emits a slot, and seed its type from the
+ # rhs (or default int for `||=`/`&&=` reading nil).
     if t == "ClassVariableOperatorWriteNode" || t == "ClassVariableOrWriteNode" || t == "ClassVariableAndWriteNode"
       qname = cvar_qname(class_idx, @nd_name[nid])
       val_t = infer_type(@nd_expression[nid])
@@ -6473,25 +6473,25 @@ class Compiler
     cp = @nd_constant_path[nid]
     if cp >= 0
       cname = const_ref_flat_name(cp)
-      # For `module M; class C; ... end; end`, Prism gives class name as
-      # ConstantReadNode("C"), so attach lexical module prefix.
+ # For `module M; class C; ... end; end`, Prism gives class name as
+ # ConstantReadNode("C"), so attach lexical module prefix.
       if module_prefix != "" && const_ref_is_relative(cp) == 1
         cname = module_prefix + "_" + cname
       end
     end
 
-    # Check for open class on built-in type
+ # Check for open class on built-in type
     if is_builtin_type_name(cname) == 1
       @open_class_names.push(cname)
-      # Collect methods as top-level functions with special naming
+ # Collect methods as top-level functions with special naming
       body = @nd_body[nid]
       if body >= 0
         body_stmts = get_stmts(body)
         body_stmts.each { |sid|
           if @nd_type[sid] == "DefNode"
-            # Add as top-level method with prefix
+ # Add as top-level method with prefix
             mname = @nd_name[sid]
-            # Store with special naming for lookup
+ # Store with special naming for lookup
             @meth_names.push("__oc_" + cname + "_" + mname)
             params = collect_params_str(sid)
             @meth_param_names.push(params)
@@ -6508,10 +6508,10 @@ class Compiler
       return
     end
 
-    # Class reopening: if the class was already registered (in an
-    # earlier `class Foo ... end` block), reuse the existing entry
-    # so methods and attrs from this body get appended rather than
-    # producing a duplicate C struct/constructor.
+ # Class reopening: if the class was already registered (in an
+ # earlier `class Foo ... end` block), reuse the existing entry
+ # so methods and attrs from this body get appended rather than
+ # producing a duplicate C struct/constructor.
     existing_ci = find_class_idx(cname)
     if existing_ci >= 0
       ci = existing_ci
@@ -6552,12 +6552,12 @@ class Compiler
               while ik < inc_ids.length
                 if @nd_type[inc_ids[ik]] == "ConstantReadNode"
                   mod_name = @nd_name[inc_ids[ik]]
-                  # Issue #425: when this class is nested inside a
-                  # module (module_prefix != ""), the include arg is
-                  # a bare ConstantReadNode but the registered module
-                  # name is `<prefix>_<name>`. Try the qualified form
-                  # first; fall back to the bare name for top-level
-                  # modules.
+ # when this class is nested inside a
+ # module (module_prefix != ""), the include arg is
+ # a bare ConstantReadNode but the registered module
+ # name is `<prefix>_<name>`. Try the qualified form
+ # first; fall back to the bare name for top-level
+ # modules.
                   resolved_mod_name = resolve_include_module_name(mod_name, module_prefix)
                   collect_module_methods_into_class(ci, resolved_mod_name)
                   record_class_include(ci, resolved_mod_name)
@@ -6568,8 +6568,8 @@ class Compiler
           end
         end
       }
-      # Pin lexical scope while collecting ivars. See longer comment
-      # at the other collect_ivars call site below for rationale.
+ # Pin lexical scope while collecting ivars. See longer comment
+ # at the other collect_ivars call site below for rationale.
       saved_idx = @current_class_idx
       @current_class_idx = ci
       collect_ivars(ci)
@@ -6587,7 +6587,7 @@ class Compiler
           if sr >= 0
             if @nd_type[sr] == "ConstantReadNode"
               if @nd_name[sr] == "Struct"
-                # Struct.new(:x, :y, keyword_init: true)
+ # Struct.new(:x, :y, keyword_init: true)
                 sargs_id = @nd_arguments[sp]
                 if sargs_id >= 0
                   sarg_ids = get_args(sargs_id)
@@ -6601,7 +6601,7 @@ class Compiler
                       struct_fields.push(fname)
                     end
                     if @nd_type[sarg_ids[sk]] == "KeywordHashNode"
-                      # keyword_init detected
+ # keyword_init detected
                     end
                     sk = sk + 1
                   end
@@ -6615,11 +6615,11 @@ class Compiler
         if parent == ""
           parent = @nd_name[sp]
         end
-        # Resolve the parent class name against the same module-prefix
-        # chain that was used to register the child. `class Sub < Base`
-        # inside `module M` should land on `M_Base` (the registered
-        # name), not bare "Base", or `emit_class_fields` later fails
-        # `find_class_idx` and silently drops every inherited field.
+ # Resolve the parent class name against the same module-prefix
+ # chain that was used to register the child. `class Sub < Base`
+ # inside `module M` should land on `M_Base` (the registered
+ # name), not bare "Base", or `emit_class_fields` later fails
+ # `find_class_idx` and silently drops every inherited field.
         if module_prefix != "" && const_ref_is_relative(sp) == 1
           if find_class_idx(parent) < 0
             mp = module_prefix
@@ -6630,7 +6630,7 @@ class Compiler
                 mp = ""
               else
                 idx = mp.rindex("_")
-                # CRuby returns nil when not found; spinel runtime returns -1.
+ # CRuby returns nil when not found; spinel runtime returns -1.
                 if idx == nil || idx < 0
                   mp = ""
                 else
@@ -6649,7 +6649,7 @@ class Compiler
     @cls_is_sra.push(0)
     @cls_parents.push(parent)
     @cls_includes.push("")
-    # Initialize struct fields as ivars
+ # Initialize struct fields as ivars
     ivar_names = ""
     ivar_types = ""
     attr_readers = ""
@@ -6670,8 +6670,8 @@ class Compiler
     end
     @cls_ivar_names.push(ivar_names)
     @cls_ivar_types.push(ivar_types)
-    # Struct fields are added via attr_*-style fallback (no scanned literal
-    # write yet). Mark each as non-definite (#130).
+ # Struct fields are added via attr_*-style fallback (no scanned literal
+ # write yet). Mark each as non-definite.
     struct_definite = ""
     sk2 = 0
     while sk2 < struct_fields.length
@@ -6682,8 +6682,8 @@ class Compiler
       sk2 = sk2 + 1
     end
     @cls_ivar_init_definite.push(struct_definite)
-    # Initialize observed_types parallel to ivar_names: one empty
-    # comma-list per struct field, joined by semicolons.
+ # Initialize observed_types parallel to ivar_names: one empty
+ # comma-list per struct field, joined by semicolons.
     obs_init = ""
     sk3 = 0
     while sk3 < struct_fields.length
@@ -6693,7 +6693,7 @@ class Compiler
       sk3 = sk3 + 1
     end
     @cls_ivar_observed_types.push(obs_init)
-    # Auto-generate initialize method for struct-derived classes
+ # Auto-generate initialize method for struct-derived classes
     if struct_fields.length > 0
       init_params = ""
       init_ptypes = ""
@@ -6736,13 +6736,13 @@ class Compiler
     @cls_cmeth_defaults.push("")
     @cls_meth_has_yield.push("")
 
-    # Collect class body
+ # Collect class body
     body = @nd_body[nid]
     if body < 0
       return
     end
     body_stmts = get_stmts(body)
-    # First pass: collect all class methods and attrs
+ # First pass: collect all class methods and attrs
     body_stmts.each { |sid|
       if @nd_type[sid] == "DefNode"
         collect_class_method(ci, sid)
@@ -6750,7 +6750,7 @@ class Compiler
       if @nd_type[sid] == "ConstantWriteNode"
         collect_scoped_constant(cname, sid)
       end
-      # Class-body `A, B = ...` multi-write to constants.
+ # Class-body `A, B = ...` multi-write to constants.
       if @nd_type[sid] == "MultiWriteNode"
         collect_scoped_multi_const(cname, sid)
       end
@@ -6762,10 +6762,10 @@ class Compiler
           end
         end
       end
-      # Nested class / module inside class. Mirroring the
-      # nested-in-module path, the inner type is registered at top
-      # level under its outer-class–prefixed name (e.g. `A::B` →
-      # `A_B`) so a `A::B.new` call resolves via the same flat lookup.
+ # Nested class / module inside class. Mirroring the
+ # nested-in-module path, the inner type is registered at top
+ # level under its outer-class–prefixed name (e.g. `A::B` →
+ # `A_B`) so a `A::B.new` call resolves via the same flat lookup.
       if @nd_type[sid] == "ClassNode"
         collect_class_with_prefix(sid, cname)
       end
@@ -6773,7 +6773,7 @@ class Compiler
         collect_module_with_prefix(sid, cname)
       end
     }
-    # Second pass: handle includes (after all own methods are known)
+ # Second pass: handle includes (after all own methods are known)
     body_stmts.each { |sid|
       if @nd_type[sid] == "CallNode"
         if @nd_name[sid] == "include"
@@ -6784,17 +6784,17 @@ class Compiler
             while ik < inc_ids.length
               if @nd_type[inc_ids[ik]] == "ConstantReadNode"
                 mod_name = @nd_name[inc_ids[ik]]
-                # Issue #425: same prefix resolution as the
-                # class-reopening branch -- the include arg is a
-                # bare name but the registered module's name is
-                # `<prefix>_<name>` when nested in a module.
+ # same prefix resolution as the
+ # class-reopening branch -- the include arg is a
+ # bare name but the registered module's name is
+ # `<prefix>_<name>` when nested in a module.
                 resolved_mod_name = resolve_include_module_name(mod_name, module_prefix)
                 collect_module_methods_into_class(ci, resolved_mod_name)
-                # Issue #404 Phase 3 Tier 2: record the include
-                # relationship for ancestors-table emission. The
-                # methods are already merged into the class above;
-                # this pass keeps the module link alive so the
-                # codegen can weave it into the MRO.
+ # record the include
+ # relationship for ancestors-table emission. The
+ # methods are already merged into the class above;
+ # this pass keeps the module link alive so the
+ # codegen can weave it into the MRO.
                 record_class_include(ci, resolved_mod_name)
               end
               ik = ik + 1
@@ -6804,9 +6804,9 @@ class Compiler
       end
     }
 
-    # Third pass: handle alias / undef inside the class body. Must
-    # run AFTER all own methods + included module methods are
-    # registered, so the alias source can be located.
+ # Third pass: handle alias / undef inside the class body. Must
+ # run AFTER all own methods + included module methods are
+ # registered, so the alias source can be located.
     body_stmts.each { |sid|
       if @nd_type[sid] == "AliasMethodNode"
         nn = symbol_node_literal(@nd_new_name[sid])
@@ -6816,10 +6816,10 @@ class Compiler
         end
       end
       if @nd_type[sid] == "UndefNode"
-        # `undef foo, bar` -- record the removal in @undef_*. Spinel
-        # doesn't currently enforce "calling an undef'd method
-        # fails" at the compile-time dispatch path; the recording
-        # is the foundation for that future check.
+ # `undef foo, bar` -- record the removal in @undef_*. Spinel
+ # doesn't currently enforce "calling an undef'd method
+ # fails" at the compile-time dispatch path; the recording
+ # is the foundation for that future check.
         unames = parse_id_list(@nd_names[sid])
         uk = 0
         while uk < unames.length
@@ -6833,22 +6833,22 @@ class Compiler
     }
 
 
-    # Collect ivars. Pin the lexical scope to this class so any
-    # `@x = Foo.new(...)` inside its methods resolves `Foo` against
-    # the same scope chain the call site sees — without this,
-    # current_lexical_scope_name returns "" and a `Config` reference
-    # inside `Optcarrot::NES` resolves to bare "Config" (no
-    # Optcarrot_ prefix), poisoning the ivar's recorded type and the
-    # eventual `sp_Config *` field declaration that fails to compile.
+ # Collect ivars. Pin the lexical scope to this class so any
+ # `@x = Foo.new(...)` inside its methods resolves `Foo` against
+ # the same scope chain the call site sees — without this,
+ # current_lexical_scope_name returns "" and a `Config` reference
+ # inside `Optcarrot::NES` resolves to bare "Config" (no
+ # Optcarrot_ prefix), poisoning the ivar's recorded type and the
+ # eventual `sp_Config *` field declaration that fails to compile.
     saved_idx = @current_class_idx
     @current_class_idx = ci
     collect_ivars(ci)
     @current_class_idx = saved_idx
   end
 
-  # Extract the literal name from a SymbolNode argument. Returns ""
-  # for InterpolatedSymbolNode and other shapes Spinel doesn't
-  # support as alias source/target or undef target at compile time.
+ # Extract the literal name from a SymbolNode argument. Returns ""
+ # for InterpolatedSymbolNode and other shapes Spinel doesn't
+ # support as alias source/target or undef target at compile time.
   def symbol_node_literal(nid)
     if nid < 0
       return ""
@@ -6863,12 +6863,12 @@ class Compiler
     ""
   end
 
-  # `alias new old` -- copy the existing class method's slot to a
-  # new name in @cls_meth_*. CRuby snapshots the method body at
-  # alias time; copying the body_id (a number, not a reference)
-  # gives the same snapshot semantics: a later `def old` redefinition
-  # would assign a new body_id to the old slot but the alias slot
-  # keeps the original.
+ # `alias new old` -- copy the existing class method's slot to a
+ # new name in @cls_meth_*. CRuby snapshots the method body at
+ # alias time; copying the body_id (a number, not a reference)
+ # gives the same snapshot semantics: a later `def old` redefinition
+ # would assign a new body_id to the old slot but the alias slot
+ # keeps the original.
   def collect_class_method_alias(ci, new_name, old_name)
     src = cls_find_method_direct(ci, old_name)
     if src < 0
@@ -6891,27 +6891,27 @@ class Compiler
     end
   end
 
-  # `undef foo` -- mark the method as removed in the @undef_*
-  # tracker. Spinel currently doesn't enforce "call after undef
-  # fails to compile" -- the recording is the foundation for that
-  # future check. Documented out of scope in test/undef.rb.
+ # `undef foo` -- mark the method as removed in the @undef_*
+ # tracker. Spinel currently doesn't enforce "call after undef
+ # fails to compile" -- the recording is the foundation for that
+ # future check. Documented out of scope in test/undef.rb.
   def collect_class_method_undef(ci, name)
     @undef_class_idx.push(ci)
     @undef_method.push(name)
   end
 
 
-  # Issue #425: resolve a bare include arg against the enclosing
-  # module's lexical scope. For `module Ns; class Base; include
-  # Helper; end; end`, the include's ConstantReadNode is the
-  # unqualified `Helper`, but the registered module's name (from
-  # collect_module_with_prefix) is `Ns_Helper`. Try the qualified
-  # form first; fall back to the bare name for top-level modules.
-  # Issue #404 Phase 3 Tier 2: append a module name to the per-class
-  # includes list. Skipped when the module name doesn't resolve to
-  # a registered module (collect_module_methods_into_class already
-  # warns / no-ops in that case; the ancestors table only carries
-  # modules known to the program).
+ # resolve a bare include arg against the enclosing
+ # module's lexical scope. For `module Ns; class Base; include
+ # Helper; end; end`, the include's ConstantReadNode is the
+ # unqualified `Helper`, but the registered module's name (from
+ # collect_module_with_prefix) is `Ns_Helper`. Try the qualified
+ # form first; fall back to the bare name for top-level modules.
+ # append a module name to the per-class
+ # includes list. Skipped when the module name doesn't resolve to
+ # a registered module (collect_module_methods_into_class already
+ # warns / no-ops in that case; the ancestors table only carries
+ # modules known to the program).
   def record_class_include(ci, mod_name)
     mi = 0
     found = 0
@@ -6927,7 +6927,7 @@ class Compiler
       return
     end
     cur = @cls_includes[ci]
-    # Dedup: a re-included module shouldn't duplicate in ancestors.
+ # Dedup: a re-included module shouldn't duplicate in ancestors.
     parts = cur.split(";")
     pk = 0
     while pk < parts.length
@@ -6958,7 +6958,7 @@ class Compiler
   end
 
   def collect_module_methods_into_class(ci, mod_name)
-    # Find the module and add its methods to the class
+ # Find the module and add its methods to the class
     mi = 0
     while mi < @module_names.length
       if @module_names[mi] == mod_name
@@ -6970,7 +6970,7 @@ class Compiler
             sid = mstmts[mk]
             if @nd_type[sid] == "DefNode"
               mname = @nd_name[sid]
-              # Only add if class doesn't already have this method
+ # Only add if class doesn't already have this method
               existing = cls_find_method_direct(ci, mname)
               if existing < 0
                 collect_class_method(ci, sid)
@@ -6988,10 +6988,10 @@ class Compiler
     mname = @nd_name[nid]
     body_id = @nd_body[nid]
 
-    # Check for class method (def self.xxx)
+ # Check for class method (def self.xxx)
     if @nd_receiver[nid] >= 0
       if @nd_type[@nd_receiver[nid]] == "SelfNode"
-        # Class method
+ # Class method
         params_str = collect_params_str(nid)
         ptypes_str = collect_ptypes_str(nid, ci)
         defaults_str = collect_defaults_str(nid)
@@ -7005,7 +7005,7 @@ class Compiler
     defaults_str = collect_defaults_str(nid)
     has_y = body_has_yield(body_id)
     append_cls_meth(ci, mname, params_str, ptypes_str, "int", body_id, defaults_str)
-    # Track yield info
+ # Track yield info
     if @cls_meth_has_yield[ci] != ""
       @cls_meth_has_yield[ci] = @cls_meth_has_yield[ci] + ";" + has_y.to_s
     else
@@ -7047,7 +7047,7 @@ class Compiler
       result = result + @nd_name[kws[k]]
       k = k + 1
     end
-    # Rest param (splat)
+ # Rest param (splat)
     rest = @nd_rest[params]
     if rest >= 0
       if @nd_type[rest] == "RestParameterNode"
@@ -7057,9 +7057,9 @@ class Compiler
         result = result + @nd_name[rest]
       end
     end
-    # Post-rest required params: `def f(*r, x, y)` -> `x, y` come AFTER
-    # rest in the AST's `posts` slot. Same shape as `requireds` (each
-    # entry is a RequiredParameterNode); flow them straight through.
+ # Post-rest required params: `def f(*r, x, y)` -> `x, y` come AFTER
+ # rest in the AST's `posts` slot. Same shape as `requireds` (each
+ # entry is a RequiredParameterNode); flow them straight through.
     posts = parse_id_list(@nd_posts[params])
     k = 0
     while k < posts.length
@@ -7071,9 +7071,9 @@ class Compiler
       end
       k = k + 1
     end
-    # Keyword rest (`**kw`). Anonymous `**` synthesizes `__anon_kwrest`.
-    # NoKeywordsParameterNode (`**nil`) is skipped here -- it doesn't
-    # carry a slot.
+ # Keyword rest (`**kw`). Anonymous `**` synthesizes `__anon_kwrest`.
+ # NoKeywordsParameterNode (`**nil`) is skipped here -- it doesn't
+ # carry a slot.
     kwrest = @nd_keyword_rest[params]
     if kwrest >= 0
       if @nd_type[kwrest] == "KeywordRestParameterNode"
@@ -7087,18 +7087,18 @@ class Compiler
         result = result + kn
       end
     end
-    # Block parameter (&block)
+ # Block parameter (&block)
     blk = @nd_block[params]
     if blk >= 0
       if @nd_type[blk] == "BlockParameterNode"
         if result != ""
           result = result + ","
         end
-        # Anonymous `&` (Ruby 3.1+) — `def m(&); inner(&); end` —
-        # produces a BlockParameterNode with no name. Synthesize a
-        # stable internal name so the param gets a proper `lv_` slot
-        # and downstream lookups (find_block_param_name,
-        # @current_method_block_param) work the same as for `&block`.
+ # Anonymous `&` (Ruby 3.1+) — `def m(&); inner(&); end` —
+ # produces a BlockParameterNode with no name. Synthesize a
+ # stable internal name so the param gets a proper `lv_` slot
+ # and downstream lookups (find_block_param_name,
+ # @current_method_block_param) work the same as for `&block`.
         bn = @nd_name[blk]
         if bn == ""
           bn = "__anon_block"
@@ -7147,7 +7147,7 @@ class Compiler
       if result != ""
         result = result + ","
       end
-      # Infer from default value
+ # Infer from default value
       def_id = @nd_expression[opts[k]]
       if def_id >= 0
         result = result + infer_type(def_id)
@@ -7161,7 +7161,7 @@ class Compiler
       if result != ""
         result = result + ","
       end
-      # Infer from default value
+ # Infer from default value
       def_id = @nd_expression[kws[k]]
       if def_id >= 0
         result = result + infer_type(def_id)
@@ -7170,7 +7170,7 @@ class Compiler
       end
       k = k + 1
     end
-    # Rest param (splat)
+ # Rest param (splat)
     rest = @nd_rest[params]
     if rest >= 0
       if @nd_type[rest] == "RestParameterNode"
@@ -7180,7 +7180,7 @@ class Compiler
         result = result + "int_array"
       end
     end
-    # Post-rest required params (`def f(*r, x, y)`).
+ # Post-rest required params (`def f(*r, x, y)`).
     posts = parse_id_list(@nd_posts[params])
     k = 0
     while k < posts.length
@@ -7192,8 +7192,8 @@ class Compiler
       end
       k = k + 1
     end
-    # Keyword rest (**kw). Spinel kwargs use symbol keys (matches
-    # `f(a: 1)` keyword hash construction), so the slot is sym_poly_hash.
+ # Keyword rest (**kw). Spinel kwargs use symbol keys (matches
+ # `f(a: 1)` keyword hash construction), so the slot is sym_poly_hash.
     kwrest = @nd_keyword_rest[params]
     if kwrest >= 0
       if @nd_type[kwrest] == "KeywordRestParameterNode"
@@ -7203,7 +7203,7 @@ class Compiler
         result = result + "sym_poly_hash"
       end
     end
-    # Block parameter (&block)
+ # Block parameter (&block)
     blk = @nd_block[params]
     if blk >= 0
       if @nd_type[blk] == "BlockParameterNode"
@@ -7259,7 +7259,7 @@ class Compiler
       end
       k = k + 1
     end
-    # Rest param
+ # Rest param
     rest = @nd_rest[params]
     if rest >= 0
       if @nd_type[rest] == "RestParameterNode"
@@ -7269,7 +7269,7 @@ class Compiler
         result = result + "-1"
       end
     end
-    # Post-rest required params (`def f(*r, x, y)`) — no defaults.
+ # Post-rest required params (`def f(*r, x, y)`) — no defaults.
     posts = parse_id_list(@nd_posts[params])
     k = 0
     while k < posts.length
@@ -7281,8 +7281,8 @@ class Compiler
       end
       k = k + 1
     end
-    # Keyword rest (**kw): no compile-time default, slot stays NULL
-    # until the caller provides a hash.
+ # Keyword rest (**kw): no compile-time default, slot stays NULL
+ # until the caller provides a hash.
     kwrest = @nd_keyword_rest[params]
     if kwrest >= 0
       if @nd_type[kwrest] == "KeywordRestParameterNode"
@@ -7292,7 +7292,7 @@ class Compiler
         result = result + "-1"
       end
     end
-    # Block param
+ # Block param
     blk = @nd_block[params]
     if blk >= 0
       if @nd_type[blk] == "BlockParameterNode"
@@ -7327,7 +7327,7 @@ class Compiler
       @cls_meth_defaults[ci] = defaults
       @cls_meth_ptypes_empty[ci] = ""
     end
-    # Invalidate split caches keyed on @cls_meth_names / @cls_meth_returns.
+ # Invalidate split caches keyed on @cls_meth_names / @cls_meth_returns.
     @cls_meth_idx_cache = {}
     @cls_meth_return_cache = {}
   end
@@ -7405,7 +7405,7 @@ class Compiler
   end
 
   def collect_ivars(ci)
-    # Scan all methods for ivar writes
+ # Scan all methods for ivar writes
     meths = @cls_meth_bodies[ci].split(";")
     j = 0
     while j < meths.length
@@ -7415,7 +7415,7 @@ class Compiler
       end
       j = j + 1
     end
-    # Add ivars from attr_readers/writers that might not have explicit writes
+ # Add ivars from attr_readers/writers that might not have explicit writes
     readers = @cls_attr_readers[ci].split(";")
     j = 0
     while j < readers.length
@@ -7436,10 +7436,10 @@ class Compiler
     end
   end
 
-  # Direct, unconditional ivar type replacement. Bypasses the
-  # widening logic in update_ivar_type — used when the caller has
-  # already determined the new type is correct (e.g. promoting an
-  # empty-hash default to a concrete hash type from a `[]=` write).
+ # Direct, unconditional ivar type replacement. Bypasses the
+ # widening logic in update_ivar_type — used when the caller has
+ # already determined the new type is correct (e.g. promoting an
+ # empty-hash default to a concrete hash type from a `[]=` write).
   def replace_ivar_type(ci, iname, new_type)
     names = @cls_ivar_names[ci].split(";")
     types = @cls_ivar_types[ci].split(";")
@@ -7470,22 +7470,22 @@ class Compiler
       if names[k] == iname
         if k < types.length
           old = types[k]
-          # Stale unqualified obj-name normalization. collect_ivars
-          # registers ivar types during Pass 1 (class enumeration), in
-          # source order; at that point sibling classes that come later
-          # in the file haven't been registered yet. A
-          # `@cpu = CPU.new(@conf)` write inside the lexically-first
-          # class then resolves "CPU" against an incomplete class
-          # table, lands at unqualified "obj_CPU", and pins the slot.
-          # When a subsequent pass — with all classes registered —
-          # records the qualified "obj_<scope>_CPU" via scan_writer_calls
-          # (whose lexical resolution does succeed), the stale and
-          # qualified forms compare unequal and the heterogeneity
-          # branch below widens to "poly". Detect the relationship
-          # (old's bare name matches the trailing segment of new's
-          # name AND old's bare name doesn't refer to any registered
-          # class) and accept the qualified form as a refinement
-          # rather than a disagreement.
+ # Stale unqualified obj-name normalization. collect_ivars
+ # registers ivar types during Pass 1 (class enumeration), in
+ # source order; at that point sibling classes that come later
+ # in the file haven't been registered yet. A
+ # `@cpu = CPU.new(@conf)` write inside the lexically-first
+ # class then resolves "CPU" against an incomplete class
+ # table, lands at unqualified "obj_CPU", and pins the slot.
+ # When a subsequent pass — with all classes registered —
+ # records the qualified "obj_<scope>_CPU" via scan_writer_calls
+ # (whose lexical resolution does succeed), the stale and
+ # qualified forms compare unequal and the heterogeneity
+ # branch below widens to "poly". Detect the relationship
+ # (old's bare name matches the trailing segment of new's
+ # name AND old's bare name doesn't refer to any registered
+ # class) and accept the qualified form as a refinement
+ # rather than a disagreement.
           if is_obj_type(old) == 1 && is_obj_type(new_type) == 1 && old != new_type
             old_bare_uit = old[4, old.length - 4]
             new_bare_uit = new_type[4, new_type.length - 4]
@@ -7499,21 +7499,21 @@ class Compiler
               end
             end
           end
-          # Heterogeneous int/nil + obj → poly when the prior write
-          # was a *definite* int/nil literal. The previous "int wins"
-          # / "nil wins" overwrite silently cast the int payload to a
-          # struct pointer, miscompiling `@x = 10; @x = Box.new` and
-          # any subsequent obj method dispatch. Widen to poly so the
-          # slot can carry either case at runtime; the dispatch path
-          # then decides per cls_id at the call site.
-          #
-          # The definiteness gate avoids false widening when "int"
-          # was just `infer_ivar_init_type`'s placeholder fallback for
-          # a CallNode rhs that's later refined to an obj type by
-          # the writer-scan / inference passes (e.g.
-          # `@m = method(:foo)` initially scans as int and a
-          # refinement promotes it to `obj_Method` — no heterogeneity
-          # to widen for).
+ # Heterogeneous int/nil + obj → poly when the prior write
+ # was a *definite* int/nil literal. The previous "int wins"
+ # / "nil wins" overwrite silently cast the int payload to a
+ # struct pointer, miscompiling `@x = 10; @x = Box.new` and
+ # any subsequent obj method dispatch. Widen to poly so the
+ # slot can carry either case at runtime; the dispatch path
+ # then decides per cls_id at the call site.
+ #
+ # The definiteness gate avoids false widening when "int"
+ # was just `infer_ivar_init_type`'s placeholder fallback for
+ # a CallNode rhs that's later refined to an obj type by
+ # the writer-scan / inference passes (e.g.
+ # `@m = method(:foo)` initially scans as int and a
+ # refinement promotes it to `obj_Method` — no heterogeneity
+ # to widen for).
           if (old == "int" || old == "nil") && is_obj_type(new_type) == 1 && cls_ivar_definite_flag(ci, iname) == 1
             types[k] = "poly"
             @needs_rb_value = 1
@@ -7525,11 +7525,11 @@ class Compiler
             @cls_ivar_types_version = @cls_ivar_types_version + 1
           elsif old != new_type && old != "poly"
             if is_array_type(old) == 1 && is_array_type(new_type) == 1
-              # Don't widen a typed `<obj>_ptr_array` slot back to
-              # poly when the disagreement is just `int_array`. That
-              # disagreement comes from the `[nil] * N` empty default
-              # — the writer-scan `[]=` / `<<` widening is more
-              # specific and should win.
+ # Don't widen a typed `<obj>_ptr_array` slot back to
+ # poly when the disagreement is just `int_array`. That
+ # disagreement comes from the `[nil] * N` empty default
+ # — the writer-scan `[]=` / `<<` widening is more
+ # specific and should win.
               if is_ptr_array_type(old) == 1 && new_type == "int_array"
                 k = k + 1
                 next
@@ -7541,7 +7541,7 @@ class Compiler
               k = k + 1
               next
             end
-            # Nullable pattern: nil + T → T?, T + nil → T?
+ # Nullable pattern: nil + T → T?, T + nil → T?
             if new_type == "nil" && is_nullable_pointer_type(old) == 1
               if old[old.length - 1] != "?"
                 types[k] = old + "?"
@@ -7611,13 +7611,13 @@ class Compiler
     end
   end
 
-  # Record `at` as a distinct observation for the (class, ivar)
-  # slot if it's a concrete (non-fallback) type. "Concrete" means
-  # either `at != "int"` and `at != "nil"` (those are infer_type's
-  # catch-all placeholders), or the rhs is a definite-literal AST.
-  # The dedup keeps the list short — a slot written with int from
-  # twenty different `obj.length` call sites still records "int"
-  # once.
+ # Record `at` as a distinct observation for the (class, ivar)
+ # slot if it's a concrete (non-fallback) type. "Concrete" means
+ # either `at != "int"` and `at != "nil"` (those are infer_type's
+ # catch-all placeholders), or the rhs is a definite-literal AST.
+ # The dedup keeps the list short — a slot written with int from
+ # twenty different `obj.length` call sites still records "int"
+ # once.
   def record_ivar_observation(ci, iname, at, expr_id)
     is_concrete = 0
     if at != "int" && at != "nil"
@@ -7629,14 +7629,14 @@ class Compiler
       return
     end
     names = @cls_ivar_names[ci].split(";")
-    # Pad obs to names.length: split(";", -1) preserves trailing "" but
-    # an entirely-empty storage gives a 0-length array. Walk by index
-    # and treat missing entries as "".
+ # Pad obs to names.length: split(";", -1) preserves trailing "" but
+ # an entirely-empty storage gives a 0-length array. Walk by index
+ # and treat missing entries as "".
     obs_str = @cls_ivar_observed_types[ci]
     k = 0
     while k < names.length
       if names[k] == iname
-        # Build an array of slots, one per ivar, defaulting empty.
+ # Build an array of slots, one per ivar, defaulting empty.
         slots = "".split(",")
         ix = 0
         while ix < names.length
@@ -7671,19 +7671,19 @@ class Compiler
     end
   end
 
-  # Was the AST expression a definite-literal that
-  # `infer_ivar_init_type` types unambiguously? Used by scan_ivars
-  # to decide when to widen a multi-write ivar slot to poly.
-  #
-  # Also accepts typed-hash[key] reads — when the receiver is a
-  # hash whose value type is statically known (str_int_hash /
-  # sym_int_hash / *_str_hash / int_str_hash), the call always
-  # produces that value type. Recording this writer's "int" (or
-  # "string") as a *concrete* observation in
-  # finalize_ivar_heterogeneity lets a sibling-method writer of a
-  # different concrete type trigger the poly widen, instead of
-  # silently narrowing the slot to whichever sibling won the type
-  # race.
+ # Was the AST expression a definite-literal that
+ # `infer_ivar_init_type` types unambiguously? Used by scan_ivars
+ # to decide when to widen a multi-write ivar slot to poly.
+ #
+ # Also accepts typed-hash[key] reads — when the receiver is a
+ # hash whose value type is statically known (str_int_hash /
+ # sym_int_hash / *_str_hash / int_str_hash), the call always
+ # produces that value type. Recording this writer's "int" (or
+ # "string") as a *concrete* observation in
+ # finalize_ivar_heterogeneity lets a sibling-method writer of a
+ # different concrete type trigger the poly widen, instead of
+ # silently narrowing the slot to whichever sibling won the type
+ # race.
   def is_definite_ivar_init(nid)
     if nid < 0
       return 0
@@ -7704,10 +7704,10 @@ class Compiler
         end
       end
     end
-    # A ternary whose branches are themselves definite is itself
-    # definite. Lets the multi-write poly-widening rule still fire
-    # when a later concrete write disagrees with an IfNode-typed
-    # slot.
+ # A ternary whose branches are themselves definite is itself
+ # definite. Lets the multi-write poly-widening rule still fire
+ # when a later concrete write disagrees with an IfNode-typed
+ # slot.
     if t == "IfNode"
       then_d = 0
       body = @nd_body[nid]
@@ -7763,13 +7763,13 @@ class Compiler
       iname = @nd_name[nid]
       expr_first = @nd_expression[nid]
       if ivar_exists(ci, iname) == 0 && ivar_exists_in_ancestor(ci, iname) == 1
-        # Slot is on a parent class — route the write through
-        # update_ivar_type so the parent's type widens consistently.
-        # Without this, the child re-adds the ivar to its own table
-        # with the new write's type, while the parent widens to poly
-        # via update_ivar_type's recurse, leaving the two tables
-        # disagreeing — and downstream cls_ivar_type lookups on the
-        # child see only its (narrower) entry, missing the widening.
+ # Slot is on a parent class — route the write through
+ # update_ivar_type so the parent's type widens consistently.
+ # Without this, the child re-adds the ivar to its own table
+ # with the new write's type, while the parent widens to poly
+ # via update_ivar_type's recurse, leaving the two tables
+ # disagreeing — and downstream cls_ivar_type lookups on the
+ # child see only its (narrower) entry, missing the widening.
         vtype = infer_ivar_init_type(expr_first)
         if vtype != "int" && vtype != "nil"
           update_ivar_type(ci, iname, vtype)
@@ -7778,14 +7778,14 @@ class Compiler
         vtype = infer_ivar_init_type(expr_first)
         add_ivar(ci, iname, vtype, is_definite_ivar_init(expr_first))
       else
-        # When the new write is a definite-literal AND the ivar's
-        # first scanned write was also a definite-literal AND the
-        # types disagree, widen to poly. The dual definite-literal
-        # gate avoids false widening on `infer_ivar_init_type`'s
-        # "int" fallback for non-recognized expressions (CallNodes,
-        # LocalVariableReadNodes) — spinel_codegen's own ivars
-        # (e.g. `@current_method_name = "x" + n.to_s`) would
-        # otherwise widen and break the bootstrap.
+ # When the new write is a definite-literal AND the ivar's
+ # first scanned write was also a definite-literal AND the
+ # types disagree, widen to poly. The dual definite-literal
+ # gate avoids false widening on `infer_ivar_init_type`'s
+ # "int" fallback for non-recognized expressions (CallNodes,
+ # LocalVariableReadNodes) — spinel_codegen's own ivars
+ # (e.g. `@current_method_name = "x" + n.to_s`) would
+ # otherwise widen and break the bootstrap.
         expr = @nd_expression[nid]
         if expr >= 0
           if @nd_type[expr] != "NilNode"
@@ -7809,10 +7809,10 @@ class Compiler
         add_ivar(ci, iname, "int")
       end
     end
-    # `@x ||= expr` / `@x &&= expr`: register the slot when first
-    # encountered. The rhs type seeds the ivar; without registration
-    # the struct comes out without the slot and any subsequent read
-    # ground out at the int default.
+ # `@x ||= expr` / `@x &&= expr`: register the slot when first
+ # encountered. The rhs type seeds the ivar; without registration
+ # the struct comes out without the slot and any subsequent read
+ # ground out at the int default.
     if @nd_type[nid] == "InstanceVariableOrWriteNode" || @nd_type[nid] == "InstanceVariableAndWriteNode"
       iname = @nd_name[nid]
       expr_first = @nd_expression[nid]
@@ -7823,8 +7823,8 @@ class Compiler
         end
       elsif ivar_exists(ci, iname) == 0
         vtype = infer_ivar_init_type(expr_first)
-        # ||= reads @x first; pre-register a nil observation so the
-        # `nil + T → T?` rule fires when a later writer-scan widens.
+ # ||= reads @x first; pre-register a nil observation so the
+ # `nil + T → T?` rule fires when a later writer-scan widens.
         add_ivar(ci, iname, "nil", 0)
         if vtype != "int" && vtype != "nil"
           update_ivar_type(ci, iname, vtype)
@@ -7839,9 +7839,9 @@ class Compiler
         end
       end
     end
-    # Multi-write to ivars: `@a, @b = expr1, expr2` (or `[expr1, expr2]`).
-    # Without this branch, ivars assigned only via destructuring never get
-    # registered and the struct comes out missing them.
+ # Multi-write to ivars: `@a, @b = expr1, expr2` (or `[expr1, expr2]`).
+ # Without this branch, ivars assigned only via destructuring never get
+ # registered and the struct comes out missing them.
     if @nd_type[nid] == "MultiWriteNode"
       targets = parse_id_list(@nd_targets[nid])
       val_id = @nd_expression[nid]
@@ -7862,15 +7862,15 @@ class Compiler
         ti = ti + 1
       end
     end
-    # Recurse into children
+ # Recurse into children
     scan_ivars_children(ci, nid)
   end
 
-  # i-th element type when scanning ivar destructuring writes. Mirrors
-  # multi_write_target_type but also handles array literals on the RHS
-  # (ivar collection runs before tuple inference, so `@a, @b = 1, 2`
-  # gets its types from positional ArrayNode elements rather than a
-  # tuple return).
+ # i-th element type when scanning ivar destructuring writes. Mirrors
+ # multi_write_target_type but also handles array literals on the RHS
+ # (ivar collection runs before tuple inference, so `@a, @b = 1, 2`
+ # gets its types from positional ArrayNode elements rather than a
+ # tuple return).
   def scan_ivars_multi_target_type(val_id, ti)
     if val_id < 0
       return "int"
@@ -7886,15 +7886,15 @@ class Compiler
     if is_tuple_type(rt) == 1
       return tuple_elem_type_at(rt, ti)
     end
-    # `A, B = arr.map { block }` — each target is one element of the
-    # mapped array, so its type is the block's return type. Spinel
-    # collapses array-of-array to a placeholder (int_array) at the
-    # outer infer_type level, so we have to peek through the call
-    # node directly to recover the element type. `collect` is the
-    # standard alias for `map`; treat both. Trust the block return
-    # even when it's `int` — `rt` (the outer call's inferred type)
-    # is unreliable for nested-array shapes per the comment above,
-    # so the block return is more authoritative.
+ # `A, B = arr.map { block }` — each target is one element of the
+ # mapped array, so its type is the block's return type. Spinel
+ # collapses array-of-array to a placeholder (int_array) at the
+ # outer infer_type level, so we have to peek through the call
+ # node directly to recover the element type. `collect` is the
+ # standard alias for `map`; treat both. Trust the block return
+ # even when it's `int` — `rt` (the outer call's inferred type)
+ # is unreliable for nested-array shapes per the comment above,
+ # so the block return is more authoritative.
     if @nd_type[val_id] == "CallNode" && (@nd_name[val_id] == "map" || @nd_name[val_id] == "collect")
       blk = @nd_block[val_id]
       if blk >= 0
@@ -7910,8 +7910,8 @@ class Compiler
         end
       end
     end
-    # Array-typed RHS (e.g. `A, B = [1, 6].map { ... }`): each target
-    # gets one element of the recv array. Use the recv's element type.
+ # Array-typed RHS (e.g. `A, B = [1, 6].map { ... }`): each target
+ # gets one element of the recv array. Use the recv's element type.
     if rt == "int_array" || rt == "sym_array"
       return "int"
     end
@@ -8039,24 +8039,24 @@ class Compiler
           rname = constructor_class_name(r)
           if rname != ""
             if rname == "Array"
-              # Block form `Array.new(n) { ... }` — infer container
-              # from the block tail (matches compile_constructor_expr).
-              # When the block tail's type can't be resolved at this
-              # pre-compile pass (a LocalVariableReadNode whose write
-              # is in the same block, e.g. `_a = [0]; _a.clear; _a`,
-              # hasn't been declare_var'd yet — find_var_type returns
-              # ""), fall through to the placeholder "int" path so
-              # the later compile pass's update_ivar_type can widen
-              # int → concrete-container without going through the
-              # array+array → poly_array widening.
+ # Block form `Array.new(n) { ... }` — infer container
+ # from the block tail (matches compile_constructor_expr).
+ # When the block tail's type can't be resolved at this
+ # pre-compile pass (a LocalVariableReadNode whose write
+ # is in the same block, e.g. `_a = [0]; _a.clear; _a`,
+ # hasn't been declare_var'd yet — find_var_type returns
+ # ""), fall through to the placeholder "int" path so
+ # the later compile pass's update_ivar_type can widen
+ # int → concrete-container without going through the
+ # array+array → poly_array widening.
               blk_an2 = @nd_block[nid]
               if blk_an2 >= 0
                 body_an2 = @nd_body[blk_an2]
                 if body_an2 >= 0
                   stmts_an2 = get_stmts(body_an2)
                   if stmts_an2.length > 0
-                    # `[]` / `[].dup` block tail → poly_array (see
-                    # infer_constructor_type for rationale).
+ # `[]` / `[].dup` block tail → poly_array (see
+ # infer_constructor_type for rationale).
                     if is_empty_array_or_dup(stmts_an2.last) == 1
                       @needs_rb_value = 1
                       @needs_gc = 1
@@ -8084,16 +8084,16 @@ class Compiler
                       @needs_gc = 1
                       return bret2 + "_ptr_array"
                     end
-                    # bret2 == "int" or "" — leave the slot untyped so
-                    # the later compile pass can refine without
-                    # triggering update_ivar_type's array-widening.
+ # bret2 == "int" or "" — leave the slot untyped so
+ # the later compile pass can refine without
+ # triggering update_ivar_type's array-widening.
                     return "int"
                   end
                 end
               end
-              # Check fill value type for Array.new(n, val).
-              # Pointer-type fills must produce a typed PtrArray; falling
-              # through to int_array would leave the elements unscanned by GC.
+ # Check fill value type for Array.new(n, val).
+ # Pointer-type fills must produce a typed PtrArray; falling
+ # through to int_array would leave the elements unscanned by GC.
               args_id = @nd_arguments[nid]
               if args_id >= 0
                 aargs = get_args(args_id)
@@ -8140,16 +8140,16 @@ class Compiler
         return vt
       end
     end
-    # Ternary / if-as-expression RHS: recurse into both branches'
-    # last statements and unify with strict comparison. Cannot
-    # delegate to unify_return_type — that helper has an "int is
-    # default/unresolved" escape hatch (`int + T → T`) which is
-    # correct for method-return inference but the wrong rule for
-    # ivar-write inference: mixing concrete int and concrete
-    # non-int in a ternary needs to widen to poly here, not
-    # silently pick the non-int side. nil branches still defer to
-    # the other type so existing nullable widening
-    # (string + nil → string?) flows through update_ivar_type.
+ # Ternary / if-as-expression RHS: recurse into both branches'
+ # last statements and unify with strict comparison. Cannot
+ # delegate to unify_return_type — that helper has an "int is
+ # default/unresolved" escape hatch (`int + T → T`) which is
+ # correct for method-return inference but the wrong rule for
+ # ivar-write inference: mixing concrete int and concrete
+ # non-int in a ternary needs to widen to poly here, not
+ # silently pick the non-int side. nil branches still defer to
+ # the other type so existing nullable widening
+ # (string + nil → string?) flows through update_ivar_type.
     if t == "IfNode"
       then_t = "nil"
       body = @nd_body[nid]
@@ -8177,11 +8177,11 @@ class Compiler
       if then_t == else_t
         return then_t
       end
-      # Nullable widening (`T + nil → T?`, `nil + T → T?`) — match
-      # unify_return_type's behavior locally so a later `infer_type`-
-      # based pass (spinel_codegen.rb:7045) computing the same "T?"
-      # doesn't widen us to poly via update_ivar_type's missing
-      # T + T? → T? handler.
+ # Nullable widening (`T + nil → T?`, `nil + T → T?`) — match
+ # unify_return_type's behavior locally so a later `infer_type`-
+ # based pass (spinel_codegen.rb:7045) computing the same "T?"
+ # doesn't widen us to poly via update_ivar_type's missing
+ # T + T? → T? handler.
       if then_t == "nil"
         if is_nullable_pointer_type(else_t) == 1 && is_nullable_type(else_t) == 0
           return else_t + "?"
@@ -8206,7 +8206,7 @@ class Compiler
     ptypes_str = ""
     defaults_str = collect_defaults_str(nid)
 
-    # Infer param types from defaults
+ # Infer param types from defaults
     params = @nd_parameters[nid]
     if params >= 0
       reqs = parse_id_list(@nd_requireds[params])
@@ -8246,7 +8246,7 @@ class Compiler
         end
         k = k + 1
       end
-      # Rest param (splat)
+ # Rest param (splat)
       rest = @nd_rest[params]
       if rest >= 0
         if @nd_type[rest] == "RestParameterNode"
@@ -8256,7 +8256,7 @@ class Compiler
           ptypes_str = ptypes_str + "int_array"
         end
       end
-      # Block param (&block)
+ # Block param (&block)
       blk = @nd_block[params]
       if blk >= 0
         if @nd_type[blk] == "BlockParameterNode"
@@ -8281,7 +8281,7 @@ class Compiler
   end
 
   def collect_define_method(nid)
-    # define_method(:name) { |args| body }
+ # define_method(:name) { |args| body }
     args_id = @nd_arguments[nid]
     if args_id < 0
       return
@@ -8299,7 +8299,7 @@ class Compiler
       return
     end
     body_id = @nd_body[blk]
-    # Collect block params
+ # Collect block params
     params_str = ""
     ptypes_str = ""
     bp = @nd_parameters[blk]
@@ -8344,7 +8344,7 @@ class Compiler
       end
     end
     body = @nd_body[nid]
-    # Store module info for include
+ # Store module info for include
     @module_names.push(mname)
     @module_body_ids.push(body)
     if body < 0
@@ -8352,7 +8352,7 @@ class Compiler
     end
     body_stmts = get_stmts(body)
 
-    # Match top-level collection order: modules first, then classes.
+ # Match top-level collection order: modules first, then classes.
     body_stmts.each { |sid|
       if @nd_type[sid] == "ModuleNode"
         collect_module_with_prefix(sid, mname)
@@ -8369,22 +8369,22 @@ class Compiler
       if @nd_type[sid] == "ConstantWriteNode"
         collect_scoped_constant(mname, sid)
       end
-      # Module-body `A, B = ...` multi-write to constants.
+ # Module-body `A, B = ...` multi-write to constants.
       if @nd_type[sid] == "MultiWriteNode"
         collect_scoped_multi_const(mname, sid)
       end
-      # `module_function` (no args) flips subsequent `def name`
-      # into class-method dispatch, parallel to `def self.name`.
-      # Spinel only needs the class-method shape; the full Ruby
-      # semantics also installs the methods as private instance
-      # methods (for include-mixin), unmodeled here.
+ # `module_function` (no args) flips subsequent `def name`
+ # into class-method dispatch, parallel to `def self.name`.
+ # Spinel only needs the class-method shape; the full Ruby
+ # semantics also installs the methods as private instance
+ # methods (for include-mixin), unmodeled here.
       if @nd_type[sid] == "CallNode" && @nd_receiver[sid] < 0 && @nd_name[sid] == "module_function"
         args_id_mf = @nd_arguments[sid]
         if args_id_mf < 0 || get_args(args_id_mf).length == 0
           in_module_function = 1
         end
       end
-      # Collect module class methods (def self.xxx) as top-level functions
+ # Collect module class methods (def self.xxx) as top-level functions
       if @nd_type[sid] == "DefNode"
         is_self_def = 0
         if @nd_receiver[sid] >= 0 && @nd_type[@nd_receiver[sid]] == "SelfNode"
@@ -8392,7 +8392,7 @@ class Compiler
         end
         if is_self_def == 1 || (in_module_function == 1 && @nd_receiver[sid] < 0)
           dmname = @nd_name[sid]
-          # Create as top-level method with module prefix for dispatch
+ # Create as top-level method with module prefix for dispatch
           @meth_names.push(mname + "_cls_" + dmname)
           @meth_param_names.push(collect_params_str(sid))
           @meth_param_types.push(collect_ptypes_str(sid, -1))
@@ -8400,16 +8400,16 @@ class Compiler
           @meth_return_types.push("int")
           @meth_body_ids.push(@nd_body[sid])
           @meth_has_yield.push(0)
-          # Capture default-arg expressions so call sites that
-          # omit trailing args get them filled in by
-          # compile_call_args_with_defaults — the actual default
-          # value is required (not just literal 0) for string
-          # default args etc.
+ # Capture default-arg expressions so call sites that
+ # omit trailing args get them filled in by
+ # compile_call_args_with_defaults — the actual default
+ # value is required (not just literal 0) for string
+ # default args etc.
           @meth_has_defaults.push(collect_defaults_str(sid))
           @meth_rest_index.push(collect_rest_index(sid))
         end
       end
-      # Collect module-level ivar writes as global statics
+ # Collect module-level ivar writes as global statics
       if @nd_type[sid] == "InstanceVariableWriteNode"
         iname = @nd_name[sid]
         cname2 = mname + "_" + iname[1, iname.length - 1]
@@ -8426,19 +8426,19 @@ class Compiler
         @const_expr_ids.push(expr_id)
         @const_scope_names.push(mname)
       end
-      # FFI DSL: ffi_lib, ffi_cflags, ffi_func, ffi_const, ffi_buffer,
-      # ffi_read_u32, ffi_read_i32, ffi_read_ptr. Bare CallNode with no
-      # explicit receiver whose name starts with "ffi_".
+ # FFI DSL: ffi_lib, ffi_cflags, ffi_func, ffi_const, ffi_buffer,
+ # ffi_read_u32, ffi_read_i32, ffi_read_ptr. Bare CallNode with no
+ # explicit receiver whose name starts with "ffi_".
       if @nd_type[sid] == "CallNode" && @nd_receiver[sid] < 0
         cname_ffi = @nd_name[sid]
         if cname_ffi.length >= 4 && cname_ffi[0, 4] == "ffi_"
           scan_ffi_decl(mname, sid)
         end
       end
-      # `class << self; attr_accessor :foo; end` — register `foo` as a
-      # module-level singleton accessor. Stage 1 of issue #126: the
-      # accessor's value is resolved later via the constant-fold pass
-      # (rewrite_module_singleton_accessors) once we've seen all writes.
+ # `class << self; attr_accessor :foo; end` — register `foo` as a
+ # module-level singleton accessor. Stage 1 of the
+ # accessor's value is resolved later via the constant-fold pass
+ # (rewrite_module_singleton_accessors) once we've seen all writes.
       if @nd_type[sid] == "SingletonClassNode"
         sbody = @nd_body[sid]
         if sbody >= 0
@@ -8463,18 +8463,18 @@ class Compiler
     }
   end
 
-  # Refine module-ivar types for empty-container literals
-  # (`@h = {}` / `@arr = []`) by walking the module's class-method
-  # bodies for `@h[k] = v` / `@h << v` style writes and picking the
-  # most specific hash / array shape from the observed key + value
-  # types. Otherwise the empty-hash default `str_int_hash` stays
-  # frozen and a sym-key / string-value write site emits a typed-
-  # mismatch sp_StrIntHash_set call.
-  #
-  # Called from generate_code after the param-type inference loop so
-  # `infer_type(args[i])` resolves params to their call-site-widened
-  # types — refining at module-collect time would see every param as
-  # the placeholder "int".
+ # Refine module-ivar types for empty-container literals
+ # (`@h = {}` / `@arr = []`) by walking the module's class-method
+ # bodies for `@h[k] = v` / `@h << v` style writes and picking the
+ # most specific hash / array shape from the observed key + value
+ # types. Otherwise the empty-hash default `str_int_hash` stays
+ # frozen and a sym-key / string-value write site emits a typed-
+ # mismatch sp_StrIntHash_set call.
+ #
+ # Called from generate_code after the param-type inference loop so
+ # `infer_type(args[i])` resolves params to their call-site-widened
+ # types — refining at module-collect time would see every param as
+ # the placeholder "int".
   def refine_all_module_ivar_types
     mi = 0
     while mi < @module_names.length
@@ -8489,15 +8489,15 @@ class Compiler
 
   def refine_module_ivar_types(mname, body_stmts)
     body_stmts.each { |sid|
-      # Two shapes both refine the same `@const_types` slot:
-      #   @slots = {}  (InstanceVariableWriteNode in a module body —
-      #                 spinel hoists module ivars to file-scope
-      #                 constants named `<Mod>_<iname>`)
-      #   LOG    = []  (ConstantWriteNode — registered directly as
-      #                 `<Mod>_<cname>`)
-      # The bare-constant shape needs the same refinement so
-      # `LOG << some_hash` writes flip the constant off the
-      # empty-array `int_array` default.
+ # Two shapes both refine the same `@const_types` slot:
+ # @slots = {} (InstanceVariableWriteNode in a module body —
+ # spinel hoists module ivars to file-scope
+ # constants named `<Mod>_<iname>`)
+ # LOG = [] (ConstantWriteNode — registered directly as
+ # `<Mod>_<cname>`)
+ # The bare-constant shape needs the same refinement so
+ # `LOG << some_hash` writes flip the constant off the
+ # empty-array `int_array` default.
       iv_write = @nd_type[sid] == "InstanceVariableWriteNode"
       const_write = @nd_type[sid] == "ConstantWriteNode"
       next unless iv_write || const_write
@@ -8511,26 +8511,26 @@ class Compiler
       ci = find_const_idx(cname2)
       next if ci < 0
       cur = @const_types[ci]
-      # Only refine when the recorded type is the empty-hash default
-      # (str_int_hash) or empty-array default (int_array).
+ # Only refine when the recorded type is the empty-hash default
+ # (str_int_hash) or empty-array default (int_array).
       next unless cur == "str_int_hash" || cur == "int_array"
       expr_id = @nd_expression[sid]
       next unless expr_id >= 0
       next unless (cur == "str_int_hash" && is_empty_hash_literal(expr_id) == 1) ||
                   (cur == "int_array" && is_empty_array_literal(expr_id) == 1)
-      # Walk all class methods in the module looking for writes to
-      # this ivar.
+ # Walk all class methods in the module looking for writes to
+ # this ivar.
       key_t_set = "".split(",")
       val_t_set = "".split(",")
       body_stmts.each { |sid2|
         next unless @nd_type[sid2] == "DefNode"
         bid = @nd_body[sid2]
         next unless bid >= 0
-        # The def's params live in the top-level method table under the
-        # synthetic `<mname>_cls_<dmname>` name. Pull the
-        # call-site-widened types from there and declare them in a
-        # temporary scope so `infer_type(LocalVariableReadNode)` for
-        # those params resolves correctly during the walk.
+ # The def's params live in the top-level method table under the
+ # synthetic `<mname>_cls_<dmname>` name. Pull the
+ # call-site-widened types from there and declare them in a
+ # temporary scope so `infer_type(LocalVariableReadNode)` for
+ # those params resolves correctly during the walk.
         synth_name = mname + "_cls_" + @nd_name[sid2]
         mi3 = find_method_idx(synth_name)
         push_scope
@@ -8546,14 +8546,14 @@ class Compiler
             declare_var(pnames3[k3], pt3)
             k3 = k3 + 1
           end
-          # Declare body locals too: a `LOG << entry` write where
-          # `entry = { ... }` was assigned earlier in the body needs
-          # the LocalVariableReadNode read on `entry` to resolve
-          # against the local's actual type, not infer_type's "int"
-          # default. Without this val_t_set ends up `["int"]` and
-          # pick_array_class returns the same int_array we started
-          # with. The ivar shape (`@slots[k] = v` where k/v are
-          # params) only needs the params declared above.
+ # Declare body locals too: a `LOG << entry` write where
+ # `entry = { ... }` was assigned earlier in the body needs
+ # the LocalVariableReadNode read on `entry` to resolve
+ # against the local's actual type, not infer_type's "int"
+ # default. Without this val_t_set ends up `["int"]` and
+ # pick_array_class returns the same int_array we started
+ # with. The ivar shape (`@slots[k] = v` where k/v are
+ # params) only needs the params declared above.
           local_names = "".split(",")
           local_types = "".split(",")
           scan_locals(bid, local_names, local_types, pnames3)
@@ -8574,13 +8574,13 @@ class Compiler
         pop_scope
       }
       if cur == "str_int_hash"
-        # Pick the hash class that fits the observed (key, value) types.
+ # Pick the hash class that fits the observed (key, value) types.
         new_t = pick_hash_class(key_t_set, val_t_set)
         if new_t != "" && new_t != cur
           @const_types[ci] = new_t
-          # Set the @needs_* flag so emit_sym_runtime / future hash
-          # runtime emitters declare the matching struct + helpers
-          # before this const's `cst_<name>` declaration is rendered.
+ # Set the @needs_* flag so emit_sym_runtime / future hash
+ # runtime emitters declare the matching struct + helpers
+ # before this const's `cst_<name>` declaration is rendered.
           mark_hash_needs(new_t)
         end
       elsif cur == "int_array"
@@ -8624,13 +8624,13 @@ class Compiler
     end
   end
 
-  # Walk `nid` accumulating distinct key + value types observed at
-  # `LOG << v` / `LOG[k] = v` / `LOG.push(v)` writes against a
-  # module-level constant `LOG`. Parallel to
-  # scan_module_ivar_writes for the ivar / hoisted shape; this
-  # variant tracks ConstantReadNode recv (resolving via the
-  # enclosing module's lexical scope) and feeds the same set the
-  # refinement uses to pick the typed-array / typed-hash shape.
+ # Walk `nid` accumulating distinct key + value types observed at
+ # `LOG << v` / `LOG[k] = v` / `LOG.push(v)` writes against a
+ # module-level constant `LOG`. Parallel to
+ # scan_module_ivar_writes for the ivar / hoisted shape; this
+ # variant tracks ConstantReadNode recv (resolving via the
+ # enclosing module's lexical scope) and feeds the same set the
+ # refinement uses to pick the typed-array / typed-hash shape.
   def scan_module_const_writes(nid, cname, key_t_set, val_t_set)
     if nid < 0
       return
@@ -8710,7 +8710,7 @@ class Compiler
 
   def pick_hash_class(key_t_set, val_t_set)
     return "" if key_t_set.length == 0 || val_t_set.length == 0
-    # Heterogeneous keys → poly hash; mixed values → poly hash too.
+ # Heterogeneous keys → poly hash; mixed values → poly hash too.
     sym_keys = key_t_set.length == 1 && key_t_set[0] == "symbol"
     str_keys = key_t_set.length == 1 && key_t_set[0] == "string"
     int_keys = key_t_set.length == 1 && key_t_set[0] == "int"
@@ -8731,17 +8731,17 @@ class Compiler
     if int_keys && str_vals
       return "int_str_hash"
     end
-    # Fall back to poly when the observed pair doesn't fit a typed hash.
+ # Fall back to poly when the observed pair doesn't fit a typed hash.
     if sym_keys
       return "sym_poly_hash"
     end
     if str_keys
       return "str_poly_hash"
     end
-    # Heterogeneous key types — fall back to poly_poly_hash so each
-    # entry carries its own tag and OBJ-tag eql? dispatches via the
-    # codegen-emitted class hooks (e.g. Method#eql? for the optcarrot
-    # `@peeks[peek] ||= peek` cache).
+ # Heterogeneous key types — fall back to poly_poly_hash so each
+ # entry carries its own tag and OBJ-tag eql? dispatches via the
+ # codegen-emitted class hooks (e.g. Method#eql? for the optcarrot
+ # `@peeks[peek] ||= peek` cache).
     "poly_poly_hash"
   end
 
@@ -8757,14 +8757,14 @@ class Compiler
     "poly_array"
   end
 
-  # ---------- FFI declaration scanning ----------
-  #
-  # Each ffi_* DSL form inside a `module M ... end` body is recognized by
-  # collect_module_with_prefix and dispatched here. Declarations are
-  # recorded into the @ffi_* parallel arrays; emission happens later from
-  # emit_ffi_externs and the compile/infer hooks.
+ # ---------- FFI declaration scanning ----------
+ #
+ # Each ffi_* DSL form inside a `module M ... end` body is recognized by
+ # collect_module_with_prefix and dispatched here. Declarations are
+ # recorded into the @ffi_* parallel arrays; emission happens later from
+ # emit_ffi_externs and the compile/infer hooks.
 
-  # Return the index of `mname` in @ffi_modules, creating an entry if missing.
+ # Return the index of `mname` in @ffi_modules, creating an entry if missing.
   def ffi_module_idx(mname)
     i = 0
     while i < @ffi_modules.length
@@ -8779,8 +8779,8 @@ class Compiler
     @ffi_modules.length - 1
   end
 
-  # Map an FFI type-spec symbol (e.g. "uint32", "str", "ptr") to a Spinel
-  # type token ("int", "string", "ptr"). Returns "" on unknown input.
+ # Map an FFI type-spec symbol (e.g. "uint32", "str", "ptr") to a Spinel
+ # type token ("int", "string", "ptr"). Returns "" on unknown input.
   def ffi_type_of(spec)
     if spec == "int" || spec == "uint32" || spec == "int32" || spec == "uint16" || spec == "int16" || spec == "uint8" || spec == "int8" || spec == "size_t" || spec == "long"
       return "int"
@@ -8803,12 +8803,12 @@ class Compiler
     ""
   end
 
-  # Map an FFI type-spec symbol to the C type used in extern prototypes
-  # and call-site casts. Unlike ffi_type_of (which collapses to Spinel
-  # tokens), this preserves C-level detail (uint32_t vs size_t etc.).
+ # Map an FFI type-spec symbol to the C type used in extern prototypes
+ # and call-site casts. Unlike ffi_type_of (which collapses to Spinel
+ # tokens), this preserves C-level detail (uint32_t vs size_t etc.).
 
-  # Extract a string literal from a SymbolNode or StringNode arg. Returns
-  # "" if the arg is not a literal we recognize.
+ # Extract a string literal from a SymbolNode or StringNode arg. Returns
+ # "" if the arg is not a literal we recognize.
   def ffi_arg_str(nid)
     if nid < 0
       return ""
@@ -8820,7 +8820,7 @@ class Compiler
     ""
   end
 
-  # Extract an integer from an IntegerNode arg. Returns -1 on non-int.
+ # Extract an integer from an IntegerNode arg. Returns -1 on non-int.
   def ffi_arg_int(nid)
     if nid < 0
       return -1
@@ -8831,16 +8831,16 @@ class Compiler
     -1
   end
 
-  # Emit an FFI decl error and abort with a pointed message.
+ # Emit an FFI decl error and abort with a pointed message.
   def ffi_error(mname, dname, msg)
     $stderr.puts "FFI error in module " + mname + ": " + dname + ": " + msg
     exit(1)
   end
 
-  # Mangle a buffer's C symbol with module prefix to keep two modules
-  # from colliding when both declare e.g. `:scratch`.
+ # Mangle a buffer's C symbol with module prefix to keep two modules
+ # from colliding when both declare e.g. `:scratch`.
 
-  # Lookup helpers — return the registry index, or -1 if not declared.
+ # Lookup helpers — return the registry index, or -1 if not declared.
   def ffi_find_func(mod_name, fn_name)
     k = 0
     while k < @ffi_func_names.length
@@ -8874,8 +8874,8 @@ class Compiler
     -1
   end
 
-  # Dispatch on the specific ffi_* declaration name. Called once per
-  # recognized CallNode in a module body.
+ # Dispatch on the specific ffi_* declaration name. Called once per
+ # recognized CallNode in a module body.
   def scan_ffi_decl(mname, nid)
     dname = @nd_name[nid]
     args_id = @nd_arguments[nid]
@@ -8918,7 +8918,7 @@ class Compiler
     end
 
     if dname == "ffi_func"
-      # ffi_func :name, [:arg1, :arg2], :ret
+ # ffi_func :name, [:arg1, :arg2], :ret
       if args.length != 3
         ffi_error(mname, dname, "expected 3 args (name, [arg types], ret type)")
       end
@@ -8962,10 +8962,10 @@ class Compiler
     end
 
     if dname == "ffi_const"
-      # ffi_const :NAME, <int>. Reuse the existing module-constant
-      # storage so ConstantPathNode (Module::NAME) finds it via the
-      # standard lookup. Names are mangled "<Mod>_<NAME>" to match the
-      # convention set by collect_scoped_constant.
+ # ffi_const :NAME, <int>. Reuse the existing module-constant
+ # storage so ConstantPathNode (Module::NAME) finds it via the
+ # standard lookup. Names are mangled "<Mod>_<NAME>" to match the
+ # convention set by collect_scoped_constant.
       if args.length != 2
         ffi_error(mname, dname, "expected 2 args (name, integer value)")
       end
@@ -8982,7 +8982,7 @@ class Compiler
     end
 
     if dname == "ffi_buffer"
-      # ffi_buffer :name, <size>
+ # ffi_buffer :name, <size>
       if args.length != 2
         ffi_error(mname, dname, "expected 2 args (name, size)")
       end
@@ -9023,11 +9023,11 @@ class Compiler
     ffi_error(mname, dname, "unknown FFI declaration")
   end
 
-  # ---------- FFI inference and call emission ----------
+ # ---------- FFI inference and call emission ----------
 
-  # Type inference for FFI method calls. Returns the declared Spinel
-  # return type for a ConstantReadNode-receiver call matching a
-  # registered ffi_func / ffi_buffer / ffi_read_*, or "" otherwise.
+ # Type inference for FFI method calls. Returns the declared Spinel
+ # return type for a ConstantReadNode-receiver call matching a
+ # registered ffi_func / ffi_buffer / ffi_read_*, or "" otherwise.
   def infer_ffi_call_type(nid, mname, recv)
     if recv < 0
       return ""
@@ -9055,27 +9055,27 @@ class Compiler
     ""
   end
 
-  # Compile a call to an FFI function/buffer/reader. Returns "" if this
-  # is not an FFI call so the caller can fall through.
+ # Compile a call to an FFI function/buffer/reader. Returns "" if this
+ # is not an FFI call so the caller can fall through.
 
-  # Emit a direct call to the FFI function indexed by `fi`. Each
-  # argument is cast to its declared C type so type mismatches fail
-  # loudly at compile time and we sidestep -Wconversion noise.
+ # Emit a direct call to the FFI function indexed by `fi`. Each
+ # argument is cast to its declared C type so type mismatches fail
+ # loudly at compile time and we sidestep -Wconversion noise.
 
-  # Emit a field-read from a buffer: Module.<reader_name>(buf).
+ # Emit a field-read from a buffer: Module.<reader_name>(buf).
 
-  # Emit FFI prologue: link/cflag markers, extern prototypes, buffer
-  # storage. Called from generate_code right after the symbol runtime.
-  # No-op when no FFI module was declared.
+ # Emit FFI prologue: link/cflag markers, extern prototypes, buffer
+ # storage. Called from generate_code right after the symbol runtime.
+ # No-op when no FFI module was declared.
 
   def collect_constant(nid)
     collect_scoped_constant("", nid)
   end
 
-  # Multi-write to constants: `A, B, C = expr`. Each ConstantTargetNode
-  # in the targets list gets registered as a separate constant whose
-  # value is the i-th element of the RHS at emit time. Used both at
-  # top level and inside class/module bodies (`scope_name`).
+ # Multi-write to constants: `A, B, C = expr`. Each ConstantTargetNode
+ # in the targets list gets registered as a separate constant whose
+ # value is the i-th element of the RHS at emit time. Used both at
+ # top level and inside class/module bodies (`scope_name`).
   def collect_scoped_multi_const(scope_name, nid)
     targets = parse_id_list(@nd_targets[nid])
     val_id = @nd_expression[nid]
@@ -9087,9 +9087,9 @@ class Compiler
         if scope_name != ""
           cname = scope_name + "_" + cname
         end
-        # Use the existing scope chain when inferring element types so
-        # nested-array RHS (`A, B = (1..2).map {...}`) gets the elem
-        # type of the array rather than int.
+ # Use the existing scope chain when inferring element types so
+ # nested-array RHS (`A, B = (1..2).map {...}`) gets the elem
+ # type of the array rather than int.
         old_scope = @current_lexical_scope
         @current_lexical_scope = scope_name
         ct = scan_ivars_multi_target_type(val_id, ti)
@@ -9102,10 +9102,10 @@ class Compiler
         else
           @const_names.push(cname)
           @const_types.push(ct)
-          # Element-of-multi: emit_global_constants can't reduce these
-          # at module-init time since the source expression is the
-          # whole RHS, not a per-target one. Mark expr_id = -1 and
-          # rely on @multi_const_inits below to drive the assignment.
+ # Element-of-multi: emit_global_constants can't reduce these
+ # at module-init time since the source expression is the
+ # whole RHS, not a per-target one. Mark expr_id = -1 and
+ # rely on @multi_const_inits below to drive the assignment.
           @const_expr_ids.push(-1)
           @const_scope_names.push(scope_name)
         end
@@ -9114,36 +9114,36 @@ class Compiler
         ti = ti + 1
       end
     end
-    # Record the multi-write as a single deferred init: the RHS is
-    # evaluated once and each constant takes one element.
+ # Record the multi-write as a single deferred init: the RHS is
+ # evaluated once and each constant takes one element.
     if @multi_const_inits == nil
       @multi_const_inits = "".split(",")
     end
     @multi_const_inits.push(scope_name + "|" + nid.to_s)
   end
 
-  # Synthetic built-in user class for `method(:foo)` capture: every
-  # `m = method(:foo)` / `obj.method(:foo)` produces an instance of
-  # this class, allocated by sp_Method_new and walked by the auto-
-  # generated sp_Method_gc_scan. Ref #215.
-  #
-  # The two ivars:
-  # - `@self_obj` typed `obj_Method`. Load-bearing hack: this type
-  #   makes ivar_is_gc_ptr true, which makes the auto-generated gc
-  #   scanner emit `sp_gc_mark(self->iv_self_obj)`. The actual
-  #   captured pointer is the bound receiver (any user class), cast
-  #   to `sp_Method *`. sp_gc_mark dispatches via the GC header's
-  #   `scan` field — set at the *bound receiver's* allocation time —
-  #   not via the static pointer type, so the cast is safe at the
-  #   GC level even though it's a type lie at the C level.
-  #   detect_method_taken_classes excludes the bound receiver's
-  #   class from value-type optimization so the captured pointer
-  #   never dangles (value-type instances live on the caller's
-  #   stack and would be reclaimed when the binding method returns).
-  # - `@fn_ptr` typed `int`. Holds `(uintptr_t)&sp_<DefCls>_<mname>`
-  #   reinterpreted as mrb_int (int64_t — wide enough on every
-  #   target). The Method.call/[] codegen in compile_call_expr casts
-  #   it back to a function pointer of the right shape.
+ # Synthetic built-in user class for `method(:foo)` capture: every
+ # `m = method(:foo)` / `obj.method(:foo)` produces an instance of
+ # this class, allocated by sp_Method_new and walked by the auto-
+ # generated sp_Method_gc_scan. .
+ #
+ # The two ivars:
+ # - `@self_obj` typed `obj_Method`. Load-bearing hack: this type
+ # makes ivar_is_gc_ptr true, which makes the auto-generated gc
+ # scanner emit `sp_gc_mark(self->iv_self_obj)`. The actual
+ # captured pointer is the bound receiver (any user class), cast
+ # to `sp_Method *`. sp_gc_mark dispatches via the GC header's
+ # `scan` field — set at the *bound receiver's* allocation time —
+ # not via the static pointer type, so the cast is safe at the
+ # GC level even though it's a type lie at the C level.
+ # detect_method_taken_classes excludes the bound receiver's
+ # class from value-type optimization so the captured pointer
+ # never dangles (value-type instances live on the caller's
+ # stack and would be reclaimed when the binding method returns).
+ # - `@fn_ptr` typed `int`. Holds `(uintptr_t)&sp_<DefCls>_<mname>`
+ # reinterpreted as mrb_int (int64_t — wide enough on every
+ # target). The Method.call/[] codegen in compile_call_expr casts
+ # it back to a function pointer of the right shape.
   def register_builtin_classes
     @cls_names.push("Method")
     @cls_is_value_type.push(0)
@@ -9173,7 +9173,7 @@ class Compiler
   end
 
   def collect_struct_class(cname, call_nid)
-    # Generate a synthetic class from Struct.new(:field1, :field2, ...)
+ # Generate a synthetic class from Struct.new(:field1, :field2, ...)
     ci = @cls_names.length
     @cls_names.push(cname)
     @cls_is_value_type.push(0)
@@ -9201,14 +9201,14 @@ class Compiler
     @cls_cmeth_defaults.push("")
     @cls_meth_has_yield.push("")
 
-    # Get field names from symbol args (skip keyword_init hash)
+ # Get field names from symbol args (skip keyword_init hash)
     args_id = @nd_arguments[call_nid]
     field_names = "".split(",")
     if args_id >= 0
       aids = get_args(args_id)
       k = 0
       while k < aids.length
-        # Skip KeywordHashNode (keyword_init: true)
+ # Skip KeywordHashNode (keyword_init: true)
         if @nd_type[aids[k]] == "KeywordHashNode"
           k = k + 1
           next
@@ -9216,10 +9216,10 @@ class Compiler
         fname = @nd_content[aids[k]]
         if fname != ""
           field_names.push(fname)
-          # Add ivar
+ # Add ivar
           iname = "@" + fname
           add_ivar(ci, iname, "int")
-          # Add reader/writer
+ # Add reader/writer
           append_attr_reader(ci, fname)
           append_attr_writer(ci, fname)
         end
@@ -9227,7 +9227,7 @@ class Compiler
       end
     end
 
-    # Generate initialize method with params matching fields
+ # Generate initialize method with params matching fields
     init_params = field_names.join(",")
     init_ptypes = ""
     k = 0
@@ -9238,14 +9238,14 @@ class Compiler
       init_ptypes = init_ptypes + "int"
       k = k + 1
     end
-    # For struct, we don't have a body node - the constructor is synthetic
-    # We'll handle this specially in emit_constructor
+ # For struct, we don't have a body node - the constructor is synthetic
+ # We'll handle this specially in emit_constructor
     append_cls_meth(ci, "initialize", init_params, init_ptypes, "void", -1, "")
-    # Mark yield info
+ # Mark yield info
     @cls_meth_has_yield[ci] = "0"
 
-    # Store struct info for synthetic constructor generation
-    # We'll use a special marker in the body id (-2 = synthetic struct)
+ # Store struct info for synthetic constructor generation
+ # We'll use a special marker in the body id (-2 = synthetic struct)
     bodies = @cls_meth_bodies[ci].split(";")
     if bodies.length > 0
       bodies[0] = "-2"
@@ -9253,7 +9253,7 @@ class Compiler
     end
   end
 
-  # ---- Yield detection ----
+ # ---- Yield detection ----
   def body_has_yield(nid)
     if nid < 0
       return 0
@@ -9266,7 +9266,7 @@ class Compiler
         return 1
       end
     end
-    # Don't recurse into nested DefNode (that's a different method)
+ # Don't recurse into nested DefNode (that's a different method)
     if @nd_type[nid] == "DefNode"
       return 0
     end
@@ -9282,36 +9282,36 @@ class Compiler
     0
   end
 
-  # Walks `nid` for YieldNodes and returns max(`current`, max_args_of_yields).
-  # Mirrors body_has_yield's recursion shape. `current` carries the running
-  # max so callers can seed a floor (1, since every yield-using method needs
-  # at least one mrb_int slot in `_block`'s signature).
+ # Walks `nid` for YieldNodes and returns max(`current`, max_args_of_yields).
+ # Mirrors body_has_yield's recursion shape. `current` carries the running
+ # max so callers can seed a floor (1, since every yield-using method needs
+ # at least one mrb_int slot in `_block`'s signature).
 
-  # ---- Return type inference ----
+ # ---- Return type inference ----
   def infer_constructor_types
-    # Scan AST for ClassName.new(args) calls and infer param types
+ # Scan AST for ClassName.new(args) calls and infer param types
     scan_new_calls(@root_id)
   end
 
-  # Narrow pre-pass for `rewrite_instance_eval_calls`: walk top-level
-  # CallNodes shaped `recv.method(args)` where recv resolves to an
-  # obj_<C> via top-level scope, and let scan_new_calls' receiver-method
-  # branch widen the class method's ptypes. Without this, a method-param
-  # receiver inside `def configure(app); app.instance_eval { } end`
-  # has `app` ptype stuck at "int" at Pass 2.6 time — the existing
-  # `infer_main_call_types` does the same scope-wrap but only runs in
-  # `compile()` after `collect_all` returns.
-  #
-  # Why not reuse `infer_main_call_types`: that pass also runs the
-  # top-level-method branch and the constructor branch, both of which
-  # detect_poly_params later refines via different rules. Running them
-  # twice (once at Pass 2.55, once in compile()) re-orders the inputs
-  # detect_poly_params sees and demonstrably regresses
-  # `test/poly_dispatch_builtin_all.rb` (lenof's poly param drops to
-  # int_array when the early run primes ptypes ahead of the iterative
-  # loop). This pre-pass scans the same AST but skips both other
-  # branches; it only widens class-method ptypes through obj-typed
-  # receivers — the exact piece rewrite_instance_eval_calls needs.
+ # Narrow pre-pass for `rewrite_instance_eval_calls`: walk top-level
+ # CallNodes shaped `recv.method(args)` where recv resolves to an
+ # obj_<C> via top-level scope, and let scan_new_calls' receiver-method
+ # branch widen the class method's ptypes. Without this, a method-param
+ # receiver inside `def configure(app); app.instance_eval { } end`
+ # has `app` ptype stuck at "int" at Pass 2.6 time — the existing
+ # `infer_main_call_types` does the same scope-wrap but only runs in
+ # `compile()` after `collect_all` returns.
+ #
+ # Why not reuse `infer_main_call_types`: that pass also runs the
+ # top-level-method branch and the constructor branch, both of which
+ # detect_poly_params later refines via different rules. Running them
+ # twice (once at Pass 2.55, once in compile()) re-orders the inputs
+ # detect_poly_params sees and demonstrably regresses
+ # `test/poly_dispatch_builtin_all.rb` (lenof's poly param drops to
+ # int_array when the early run primes ptypes ahead of the iterative
+ # loop). This pre-pass scans the same AST but skips both other
+ # branches; it only widens class-method ptypes through obj-typed
+ # receivers — the exact piece rewrite_instance_eval_calls needs.
   def propagate_recv_method_arg_types_for_ieval
     push_scope
     if @nd_type[@root_id] == "ProgramNode"
@@ -9332,13 +9332,13 @@ class Compiler
     pop_scope
   end
 
-  # Surgical fork of scan_new_calls: only the `obj.method(args)` branch,
-  # only when `obj`'s static type is obj_<C>. Mirrors the cls_meth_ptypes
-  # widening at lines ~6603-6615 of scan_new_calls (the same int->concrete
-  # promotion gate) and falls through to recursion. Other branches of
-  # scan_new_calls (constructor and top-level method) are deliberately
-  # absent — running them earlier than master's compile() pipeline
-  # interacts badly with detect_poly_params (see commentary above).
+ # Surgical fork of scan_new_calls: only the `obj.method(args)` branch,
+ # only when `obj`'s static type is obj_<C>. Mirrors the cls_meth_ptypes
+ # widening at lines ~6603-6615 of scan_new_calls (the same int->concrete
+ # promotion gate) and falls through to recursion. Other branches of
+ # scan_new_calls (constructor and top-level method) are deliberately
+ # absent — running them earlier than master's compile() pipeline
+ # interacts badly with detect_poly_params (see commentary above).
   def walk_recv_method_calls(nid)
     if nid < 0
       return
@@ -9418,26 +9418,26 @@ class Compiler
     end
   end
 
-  # Merge `at` (inferred from a new call-site argument) into the
-  # accumulated ctor param type `old_pt`. "int" is normally treated as
-  # a fallback/placeholder (many unresolved reads default to it), but a
-  # literal IntegerNode is concrete — if old_pt is already a different
-  # concrete pointer type, int becomes genuine polymorphism. `arg_id`
-  # lets us distinguish literal from inferred.
+ # Merge `at` (inferred from a new call-site argument) into the
+ # accumulated ctor param type `old_pt`. "int" is normally treated as
+ # a fallback/placeholder (many unresolved reads default to it), but a
+ # literal IntegerNode is concrete — if old_pt is already a different
+ # concrete pointer type, int becomes genuine polymorphism. `arg_id`
+ # lets us distinguish literal from inferred.
   def unify_call_types(old_pt, at, arg_id)
     if old_pt == at
       return old_pt
     end
-    # Stale unqualified obj-name normalization. Same shape as the
-    # update_ivar_type fix: a Pass 1 ivar / param scan that ran
-    # before all sibling classes were registered may have stamped
-    # an unqualified `obj_<bare>` on a slot, which a later pass
-    # then sees alongside the qualified `obj_<scope>_<bare>`.
-    # Without this normalization the two strings compare unequal
-    # and the trailing `incompatible → poly` tail collapses the
-    # ptype, then propagates poly across every Class.new call site
-    # that reads the slot. Detect the relationship and accept the
-    # qualified form.
+ # Stale unqualified obj-name normalization. Same shape as the
+ # update_ivar_type fix: a Pass 1 ivar / param scan that ran
+ # before all sibling classes were registered may have stamped
+ # an unqualified `obj_<bare>` on a slot, which a later pass
+ # then sees alongside the qualified `obj_<scope>_<bare>`.
+ # Without this normalization the two strings compare unequal
+ # and the trailing `incompatible → poly` tail collapses the
+ # ptype, then propagates poly across every Class.new call site
+ # that reads the slot. Detect the relationship and accept the
+ # qualified form.
     if is_obj_type(old_pt) == 1 && is_obj_type(at) == 1
       old_bare_uct = old_pt[4, old_pt.length - 4]
       new_bare_uct = at[4, at.length - 4]
@@ -9499,12 +9499,12 @@ class Compiler
       @needs_rb_value = 1
       return "poly_array"
     end
-    # Hash variants: empty-default str_int_hash (from `attrs = {}`)
-    # is type-flexible — let the call-site type win, same as the
-    # int_array → typed-array escalation above. Issue #176. The
-    # poly variants subsume any other hash; mismatched concrete
-    # hash types (str_int_hash vs sym_str_hash) fall through to
-    # the "incompatible → poly" tail.
+ # Hash variants: empty-default str_int_hash (from `attrs = {}`)
+ # is type-flexible — let the call-site type win, same as the
+ # int_array → typed-array escalation above. . The
+ # poly variants subsume any other hash; mismatched concrete
+ # hash types (str_int_hash vs sym_str_hash) fall through to
+ # the "incompatible → poly" tail.
     if is_hash_type(old_pt) == 1 && is_hash_type(at) == 1
       if old_pt == "str_poly_hash" || at == "str_poly_hash"
         @needs_str_poly_hash = 1
@@ -9524,20 +9524,20 @@ class Compiler
       end
     end
     if at == "int"
-      # Numeric compat: int + float is safe in both directions.
+ # Numeric compat: int + float is safe in both directions.
       if old_pt == "float"
         return "float"
       end
-      # Literal int into a non-numeric concrete type: genuine poly.
+ # Literal int into a non-numeric concrete type: genuine poly.
       if arg_is_literal == 1
         @needs_rb_value = 1
         return "poly"
       end
-      # Inferred int (likely fallback): keep existing type.
+ # Inferred int (likely fallback): keep existing type.
       return old_pt
     end
     if base_type(old_pt) == base_type(at)
-      # Nullable-compatible variants of the same base.
+ # Nullable-compatible variants of the same base.
       if is_nullable_type(at) == 1
         return at
       end
@@ -9549,29 +9549,29 @@ class Compiler
     if (old_pt == "float" && at == "int") || (old_pt == "int" && at == "float")
       return "float"
     end
-    # `def f(conf = ARGV)`: the default's type lands as `argv`
-    # (spinel's specialised `**argv`-like scalar), but bootstrapping
-    # callers in real programs almost always invoke `f("path.nes")`
-    # — a single string. Without this narrow, unification falls to
-    # poly and the body's `Config.new(conf)` (string-expecting) gets
-    # a poly arg. Bias toward the call-site shape so single-string
-    # entry points don't drag the whole signature into poly.
+ # `def f(conf = ARGV)`: the default's type lands as `argv`
+ # (spinel's specialised `**argv`-like scalar), but bootstrapping
+ # callers in real programs almost always invoke `f("path.nes")`
+ # — a single string. Without this narrow, unification falls to
+ # poly and the body's `Config.new(conf)` (string-expecting) gets
+ # a poly arg. Bias toward the call-site shape so single-string
+ # entry points don't drag the whole signature into poly.
     if (old_pt == "argv" && at == "string") || (old_pt == "string" && at == "argv")
       return "string"
     end
-    # Genuinely incompatible types: fall back to polymorphic value.
+ # Genuinely incompatible types: fall back to polymorphic value.
     @needs_rb_value = 1
     "poly"
   end
 
 
 
-  # Resolve a ClassNode AST id to its registered index in
-  # @cls_names, walking the same module-prefix chain that
-  # `resolve_const_read_name` / `find_class_idx` use at emit
-  # time. Returns -1 when the class isn't in @cls_names (e.g. a
-  # nested `class << self` body that hasn't been registered as a
-  # regular class).
+ # Resolve a ClassNode AST id to its registered index in
+ # @cls_names, walking the same module-prefix chain that
+ # `resolve_const_read_name` / `find_class_idx` use at emit
+ # time. Returns -1 when the class isn't in @cls_names (e.g. a
+ # nested `class << self` body that hasn't been registered as a
+ # regular class).
   def class_node_to_idx(nid)
     cp = @nd_constant_path[nid]
     if cp < 0
@@ -9589,9 +9589,9 @@ class Compiler
     find_class_idx(flat)
   end
 
-  # Set @current_class_idx / @current_lexical_scope to the class
-  # introduced by `nid` (a ClassNode). No-op when the class isn't
-  # registered. Caller is responsible for save/restore.
+ # Set @current_class_idx / @current_lexical_scope to the class
+ # introduced by `nid` (a ClassNode). No-op when the class isn't
+ # registered. Caller is responsible for save/restore.
   def enter_class_scope_from_node(nid)
     ci = class_node_to_idx(nid)
     if ci >= 0
@@ -9600,10 +9600,10 @@ class Compiler
     end
   end
 
-  # Append the module name introduced by `nid` (a ModuleNode) to
-  # `@current_lexical_scope`. Caller is responsible for save/
-  # restore. Mirrors the prefix pattern that
-  # `collect_module_with_prefix` uses for nested module names.
+ # Append the module name introduced by `nid` (a ModuleNode) to
+ # `@current_lexical_scope`. Caller is responsible for save/
+ # restore. Mirrors the prefix pattern that
+ # `collect_module_with_prefix` uses for nested module names.
   def enter_module_scope_from_node(nid)
     cp = @nd_constant_path[nid]
     if cp < 0
@@ -9620,18 +9620,18 @@ class Compiler
     end
   end
 
-  # Widen a callee's `ptypes` array from a single call site's
-  # argument list, correctly handling keyword args. Positional args
-  # unify by index; a `KeywordHashNode` (kwargs) unifies each
-  # `key: value` pair into the slot whose param-name matches the
-  # key. Mutates `ptypes` in place; the caller joins the result
-  # back into the storage table (`@meth_param_types[mi]`,
-  # `@cls_cmeth_ptypes[ci]`, etc.).
-  #
-  # The kwargs branch is essential: a positional-only loop would
-  # unify a `KeywordHashNode` into `ptypes[0]` (the AST presents
-  # kwargs as a single trailing hash arg), leaving the callee's
-  # actual kwarg slots un-widened.
+ # Widen a callee's `ptypes` array from a single call site's
+ # argument list, correctly handling keyword args. Positional args
+ # unify by index; a `KeywordHashNode` (kwargs) unifies each
+ # `key: value` pair into the slot whose param-name matches the
+ # key. Mutates `ptypes` in place; the caller joins the result
+ # back into the storage table (`@meth_param_types[mi]`,
+ # `@cls_cmeth_ptypes[ci]`, etc.).
+ #
+ # The kwargs branch is essential: a positional-only loop would
+ # unify a `KeywordHashNode` into `ptypes[0]` (the AST presents
+ # kwargs as a single trailing hash arg), leaving the callee's
+ # actual kwarg slots un-widened.
   def widen_ptypes_from_args(arg_ids, pnames, ptypes)
     pos_idx = 0
     ai = 0
@@ -9676,14 +9676,14 @@ class Compiler
     if nid < 0
       return
     end
-    # When we descend into a class body, pin @current_class_idx so
-    # any `infer_type(@ivar)` in the args of a nested .new call
-    # resolves against this class's ivar table. Without this scope
-    # set-up, arguments like `@cpu` inside `Foo.initialize`'s
-    # body that contains `Bar.new(@cpu, ...)` infer as "int" (the
-    # default for an InstanceVariableReadNode with no scope), which
-    # then wedges Bar.initialize's first param at int even after
-    # multiple iterations of the fixpoint loop.
+ # When we descend into a class body, pin @current_class_idx so
+ # any `infer_type(@ivar)` in the args of a nested .new call
+ # resolves against this class's ivar table. Without this scope
+ # set-up, arguments like `@cpu` inside `Foo.initialize`'s
+ # body that contains `Bar.new(@cpu, ...)` infer as "int" (the
+ # default for an InstanceVariableReadNode with no scope), which
+ # then wedges Bar.initialize's first param at int even after
+ # multiple iterations of the fixpoint loop.
     if @nd_type[nid] == "ClassNode"
       saved_ci = @current_class_idx
       saved_scope = @current_lexical_scope
@@ -9706,12 +9706,12 @@ class Compiler
       @current_lexical_scope = saved_scope2
       return
     end
-    # IfNode (incl. ternary). When the predicate is
-    # `var.is_a?(C)` / `kind_of?(C)`, push a narrow on `var` while
-    # walking the then-arm so a recursive call inside the arm sees
-    # the narrowed type and unify_call_types widens the callee's
-    # param accordingly. The else-arm walks unchanged — we don't
-    # currently model "type minus C" (see POLY-AS-SET.md).
+ # IfNode (incl. ternary). When the predicate is
+ # `var.is_a?(C)` / `kind_of?(C)`, push a narrow on `var` while
+ # walking the then-arm so a recursive call inside the arm sees
+ # the narrowed type and unify_call_types widens the callee's
+ # param accordingly. The else-arm walks unchanged — we don't
+ # currently model "type minus C" (see POLY-AS-SET.md).
     if @nd_type[nid] == "IfNode"
       pred = @nd_predicate[nid]
       if pred >= 0
@@ -9741,7 +9741,7 @@ class Compiler
       return
     end
     if @nd_type[nid] == "CallNode"
-      # Also infer top-level method param types from call sites
+ # Also infer top-level method param types from call sites
       mname = @nd_name[nid]
       if @nd_receiver[nid] < 0
         mi = find_method_idx(mname)
@@ -9755,7 +9755,7 @@ class Compiler
             if rest_param_idx >= ptypes.length
               rest_param_idx = -1
             end
-            # Handle keyword hash args
+ # Handle keyword hash args
             ak = 0
             while ak < arg_ids.length
               if @nd_type[arg_ids[ak]] == "KeywordHashNode"
@@ -9770,7 +9770,7 @@ class Compiler
                         kname = @nd_content[key_id]
                       end
                       at = infer_type(@nd_expression[elems[ek]])
-                      # Find matching param name
+ # Find matching param name
                       pi = 0
                       while pi < pnames.length
                         if pnames[pi] == kname
@@ -9785,11 +9785,11 @@ class Compiler
                   ek = ek + 1
                 end
               else
-                # SplatNode: treat the splat source's element type as
-                # contributing to *every* fixed param from `ak` up to the
-                # last non-rest one. So `foo(*strs)` correctly infers a
-                # str-typed first param even though the call site has
-                # only a single SplatNode arg.
+ # SplatNode: treat the splat source's element type as
+ # contributing to *every* fixed param from `ak` up to the
+ # last non-rest one. So `foo(*strs)` correctly infers a
+ # str-typed first param even though the call site has
+ # only a single SplatNode arg.
                 if @nd_type[arg_ids[ak]] == "SplatNode"
                   splat_src_for_inf = @nd_expression[arg_ids[ak]]
                   if splat_src_for_inf >= 0
@@ -9823,14 +9823,14 @@ class Compiler
             @meth_param_types[mi] = ptypes.join(",")
           end
         end
-        # Bare call inside a class method body that resolves to an
-        # inherited instance method. find_method_idx above only
-        # finds *top-level* methods; an `assert_not_nil(x)` inside
-        # `T2 < T`'s body needs to widen T's `assert_not_nil`
-        # ptypes from this call's args. Mirror the obj.method()
-        # walk in the recv >= 0 branch below — find_method_owner
-        # finds the ancestor that actually defines the method, then
-        # we update *that* class's @cls_meth_ptypes.
+ # Bare call inside a class method body that resolves to an
+ # inherited instance method. find_method_idx above only
+ # finds *top-level* methods; an `assert_not_nil(x)` inside
+ # `T2 < T`'s body needs to widen T's `assert_not_nil`
+ # ptypes from this call's args. Mirror the obj.method()
+ # walk in the recv >= 0 branch below — find_method_owner
+ # finds the ancestor that actually defines the method, then
+ # we update *that* class's @cls_meth_ptypes.
         if @current_class_idx >= 0
           cls_ci_286 = @current_class_idx
           cls_owner_286 = cls_ci_286
@@ -9863,48 +9863,48 @@ class Compiler
             end
           end
         end
-        # Issue #405: bare call inside a `def self.X` body resolves
-        # to a sibling cmeth on the same class/module. Widen the
-        # sibling's ptypes from this call site's args. Mirrors the
-        # explicit-`M.X(args)` widening branch below but keyed off
-        # @current_method_name's `<Class>_cls_<m>` marker (set by
-        # infer_function_body_call_types / infer_class_body_call_types
-        # before walking each cmeth body) since recv is absent here.
+ # bare call inside a `def self.X` body resolves
+ # to a sibling cmeth on the same class/module. Widen the
+ # sibling's ptypes from this call site's args. Mirrors the
+ # explicit-`M.X(args)` widening branch below but keyed off
+ # @current_method_name's `<Class>_cls_<m>` marker (set by
+ # infer_function_body_call_types / infer_class_body_call_types
+ # before walking each cmeth body) since recv is absent here.
         if @current_method_name != ""
-          marker_405 = @current_method_name.index("_cls_")
-          if marker_405 != nil && marker_405 >= 0
-            owning_405 = @current_method_name[0, marker_405]
-            cci_405 = find_class_idx(owning_405)
-            if cci_405 >= 0
-              cmnames_405 = @cls_cmeth_names[cci_405].split(";")
-              cmidx_405 = 0
-              while cmidx_405 < cmnames_405.length
-                if cmnames_405[cmidx_405] == mname
-                  args_id_405 = @nd_arguments[nid]
-                  if args_id_405 >= 0
-                    arg_ids_405 = get_args(args_id_405)
-                    cmpt_405 = cls_cmeth_ptypes_get(cci_405, cmidx_405)
-                    if cmpt_405.length > 0
-                      cmpn_405 = cls_cmeth_pnames_get(cci_405, cmidx_405)
-                      widen_ptypes_from_args(arg_ids_405, cmpn_405, cmpt_405)
-                      cls_cmeth_ptypes_put(cci_405, cmidx_405, cmpt_405)
+          marker = @current_method_name.index("_cls_")
+          if marker != nil && marker >= 0
+            owning = @current_method_name[0, marker]
+            cci = find_class_idx(owning)
+            if cci >= 0
+              cmnames = @cls_cmeth_names[cci].split(";")
+              cmidx = 0
+              while cmidx < cmnames.length
+                if cmnames[cmidx] == mname
+                  args_id = @nd_arguments[nid]
+                  if args_id >= 0
+                    arg_ids = get_args(args_id)
+                    cmpt = cls_cmeth_ptypes_get(cci, cmidx)
+                    if cmpt.length > 0
+                      cmpn = cls_cmeth_pnames_get(cci, cmidx)
+                      widen_ptypes_from_args(arg_ids, cmpn, cmpt)
+                      cls_cmeth_ptypes_put(cci, cmidx, cmpt)
                     end
                   end
                 end
-                cmidx_405 = cmidx_405 + 1
+                cmidx = cmidx + 1
               end
             end
-            if module_name_exists(owning_405) == 1
-              synth_405 = owning_405 + "_cls_" + mname
-              sib_mi_405m = find_method_idx(synth_405)
-              if sib_mi_405m >= 0
-                args_id_405m = @nd_arguments[nid]
-                if args_id_405m >= 0
-                  arg_ids_405m = get_args(args_id_405m)
-                  ptypes_405m = @meth_param_types[sib_mi_405m].split(",")
-                  pnames_405m = @meth_param_names[sib_mi_405m].split(",")
-                  widen_ptypes_from_args(arg_ids_405m, pnames_405m, ptypes_405m)
-                  @meth_param_types[sib_mi_405m] = ptypes_405m.join(",")
+            if module_name_exists(owning) == 1
+              synth = owning + "_cls_" + mname
+              sib_mi_m = find_method_idx(synth)
+              if sib_mi_m >= 0
+                args_id_m = @nd_arguments[nid]
+                if args_id_m >= 0
+                  arg_ids_m = get_args(args_id_m)
+                  ptypes_m = @meth_param_types[sib_mi_m].split(",")
+                  pnames_m = @meth_param_names[sib_mi_m].split(",")
+                  widen_ptypes_from_args(arg_ids_m, pnames_m, ptypes_m)
+                  @meth_param_types[sib_mi_m] = ptypes_m.join(",")
                 end
               end
             end
@@ -9938,18 +9938,18 @@ class Compiler
           end
         end
       end
-      # Also infer method param types from method/operator calls on objects
+ # Also infer method param types from method/operator calls on objects
       if @nd_receiver[nid] >= 0
         rt = infer_type(@nd_receiver[nid])
         if is_obj_type(rt) == 1
           cname = rt[4, rt.length - 4]
           ci = find_class_idx(cname)
           if ci >= 0
-            # Walk inheritance: when the method isn't on `ci` directly,
-            # find the parent that actually defines it and update
-            # *that* class's @cls_meth_ptypes so the body-side
-            # promotion (infer_param_array_type_from_body) sees the
-            # caller's arg types. Issue #84.
+ # Walk inheritance: when the method isn't on `ci` directly,
+ # find the parent that actually defines it and update
+ # *that* class's @cls_meth_ptypes so the body-side
+ # promotion (infer_param_array_type_from_body) sees the
+ # caller's arg types. .
             owner_ci = ci
             midx = cls_find_method_direct(ci, mname)
             if midx < 0
@@ -9965,14 +9965,14 @@ class Compiler
               args_id = @nd_arguments[nid]
               if args_id >= 0
                 arg_ids = get_args(args_id)
-                # Unify against the existing param type rather
-                # than only widening from "int". A first-non-int-
-                # wins rule would let one call site freeze the
-                # param type and a later disagreeing site (e.g.
-                # `addr` seen as Range from one and Integer from
-                # another) lands as a signature mismatch.
-                # unify_call_types collapses incompatibles to
-                # "poly".
+ # Unify against the existing param type rather
+ # than only widening from "int". A first-non-int-
+ # wins rule would let one call site freeze the
+ # param type and a later disagreeing site (e.g.
+ # `addr` seen as Range from one and Integer from
+ # another) lands as a signature mismatch.
+ # unify_call_types collapses incompatibles to
+ # "poly".
                 ptypes = cls_meth_ptypes_get(owner_ci, midx)
                 if ptypes.length > 0
                   pnames = cls_meth_pnames_get(owner_ci, midx)
@@ -9983,67 +9983,67 @@ class Compiler
             end
           end
         end
-        # Forward-ref dispatch: when the receiver is statically `int`
-        # (a yet-untyped ivar / param read whose true class hasn't
-        # propagated through the inference fixpoint yet) but `mname`
-        # belongs to exactly one user class — and isn't shared with a
-        # primitive type's method of the same name — the int→class
-        # fallback at the bottom of compile_no_recv_call_expr will
-        # dispatch the call to that class's C function. Widen the
-        # callee's param types from this site's args so the C
-        # signatures match the values the fallback passes. Without
-        # this, file orderings that put the caller (e.g. `rom.rb`'s
-        # `@ppu.set_chr_mem(@chr_ref, @chr_ram)`) before the callee
-        # (PPU) leave the callee's params at the default `mrb_int`,
-        # producing Wint-conversion / incompatible-pointer errors at
-        # the int→class call site. unify_call_types collapses to
-        # poly when later sites disagree.
-        #
-        # Gate on the receiver being an ivar / local read — those are
-        # the only shapes the fallback realistically widens through.
-        # Skipping CallNode / IntegerNode / etc. avoids accidentally
-        # treating `(self <=> other) > 0` (where the recv is the int
-        # result of `<=>` and `>` is genuinely an int operator) as a
-        # forward-ref to `Temperature#>`, which would unify the
-        # already-correct `obj_Temperature` param against the literal
-        # `0` arg and collapse it to poly.
+ # Forward-ref dispatch: when the receiver is statically `int`
+ # (a yet-untyped ivar / param read whose true class hasn't
+ # propagated through the inference fixpoint yet) but `mname`
+ # belongs to exactly one user class — and isn't shared with a
+ # primitive type's method of the same name — the int→class
+ # fallback at the bottom of compile_no_recv_call_expr will
+ # dispatch the call to that class's C function. Widen the
+ # callee's param types from this site's args so the C
+ # signatures match the values the fallback passes. Without
+ # this, file orderings that put the caller (e.g. `rom.rb`'s
+ # `@ppu.set_chr_mem(@chr_ref, @chr_ram)`) before the callee
+ # (PPU) leave the callee's params at the default `mrb_int`,
+ # producing Wint-conversion / incompatible-pointer errors at
+ # the int→class call site. unify_call_types collapses to
+ # poly when later sites disagree.
+ #
+ # Gate on the receiver being an ivar / local read — those are
+ # the only shapes the fallback realistically widens through.
+ # Skipping CallNode / IntegerNode / etc. avoids accidentally
+ # treating `(self <=> other) > 0` (where the recv is the int
+ # result of `<=>` and `>` is genuinely an int operator) as a
+ # forward-ref to `Temperature#>`, which would unify the
+ # already-correct `obj_Temperature` param against the literal
+ # `0` arg and collapse it to poly.
         recv_iow_fwd = @nd_receiver[nid]
         recv_is_ivar_or_local = recv_iow_fwd >= 0 && (@nd_type[recv_iow_fwd] == "InstanceVariableReadNode" || @nd_type[recv_iow_fwd] == "LocalVariableReadNode")
         if rt == "int" && recv_is_ivar_or_local && primitive_method_shared_with_user_class(mname) == 0
-          # Walk every user class that defines mname AND whose
-          # param count matches the call's arg count. Pre-fix
-          # this branch bailed on multi-match cases
-          # (matched_ci_fwd = -2), leaving every candidate's
-          # params at the int default and producing
-          # incompatible-pointer C errors when poly-typed
-          # iteration over heterogeneous receivers reaches
-          # them. Issue #407 case 2: `[IndexHandler.new,
-          # UsersHandler.new].each { |h| h.handle(req, res) }`
-          # -- both Index/UsersHandler#handle(req,res) get
-          # widened from "/" and "" args; sibling classes that
-          # happen to define `handle` with a different arity
-          # (SQLite's attr_accessor, 0-arg getter) are filtered
-          # out by the arity check.
-          args_id_fwd_407 = @nd_arguments[nid]
-          if args_id_fwd_407 >= 0
-            arg_ids_fwd_407 = get_args(args_id_fwd_407)
-            arg_count_fwd_407 = arg_ids_fwd_407.length
-            if arg_count_fwd_407 > 0
+ # Walk every user class that defines mname AND whose
+ # param count matches the call's arg count. Pre-fix
+ # this branch bailed on multi-match cases
+ # (matched_ci_fwd = -2), leaving every candidate's
+ # params at the int default and producing
+ # incompatible-pointer C errors when poly-typed
+ # iteration over heterogeneous receivers reaches
+ # them. case 2: `[IndexHandler.new,
+ # UsersHandler.new].each { |h| h.handle(req, res) }`
+ # -- both Index/UsersHandler#handle(req,res) get
+ # widened from "/" and "" args; sibling classes that
+ # happen to define `handle` with a different arity
+ # (SQLite's attr_accessor, 0-arg getter) are filtered
+ # out by the arity check.
+          args_id_fwd = @nd_arguments[nid]
+          if args_id_fwd >= 0
+            arg_ids_fwd = get_args(args_id_fwd)
+            arg_count_fwd = arg_ids_fwd.length
+            if arg_count_fwd > 0
               ci_fwd = 0
               while ci_fwd < @cls_names.length
-                midx_fwd_407c = cls_find_method_direct(ci_fwd, mname)
-                if midx_fwd_407c >= 0
-                  ptypes_fwd_407c = cls_meth_ptypes_get(ci_fwd, midx_fwd_407c)
-                  if ptypes_fwd_407c.length == arg_count_fwd_407
-                    kk_fwd_407c = 0
-                    while kk_fwd_407c < arg_count_fwd_407
-                      at_fwd_407c = infer_type(arg_ids_fwd_407[kk_fwd_407c])
-                      if kk_fwd_407c < ptypes_fwd_407c.length
-                        ptypes_fwd_407c[kk_fwd_407c] = unify_call_types(ptypes_fwd_407c[kk_fwd_407c], at_fwd_407c, arg_ids_fwd_407[kk_fwd_407c])
+                midx_fwd_c = cls_find_method_direct(ci_fwd, mname)
+                if midx_fwd_c >= 0
+                  ptypes_fwd_c = cls_meth_ptypes_get(ci_fwd, midx_fwd_c)
+                  if ptypes_fwd_c.length == arg_count_fwd
+                    kk_fwd_c = 0
+                    while kk_fwd_c < arg_count_fwd
+                      at_fwd_c = infer_type(arg_ids_fwd[kk_fwd_c])
+                      if kk_fwd_c < ptypes_fwd_c.length
+                        ptypes_fwd_c[kk_fwd_c] = unify_call_types(ptypes_fwd_c[kk_fwd_c], at_fwd_c, arg_ids_fwd[kk_fwd_c])
                       end
-                      kk_fwd_407c = kk_fwd_407c + 1
+                      kk_fwd_c = kk_fwd_c + 1
                     end
-                    cls_meth_ptypes_put(ci_fwd, midx_fwd_407c, ptypes_fwd_407c)
+                    cls_meth_ptypes_put(ci_fwd, midx_fwd_c, ptypes_fwd_c)
                   end
                 end
                 ci_fwd = ci_fwd + 1
@@ -10051,16 +10051,16 @@ class Compiler
             end
           end
         end
-        # Poly-receiver widening: when the receiver is poly (e.g. a
-        # method param widened to accept multiple user classes),
-        # the per-class arms emitted by compile_poly_method_call
-        # call each class's `<mname>` C function with the same arg
-        # expressions. Walk every user class that defines mname and
-        # unify its ptypes with the call site's arg types so the
-        # arm signatures match — otherwise a String key passed to a
-        # default-`int`-typed param produces a Wint-conversion or
-        # incompatible-pointer error. unify_call_types collapses to
-        # `poly` if another call site disagrees.
+ # Poly-receiver widening: when the receiver is poly (e.g. a
+ # method param widened to accept multiple user classes),
+ # the per-class arms emitted by compile_poly_method_call
+ # call each class's `<mname>` C function with the same arg
+ # expressions. Walk every user class that defines mname and
+ # unify its ptypes with the call site's arg types so the
+ # arm signatures match — otherwise a String key passed to a
+ # default-`int`-typed param produces a Wint-conversion or
+ # incompatible-pointer error. unify_call_types collapses to
+ # `poly` if another call site disagrees.
         if rt == "poly"
           args_id_p = @nd_arguments[nid]
           if args_id_p >= 0
@@ -10087,10 +10087,10 @@ class Compiler
           end
         end
       end
-      # `<Class>.cls_method(args)` — widen class method parameter
-      # types from call-site argument types. Same shape as the
-      # receiver-method unify above but operating on
-      # @cls_cmeth_ptypes for class-constant recvs.
+ # `<Class>.cls_method(args)` — widen class method parameter
+ # types from call-site argument types. Same shape as the
+ # receiver-method unify above but operating on
+ # @cls_cmeth_ptypes for class-constant recvs.
       if @nd_type[nid] == "CallNode" && @nd_receiver[nid] >= 0
         crecv = @nd_receiver[nid]
         if @nd_type[crecv] == "ConstantReadNode" || @nd_type[crecv] == "ConstantPathNode"
@@ -10117,15 +10117,15 @@ class Compiler
                 cmidx = cmidx + 1
               end
             end
-            # Module class methods (`module M; def self.greet(...);
-            # end; end`) live in the top-level `@meth_*` tables
-            # under the synthetic name `<Mod>_cls_<m>`, not in
-            # `@cls_cmeth_*` — `find_class_idx` returns -1 for
-            # module names so the widening branch above misses
-            # them. Parallel branch widens `@meth_param_types` for
-            # the prefixed name so a `M.greet("a")` call site
-            # teaches the synthetic function to accept the actual
-            # arg type instead of the default `mrb_int`.
+ # Module class methods (`module M; def self.greet(...);
+ # end; end`) live in the top-level `@meth_*` tables
+ # under the synthetic name `<Mod>_cls_<m>`, not in
+ # `@cls_cmeth_*` — `find_class_idx` returns -1 for
+ # module names so the widening branch above misses
+ # them. Parallel branch widens `@meth_param_types` for
+ # the prefixed name so a `M.greet("a")` call site
+ # teaches the synthetic function to accept the actual
+ # arg type instead of the default `mrb_int`.
             if module_name_exists(rcname) == 1
               mfn239 = rcname + "_cls_" + @nd_name[nid]
               mi239 = find_method_idx(mfn239)
@@ -10143,14 +10143,14 @@ class Compiler
           end
         end
       end
-      # Module-dispatch ternary call sites
-      # (`Disp.adapter.method(args)` where Disp.adapter resolves to
-      # N candidate classes via the module-singleton-accessor
-      # table). The dispatch ternary calls every candidate's class
-      # method, so all of them need the args' types unified into
-      # their per-class @cls_cmeth_ptypes entry — otherwise the
-      # ternary arms type-mismatch when the caller passes a poly
-      # value but the targets' params are still mrb_int.
+ # Module-dispatch ternary call sites
+ # (`Disp.adapter.method(args)` where Disp.adapter resolves to
+ # N candidate classes via the module-singleton-accessor
+ # table). The dispatch ternary calls every candidate's class
+ # method, so all of them need the args' types unified into
+ # their per-class @cls_cmeth_ptypes entry — otherwise the
+ # ternary arms type-mismatch when the caller passes a poly
+ # value but the targets' params are still mrb_int.
       if @nd_type[nid] == "CallNode" && @nd_receiver[nid] >= 0
         outer_recv_304 = @nd_receiver[nid]
         if @nd_type[outer_recv_304] == "CallNode"
@@ -10190,13 +10190,13 @@ class Compiler
                         cmidx_304 = cmidx_304 + 1
                       end
                     end
-                    # When the candidate is a module (not a class),
-                    # its `def self.method` is stored in `@meth_*`
-                    # as `<Mod>_cls_<m>` rather than in
-                    # `@cls_cmeth_*`. Mirrors the module-class-
-                    # method widening branch above so a
-                    # `Mod.accessor.method(args)` call site widens
-                    # the synthetic top-level function's params.
+ # When the candidate is a module (not a class),
+ # its `def self.method` is stored in `@meth_*`
+ # as `<Mod>_cls_<m>` rather than in
+ # `@cls_cmeth_*`. Mirrors the module-class-
+ # method widening branch above so a
+ # `Mod.accessor.method(args)` call site widens
+ # the synthetic top-level function's params.
                     if module_name_exists(cn_304) == 1
                       mfn_304m = cn_304 + "_cls_" + outer_mname_304
                       mi_304m = find_method_idx(mfn_304m)
@@ -10215,7 +10215,7 @@ class Compiler
         end
       end
     end
-    # Recurse into children
+ # Recurse into children
     if @nd_body[nid] >= 0
       scan_new_calls(@nd_body[nid])
     end
@@ -10270,10 +10270,10 @@ class Compiler
       scan_new_calls(conds[k])
       k = k + 1
     end
-    # InterpolatedStringNode and friends carry their components in @nd_parts.
-    # Without this, an EmbeddedStatementsNode inside `"#{...}"` is the only
-    # call site for a method whose param type would otherwise widen, and
-    # the param keeps its default `int` => C error at the call site.
+ # InterpolatedStringNode and friends carry their components in @nd_parts.
+ # Without this, an EmbeddedStatementsNode inside `"#{...}"` is the only
+ # call site for a method whose param type would otherwise widen, and
+ # the param keeps its default `int` => C error at the call site.
     parts = parse_id_list(@nd_parts[nid])
     k = 0
     while k < parts.length
@@ -10282,55 +10282,55 @@ class Compiler
     end
   end
 
-  # Bare `new(args)` inside a class method body widens the
-  # subclass's `initialize` ptypes from this call's args.
-  # scan_new_calls' generic `new` handler only fires when the
-  # receiver is an explicit class constant (`Article.new(attrs)`);
-  # the bare form has no receiver and would otherwise leave
-  # `sp_Article_new(mrb_int)` called with `sp_SymStrHash *`.
-  #
-  # By the time this runs, propagate_inherited_class_methods has
-  # already given each subclass its own copy of the inherited
-  # cls method, with @cls_cmeth_ptypes widened from explicit
-  # call sites. Walking each cls method body for bare `new(args)`
-  # and unifying the matching `find_init_class(ci).initialize`
-  # ptypes fills the gap. Args that read a cls-method local
-  # resolve via the cls method's pnames/ptypes; other args fall
-  # through to infer_type with @current_class_idx pinned so
-  # @ivar refs in the args resolve against the right class.
-  # Propagate ptypes from child#initialize to parent#initialize via
-  # super calls. Without this, a `Sub.new(owner_obj)` site widens
-  # `Sub#initialize`'s `_owner` param to `obj_<C>` correctly (via
-  # the existing constructor branch in scan_new_calls), but the
-  # body's bare `super` lowers to a C call against the parent's
-  # `Base#initialize`, whose param ptype stays at the default
-  # `mrb_int` because no call-site path widens the *parent's*
-  # initialize through super. The C output then casts the typed
-  # pointer to `mrb_int` at the super-call site, the parent's body's
-  # `@owner = owner` records the int into the slot, and every
-  # subsequent `@owner.<method>` dispatch on a child instance lands
-  # on whatever class shares the int recv's cls_id — commonly the
-  # wrong one.
-  #
-  # ForwardingSuperNode (bare `super`): forwards every param of the
-  # current method by name. Unify the parent ptypes element-wise
-  # against the child ptypes (capped at min length, so a wider
-  # parent signature stays unwidened past the forwarded prefix).
-  #
-  # SuperNode (`super(arg1, arg2, …)`): explicit arg list. Each arg
-  # might be a LocalVariableReadNode that points back at one of the
-  # current method's params; if so, use the param's ptype to unify
-  # at the super arg's position. Other shapes (literals, calls)
-  # fall through to infer_type.
+ # Bare `new(args)` inside a class method body widens the
+ # subclass's `initialize` ptypes from this call's args.
+ # scan_new_calls' generic `new` handler only fires when the
+ # receiver is an explicit class constant (`Article.new(attrs)`);
+ # the bare form has no receiver and would otherwise leave
+ # `sp_Article_new(mrb_int)` called with `sp_SymStrHash *`.
+ #
+ # By the time this runs, propagate_inherited_class_methods has
+ # already given each subclass its own copy of the inherited
+ # cls method, with @cls_cmeth_ptypes widened from explicit
+ # call sites. Walking each cls method body for bare `new(args)`
+ # and unifying the matching `find_init_class(ci).initialize`
+ # ptypes fills the gap. Args that read a cls-method local
+ # resolve via the cls method's pnames/ptypes; other args fall
+ # through to infer_type with @current_class_idx pinned so
+ # @ivar refs in the args resolve against the right class.
+ # Propagate ptypes from child#initialize to parent#initialize via
+ # super calls. Without this, a `Sub.new(owner_obj)` site widens
+ # `Sub#initialize`'s `_owner` param to `obj_<C>` correctly (via
+ # the existing constructor branch in scan_new_calls), but the
+ # body's bare `super` lowers to a C call against the parent's
+ # `Base#initialize`, whose param ptype stays at the default
+ # `mrb_int` because no call-site path widens the *parent's*
+ # initialize through super. The C output then casts the typed
+ # pointer to `mrb_int` at the super-call site, the parent's body's
+ # `@owner = owner` records the int into the slot, and every
+ # subsequent `@owner.<method>` dispatch on a child instance lands
+ # on whatever class shares the int recv's cls_id — commonly the
+ # wrong one.
+ #
+ # ForwardingSuperNode (bare `super`): forwards every param of the
+ # current method by name. Unify the parent ptypes element-wise
+ # against the child ptypes (capped at min length, so a wider
+ # parent signature stays unwidened past the forwarded prefix).
+ #
+ # SuperNode (`super(arg1, arg2, …)`): explicit arg list. Each arg
+ # might be a LocalVariableReadNode that points back at one of the
+ # current method's params; if so, use the param's ptype to unify
+ # at the super arg's position. Other shapes (literals, calls)
+ # fall through to infer_type.
   def propagate_super_init_to_parent
     ci = 0
     while ci < @cls_names.length
       if @cls_parents[ci] != ""
         parent_ci = find_class_idx(@cls_parents[ci])
-        # The parent chain may insert classes without their own
-        # #initialize (e.g. an empty marker subclass between the
-        # super caller and its semantic parent). Walk up until we
-        # find one that does.
+ # The parent chain may insert classes without their own
+ # #initialize (e.g. an empty marker subclass between the
+ # super caller and its semantic parent). Walk up until we
+ # find one that does.
         walk_ci = parent_ci
         parent_init_ci = -1
         while walk_ci >= 0
@@ -10388,8 +10388,8 @@ class Compiler
       return
     end
     if nt == "ForwardingSuperNode"
-      # Bare `super`: forward every child param into the parent's slot
-      # at the same position, capped at min length.
+ # Bare `super`: forward every child param into the parent's slot
+ # at the same position, capped at min length.
       kk = 0
       lim = child_ptypes.length
       if parent_ptypes.length < lim
@@ -10511,9 +10511,9 @@ class Compiler
         end
       end
     end
-    # Mirror scan_new_calls' recursion shape so a `new(...)` at any
-    # depth in the body is reachable: stmts, body, conditionals,
-    # call args, expressions, etc.
+ # Mirror scan_new_calls' recursion shape so a `new(...)` at any
+ # depth in the body is reachable: stmts, body, conditionals,
+ # call args, expressions, etc.
     if @nd_body[nid] >= 0
       walk_bare_new_in_cmeth_body(@nd_body[nid], cls_ci, cm_pnames, cm_ptypes)
     end
@@ -10565,7 +10565,7 @@ class Compiler
   end
 
   def update_ivar_types_from_params
-    # Special case: synthetic struct constructors - ivars match params directly
+ # Special case: synthetic struct constructors - ivars match params directly
     i = 0
     while i < @cls_names.length
       init_idx2 = cls_find_method_direct(i, "initialize")
@@ -10573,7 +10573,7 @@ class Compiler
         bodies = @cls_meth_bodies[i].split(";")
         if init_idx2 < bodies.length
           if bodies[init_idx2].to_i == -2
-            # Synthetic struct - update ivar types from init param types
+ # Synthetic struct - update ivar types from init param types
             pnames = cls_meth_pnames_get(i, init_idx2)
             ptypes = cls_meth_ptypes_get(i, init_idx2)
             pk = 0
@@ -10591,7 +10591,7 @@ class Compiler
       end
       i = i + 1
     end
-    # For each class method, if it assigns @ivar = param, update ivar type from param type
+ # For each class method, if it assigns @ivar = param, update ivar type from param type
     i = 0
     while i < @cls_names.length
       mnames = @cls_meth_names[i].split(";")
@@ -10613,12 +10613,12 @@ class Compiler
               if expr >= 0
                 if @nd_type[expr] == "LocalVariableReadNode"
                   pname = @nd_name[expr]
-                  # Find param index
+ # Find param index
                   pi = 0
                   while pi < pnames.length
                     if pnames[pi] == pname
                       if pi < ptypes.length
-                        # Update ivar type
+ # Update ivar type
                         iname = @nd_name[sid]
                         ivar_names = @cls_ivar_names[i].split(";")
                         ivar_types = @cls_ivar_types[i].split(";")
@@ -10651,9 +10651,9 @@ class Compiler
   end
 
   def infer_cls_meth_param_from_body
-    # For each class method, if a param is used as param.attr_reader where attr_reader
-    # belongs to ANY class, infer param type as that class.
-    # Check all classes' methods (not just the class owning the readers).
+ # For each class method, if a param is used as param.attr_reader where attr_reader
+ # belongs to ANY class, infer param type as that class.
+ # Check all classes' methods (not just the class owning the readers).
     oci = 0
     while oci < @cls_names.length
       mnames = @cls_meth_names[oci].split(";")
@@ -10672,12 +10672,12 @@ class Compiler
             while pk < pnames.length
               if pk < ptypes.length
                 if ptypes[pk] == "int"
-                  # Pick the class whose surface (readers + writers +
-                  # methods, walked through parents) contains every
-                  # method actually called on this param. Matching
-                  # only one reader and ignoring later accesses
-                  # would pick a class that fails to satisfy the
-                  # full method set.
+ # Pick the class whose surface (readers + writers +
+ # methods, walked through parents) contains every
+ # method actually called on this param. Matching
+ # only one reader and ignoring later accesses
+ # would pick a class that fails to satisfy the
+ # full method set.
                   called = "".split(",")
                   collect_param_methods(bid, pnames[pk], called)
                   if called.length > 0 && called_methods_only_on_container_builtins(called) == 0
@@ -10704,8 +10704,8 @@ class Compiler
       end
       oci = oci + 1
     end
-    # Also infer top-level method param types from body usage. Same
-    # all-methods-must-match rule as the cls_meth_param branch above.
+ # Also infer top-level method param types from body usage. Same
+ # all-methods-must-match rule as the cls_meth_param branch above.
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -10741,25 +10741,25 @@ class Compiler
     end
   end
 
-  # Widen each method's stored parameter types to encompass any
-  # in-body reassignments to the parameter name. Without this,
-  # a body shape like
-  #
-  #   def f(hclk, ...)
-  #     hclk = "forever" if hclk == FOREVER_CLOCK
-  #     ...
-  #   end
-  #
-  # leaves `hclk`'s slot at the call-site-inferred `int`, and the
-  # `lv_hclk = (const char *)…` C statement fails -Wint-conversion.
-  # Widening to "poly" lets the slot hold both shapes via sp_RbVal.
-  #
-  # `int` is treated as a default/fallback (matches unify_call_types):
-  # int + concrete-non-int → concrete. Only genuinely incompatible
-  # writes (e.g. ptype already concrete and a different concrete
-  # write) escalate to poly.
+ # Widen each method's stored parameter types to encompass any
+ # in-body reassignments to the parameter name. Without this,
+ # a body shape like
+ #
+ # def f(hclk, ...)
+ # hclk = "forever" if hclk == FOREVER_CLOCK
+ # ...
+ # end
+ #
+ # leaves `hclk`'s slot at the call-site-inferred `int`, and the
+ # `lv_hclk = (const char *)…` C statement fails -Wint-conversion.
+ # Widening to "poly" lets the slot hold both shapes via sp_RbVal.
+ #
+ # `int` is treated as a default/fallback (matches unify_call_types):
+ # int + concrete-non-int → concrete. Only genuinely incompatible
+ # writes (e.g. ptype already concrete and a different concrete
+ # write) escalate to poly.
   def widen_param_types_from_body_writes
-    # Top-level methods.
+ # Top-level methods.
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -10785,7 +10785,7 @@ class Compiler
       mi = mi + 1
     end
 
-    # Per-class instance and class methods.
+ # Per-class instance and class methods.
     ci = 0
     while ci < @cls_names.length
       mnames = @cls_meth_names[ci].split(";")
@@ -10828,13 +10828,13 @@ class Compiler
     end
   end
 
-  # Walk under `nid` looking for `LocalVariableWriteNode`s targeting
-  # `pname` and unify the literal-typed RHS with `cur_t`. Method-call
-  # RHSes are skipped: this pass runs before return-type inference,
-  # so `infer_type(<call>)` for an unanalyzed method falls through to
-  # the `int` default and would falsely widen a string param to poly.
-  # Literal RHSes (StringNode, IntegerNode, FloatNode, SymbolNode,
-  # NilNode, true/false) are reliable enough to widen on.
+ # Walk under `nid` looking for `LocalVariableWriteNode`s targeting
+ # `pname` and unify the literal-typed RHS with `cur_t`. Method-call
+ # RHSes are skipped: this pass runs before return-type inference,
+ # so `infer_type(<call>)` for an unanalyzed method falls through to
+ # the `int` default and would falsely widen a string param to poly.
+ # Literal RHSes (StringNode, IntegerNode, FloatNode, SymbolNode,
+ # NilNode, true/false) are reliable enough to widen on.
   def scan_param_body_write_unify(nid, pname, cur_t)
     if nid < 0
       return cur_t
@@ -10866,8 +10866,8 @@ class Compiler
         ti = ti + 1
       }
     end
-    # Recurse into all child fields. Mirrors collect_param_methods'
-    # walk shape so we don't miss conditional/loop branches.
+ # Recurse into all child fields. Mirrors collect_param_methods'
+ # walk shape so we don't miss conditional/loop branches.
     if @nd_body[nid] >= 0
       cur_t = scan_param_body_write_unify(@nd_body[nid], pname, cur_t)
     end
@@ -10931,11 +10931,11 @@ class Compiler
     cur_t
   end
 
-  # `nid` is a literal whose type is reliable even before
-  # return-type inference has run. Limits the body-write widening
-  # to writes whose RHS is unambiguous, avoiding false widenings
-  # driven by `infer_type` of unanalyzed method calls (which falls
-  # through to the `int` default).
+ # `nid` is a literal whose type is reliable even before
+ # return-type inference has run. Limits the body-write widening
+ # to writes whose RHS is unambiguous, avoiding false widenings
+ # driven by `infer_type` of unanalyzed method calls (which falls
+ # through to the `int` default).
   def is_reliable_literal_for_widen(nid)
     if nid < 0
       return 0
@@ -10947,40 +10947,40 @@ class Compiler
     0
   end
 
-  # Body-write unification rule. Distinct from `unify_call_types`
-  # because the call-site rule treats `int` as a placeholder that
-  # gets overwritten by any concrete `at` — that produces
-  # `int + string → string`, which is fine for call-site widening
-  # (`int` was a default) but wrong for body-write widening (the
-  # call site really did pass int, so the slot must hold both shapes).
+ # Body-write unification rule. Distinct from `unify_call_types`
+ # because the call-site rule treats `int` as a placeholder that
+ # gets overwritten by any concrete `at` — that produces
+ # `int + string → string`, which is fine for call-site widening
+ # (`int` was a default) but wrong for body-write widening (the
+ # call site really did pass int, so the slot must hold both shapes).
   def unify_param_for_body_write(pt_a, pt_b)
     if pt_a == pt_b
       return pt_a
     end
-    # `nil` writes don't widen; `if x.nil?` body-side `x = sentinel`
-    # is a common shape that mustn't push the slot to poly.
+ # `nil` writes don't widen; `if x.nil?` body-side `x = sentinel`
+ # is a common shape that mustn't push the slot to poly.
     if pt_a == "nil"
       return pt_b
     end
     if pt_b == "nil"
       return pt_a
     end
-    # int + float coerce to float (numeric-compatible).
+ # int + float coerce to float (numeric-compatible).
     if pt_a == "int" && pt_b == "float"
       return "float"
     end
     if pt_a == "float" && pt_b == "int"
       return "float"
     end
-    # Genuinely incompatible: must hold both at runtime.
+ # Genuinely incompatible: must hold both at runtime.
     @needs_rb_value = 1
     return "poly"
   end
 
-  # Collect every method name called on `pname` anywhere under nid.
-  # Used by parameter type inference to find the class that satisfies
-  # ALL accesses, avoiding a single-reader match that ignores later
-  # method calls on the same parameter.
+ # Collect every method name called on `pname` anywhere under nid.
+ # Used by parameter type inference to find the class that satisfies
+ # ALL accesses, avoiding a single-reader match that ignores later
+ # method calls on the same parameter.
   def collect_param_methods(nid, pname, acc)
     if nid < 0
       return
@@ -11028,13 +11028,13 @@ class Compiler
     if @nd_receiver[nid] >= 0
       collect_param_methods(@nd_receiver[nid], pname, acc)
     end
-    # Walk into IfNode's predicate / else-branch and CaseNode's
-    # predicate / when-conditions. Without these arms, `def update(p);
-    # if p.title.nil?; ...; else self.title = p.title; end; end`
-    # has `p.title` only inside the predicate + else — collect
-    # would return [] and body-side type inference would leave `p`
-    # at "int" while the int-class fallback silently picked an
-    # arbitrary user class.
+ # Walk into IfNode's predicate / else-branch and CaseNode's
+ # predicate / when-conditions. Without these arms, `def update(p);
+ # if p.title.nil?; ...; else self.title = p.title; end; end`
+ # has `p.title` only inside the predicate + else — collect
+ # would return [] and body-side type inference would leave `p`
+ # at "int" while the int-class fallback silently picked an
+ # arbitrary user class.
     if @nd_predicate[nid] >= 0
       collect_param_methods(@nd_predicate[nid], pname, acc)
     end
@@ -11070,11 +11070,11 @@ class Compiler
     end
   end
 
-  # Collect every element type seen in `pname.push(elem)` or
-  # `pname << elem` patterns under nid. The deferred-element-type
-  # promotion pass uses this to decide what concrete typed-array a
-  # parameter should be promoted to when callers all passed empty
-  # `[]` literals.
+ # Collect every element type seen in `pname.push(elem)` or
+ # `pname << elem` patterns under nid. The deferred-element-type
+ # promotion pass uses this to decide what concrete typed-array a
+ # parameter should be promoted to when callers all passed empty
+ # `[]` literals.
   def collect_param_push_elem_types(nid, pname, acc)
     if nid < 0
       return
@@ -11142,25 +11142,25 @@ class Compiler
     end
   end
 
-  # Promote each top-level method parameter from int_array to a
-  # concrete typed-array (str_array, float_array, sym_array) when
-  # (a) every caller passed an empty `[]` literal (guarded by
-  # @meth_param_empty[mi][k] == "1") and (b) the body's pushes on
-  # that parameter all agree on a single concrete element type.
-  # Both gates are required: a real-int_array caller without (a)
-  # would be silently miscompiled, and a mixed-element body
-  # without (b) should surface as a type error rather than pick
-  # one arbitrarily.
+ # Promote each top-level method parameter from int_array to a
+ # concrete typed-array (str_array, float_array, sym_array) when
+ # (a) every caller passed an empty `[]` literal (guarded by
+ # @meth_param_empty[mi][k] == "1") and (b) the body's pushes on
+ # that parameter all agree on a single concrete element type.
+ # Both gates are required: a real-int_array caller without (a)
+ # would be silently miscompiled, and a mixed-element body
+ # without (b) should surface as a type error rather than pick
+ # one arbitrarily.
   def infer_param_array_type_from_body
     iter = 0
     changed = 1
     while changed == 1 && iter < 4
       changed = 0
       iter = iter + 1
-      # Top-level methods. Set up the method's scope so that
-      # collect_param_push_elem_types' infer_type calls can resolve
-      # other parameters (e.g. `buf.push(name)` where `name` is a
-      # string-typed parameter on the same method).
+ # Top-level methods. Set up the method's scope so that
+ # collect_param_push_elem_types' infer_type calls can resolve
+ # other parameters (e.g. `buf.push(name)` where `name` is a
+ # string-typed parameter on the same method).
       mi = 0
       while mi < @meth_names.length
         bid = @meth_body_ids[mi]
@@ -11220,8 +11220,8 @@ class Compiler
         end
         mi = mi + 1
       end
-      # Class methods (instance methods on user classes). Same
-      # scope-setup so `buf.push(name)` resolves the param type.
+ # Class methods (instance methods on user classes). Same
+ # scope-setup so `buf.push(name)` resolves the param type.
       ci = 0
       while ci < @cls_names.length
         @current_class_idx = ci
@@ -11305,28 +11305,28 @@ class Compiler
     end
   end
 
-  # Body-side param narrowing (Stage 1 of the callee→caller direction
-  # of type inference, complementing scan_new_calls' caller→callee
-  # widening). For each method's params still typed at the default
-  # `int`, walk the body for `param.<m>` calls. If <m> is defined
-  # on exactly one user class (and isn't a common operator / built-
-  # in-overlap method), the param's static type narrows to that
-  # class. Conflicting strong signals leave the param at int.
-  #
-  # The narrow direction (int → obj_<C>) only fires when the caller-
-  # side widening hasn't already pinned the param to a non-int type,
-  # so it never overrides observation from a real call site. If a
-  # later iteration's caller-side scan finds an actual int arg flowing
-  # into this slot, unify_call_types will widen back to poly — net
-  # effect no worse than skipping the narrow.
-  #
-  # Excluded method names cover operators (which user classes
-  # routinely overload but built-in primitives also implement) and
-  # the common Object/Enumerable surface (`length`, `each`, `to_s`,
-  # ...) — when these match a user class they don't actually
-  # discriminate from a built-in.
+ # Body-side param narrowing (Stage 1 of the callee→caller direction
+ # of type inference, complementing scan_new_calls' caller→callee
+ # widening). For each method's params still typed at the default
+ # `int`, walk the body for `param.<m>` calls. If <m> is defined
+ # on exactly one user class (and isn't a common operator / built-
+ # in-overlap method), the param's static type narrows to that
+ # class. Conflicting strong signals leave the param at int.
+ #
+ # The narrow direction (int → obj_<C>) only fires when the caller-
+ # side widening hasn't already pinned the param to a non-int type,
+ # so it never overrides observation from a real call site. If a
+ # later iteration's caller-side scan finds an actual int arg flowing
+ # into this slot, unify_call_types will widen back to poly — net
+ # effect no worse than skipping the narrow.
+ #
+ # Excluded method names cover operators (which user classes
+ # routinely overload but built-in primitives also implement) and
+ # the common Object/Enumerable surface (`length`, `each`, `to_s`,
+ # ...) — when these match a user class they don't actually
+ # discriminate from a built-in.
   def narrow_param_types_from_body_method_calls
-    # Top-level methods.
+ # Top-level methods.
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -11353,7 +11353,7 @@ class Compiler
       end
       mi = mi + 1
     end
-    # Class instance methods.
+ # Class instance methods.
     ci = 0
     while ci < @cls_names.length
       all_params = @cls_meth_params[ci].split("|")
@@ -11401,10 +11401,10 @@ class Compiler
     end
   end
 
-  # Walk `nid` for CallNode whose receiver is a LocalVariableReadNode
-  # naming one of the params. Each such site contributes one entry
-  # `<pname>\t<mname>` to `observations`. Stops at nested DefNode
-  # (those introduce their own scope with different params).
+ # Walk `nid` for CallNode whose receiver is a LocalVariableReadNode
+ # naming one of the params. Each such site contributes one entry
+ # `<pname>\t<mname>` to `observations`. Stops at nested DefNode
+ # (those introduce their own scope with different params).
   def collect_param_method_calls(nid, pnames, observations)
     if nid < 0
       return
@@ -11431,11 +11431,11 @@ class Compiler
     end
   end
 
-  # For all `<pname>\t<mname>` observations, find the unique user
-  # class that defines `<mname>`. If every strong observation
-  # (single-class match, not on the deny list) points to the same
-  # class, return its index. Conflicting classes or no signal at
-  # all return -1.
+ # For all `<pname>\t<mname>` observations, find the unique user
+ # class that defines `<mname>`. If every strong observation
+ # (single-class match, not on the deny list) points to the same
+ # class, return its index. Conflicting classes or no signal at
+ # all return -1.
   def unify_param_class_from_observations(pname, observations)
     unique_class = -1
     has_signal = 0
@@ -11476,13 +11476,13 @@ class Compiler
     -1
   end
 
-  # Methods whose name doesn't reliably discriminate a user class
-  # from a built-in receiver. Reuses `is_primitive_shared_method`
-  # (the same list #302/#305 use to gate compile_int_class_fallback
-  # _expr) so the body-side narrow stays consistent with the emit-
-  # time int-recv fallback's safety net. Plus a small deny list of
-  # numeric / boolean operators that the primitive-shared list
-  # doesn't currently cover.
+ # Methods whose name doesn't reliably discriminate a user class
+ # from a built-in receiver. Reuses `is_primitive_shared_method`
+ # (the same list used to gate compile_int_class_fallback_expr)
+ # so the body-side narrow stays consistent with the emit-time
+ # int-recv fallback's safety net. Plus a small deny list of
+ # numeric / boolean operators that the primitive-shared list
+ # doesn't currently cover.
   def is_common_method_name(mname)
     if is_primitive_shared_method(mname) == 1
       return 1
@@ -11502,9 +11502,9 @@ class Compiler
     0
   end
 
-  # Helper: given the set of element types observed in pname.push(...)
-  # patterns, return the typed-array tag to promote to, or "" if the
-  # observations don't agree on a single concrete type.
+ # Helper: given the set of element types observed in pname.push(...)
+ # patterns, return the typed-array tag to promote to, or "" if the
+ # observations don't agree on a single concrete type.
   def empty_array_promotion_for(elem_acc)
     if elem_acc.length != 1
       return ""
@@ -11523,20 +11523,20 @@ class Compiler
       return "poly_array"
     end
     if is_obj_type(elem_acc[0]) == 1
-      # Homogeneous obj array — use a typed `<obj>_ptr_array` so reads
-      # return a typed pointer (no sp_RbVal unbox needed at the call
-      # site). Falls back to poly_array via normal widening when a
-      # later mismatched-type write happens.
+ # Homogeneous obj array — use a typed `<obj>_ptr_array` so reads
+ # return a typed pointer (no sp_RbVal unbox needed at the call
+ # site). Falls back to poly_array via normal widening when a
+ # later mismatched-type write happens.
       return base_type(elem_acc[0]) + "_ptr_array"
     end
     ""
   end
 
-  # Pick the concrete hash type for an ivar that was initialized as
-  # the empty-hash default (`str_int_hash`) and is later written via
-  # `@h[k] = v`. Returns "" when the (key, value) pair has no
-  # matching concrete container — the caller leaves the ivar type
-  # alone in that case.
+ # Pick the concrete hash type for an ivar that was initialized as
+ # the empty-hash default (`str_int_hash`) and is later written via
+ # `@h[k] = v`. Returns "" when the (key, value) pair has no
+ # matching concrete container — the caller leaves the ivar type
+ # alone in that case.
   def promote_empty_hash_for(kt, vt)
     if kt == "string"
       if vt == "string"
@@ -11561,23 +11561,23 @@ class Compiler
         return "int_str_hash"
       end
     end
-    # Non-string / non-symbol / non-int key types: Method, IntArray,
-    # generic obj_X, or already-poly. Use poly_poly_hash so the runtime
-    # uses sp_RbVal-keyed eql? dispatch (Method instances dedup via the
-    # codegen-emitted hash hook, identity for everything else).
+ # Non-string / non-symbol / non-int key types: Method, IntArray,
+ # generic obj_X, or already-poly. Use poly_poly_hash so the runtime
+ # uses sp_RbVal-keyed eql? dispatch (Method instances dedup via the
+ # codegen-emitted hash hook, identity for everything else).
     if kt != ""
       return "poly_poly_hash"
     end
     ""
   end
 
-  # Block-param-aware lookup used by scan_locals's empty-hash
-  # promotion. When `nid` reads a local variable that scan_locals
-  # itself has just collected (e.g. a block param like `|k, v|`),
-  # prefer the type recorded in `types[]` over `infer_type` —
-  # the block param hasn't been `declare_var`'d in scope yet, so
-  # a bare infer_type would fall back to "int" and break the
-  # promotion of the surrounding `out[k] = v` write.
+ # Block-param-aware lookup used by scan_locals's empty-hash
+ # promotion. When `nid` reads a local variable that scan_locals
+ # itself has just collected (e.g. a block param like `|k, v|`),
+ # prefer the type recorded in `types[]` over `infer_type` —
+ # the block param hasn't been `declare_var`'d in scope yet, so
+ # a bare infer_type would fall back to "int" and break the
+ # promotion of the surrounding `out[k] = v` write.
   def scan_locals_arg_type(nid, names, types, params)
     if nid >= 0 && @nd_type[nid] == "LocalVariableReadNode"
       lname = @nd_name[nid]
@@ -11594,10 +11594,10 @@ class Compiler
     infer_type(nid)
   end
 
-  # Does class `ci` provide `mname` as a reader, writer, or method?
-  # Walks parent classes for inherited members.
-  # Does class `ci` define `mname` directly — instance method, attr
-  # reader, or attr writer — without walking the parent chain?
+ # Does class `ci` provide `mname` as a reader, writer, or method?
+ # Walks parent classes for inherited members.
+ # Does class `ci` define `mname` directly — instance method, attr
+ # reader, or attr writer — without walking the parent chain?
   def class_has_method_local(ci, mname)
     readers = @cls_attr_readers[ci].split(";")
     if not_in(mname, readers) == 0
@@ -11641,28 +11641,28 @@ class Compiler
     return 1
   end
 
-  # When picking a user class for a parameter from "what methods
-  # does the body call on it", reject sets that consist only of
-  # methods also available on built-in container types
-  # (int_array / float_array / str_array / sym_array / ptr_array).
-  # A user class that happens to define `def length` (and nothing
-  # else) would otherwise get picked for any param the body calls
-  # `.length` on — even when the actual call site passes an
-  # IntArray. The body signal is too weak to commit; leave the
-  # param at "int" so call-site unification (scan_new_calls)
-  # decides.
-  #
-  # Specifically: is `mname` a method that's also defined on a
-  # primitive type (String / Array / Hash / Integer) AND on at
-  # least one user class? When both are true, an int-typed
-  # receiver shouldn't pick the user class on the auto-cast
-  # fallback path — that's almost certainly the wrong dispatch
-  # (a param that flowed in as mrb_int because no upstream call
-  # site pinned it, with the user's actual intent being the
-  # primitive method).
+ # When picking a user class for a parameter from "what methods
+ # does the body call on it", reject sets that consist only of
+ # methods also available on built-in container types
+ # (int_array / float_array / str_array / sym_array / ptr_array).
+ # A user class that happens to define `def length` (and nothing
+ # else) would otherwise get picked for any param the body calls
+ # `.length` on — even when the actual call site passes an
+ # IntArray. The body signal is too weak to commit; leave the
+ # param at "int" so call-site unification (scan_new_calls)
+ # decides.
+ #
+ # Specifically: is `mname` a method that's also defined on a
+ # primitive type (String / Array / Hash / Integer) AND on at
+ # least one user class? When both are true, an int-typed
+ # receiver shouldn't pick the user class on the auto-cast
+ # fallback path — that's almost certainly the wrong dispatch
+ # (a param that flowed in as mrb_int because no upstream call
+ # site pinned it, with the user's actual intent being the
+ # primitive method).
   def primitive_method_shared_with_user_class(mname)
     return 0 unless is_primitive_shared_method(mname) == 1
-    # Cheap guard: the user must define a class with this method.
+ # Cheap guard: the user must define a class with this method.
     ci2 = 0
     while ci2 < @cls_names.length
       mns = @cls_meth_names[ci2].split(";")
@@ -11678,11 +11678,11 @@ class Compiler
     0
   end
 
-  # Whitelist of methods defined on built-in primitive types that
-  # commonly collide with user-class method names. Mirrors (and
-  # delegates the surface to) the predicate
-  # `called_methods_only_on_container_builtins` introduced for
-  # issue #302 — same intent, applied at a different decision site.
+ # Whitelist of methods defined on built-in primitive types that
+ # commonly collide with user-class method names. Mirrors (and
+ # delegates the surface to) the predicate
+ # `called_methods_only_on_container_builtins` introduced for
+ # — same intent, applied at a different decision site.
   def is_primitive_shared_method(m)
     if m == "length" || m == "size" || m == "[]" || m == "[]=" ||
        m == "<<" || m == "push" || m == "pop" ||
@@ -11703,8 +11703,8 @@ class Compiler
        m == "hash" || m == "class" || m == "tap" ||
        m == "==" || m == "!=" || m == "eql?" || m == "equal?" ||
        m == "nil?" || m == "is_a?" || m == "kind_of?" || m == "respond_to?" ||
-       # String / Hash / Integer-shared (kept in sync with the
-       # extension to called_methods_only_on_container_builtins).
+ # String / Hash / Integer-shared (kept in sync with the
+ # extension to called_methods_only_on_container_builtins).
        m == "index" || m == "rindex" || m == "match" || m == "match?" ||
        m == "scan" || m == "sub" || m == "gsub" || m == "tr" ||
        m == "split" || m == "chars" || m == "bytes" || m == "lines" ||
@@ -11746,26 +11746,26 @@ class Compiler
          m != "sum" && m != "min" && m != "max" && m != "minmax" &&
          m != "concat" && m != "flatten" && m != "uniq" && m != "compact" &&
          m != "slice" && m != "fetch" && m != "dig" &&
-         # Universal Object methods
+ # Universal Object methods
          m != "freeze" && m != "frozen?" && m != "dup" && m != "clone" &&
          m != "hash" && m != "class" && m != "tap" &&
          m != "==" && m != "!=" && m != "eql?" && m != "equal?" &&
          m != "nil?" && m != "is_a?" && m != "kind_of?" && m != "respond_to?" &&
-         # Generic operators that exist on builtin numeric/container types
-         # too — `+` is concat on Array/String, arithmetic on Numeric;
-         # a param using just `+` is no more "user-classy" than `length`.
+ # Generic operators that exist on builtin numeric/container types
+ # too — `+` is concat on Array/String, arithmetic on Numeric;
+ # a param using just `+` is no more "user-classy" than `length`.
          m != "+" && m != "-" && m != "*" && m != "/" && m != "%" &&
          m != "&" && m != "|" && m != "^" && m != "~" &&
          m != "<" && m != ">" && m != "<=" && m != ">=" && m != "<=>" &&
          m != "===" && m != "!" &&
-         # Methods shared across String / Hash / Integer primitive
-         # types that the body-side inference must NOT use as
-         # evidence of a user-class receiver. The Rails pattern of
-         # `def index` / `def show` / `def create` on every
-         # controller collides with `String#index` etc.; the
-         # canonical caller `s.index("[")` on a string would
-         # otherwise be routed to whichever user-class `index` the
-         # inference picked first.
+ # Methods shared across String / Hash / Integer primitive
+ # types that the body-side inference must NOT use as
+ # evidence of a user-class receiver. The Rails pattern of
+ # `def index` / `def show` / `def create` on every
+ # controller collides with `String#index` etc.; the
+ # canonical caller `s.index("[")` on a string would
+ # otherwise be routed to whichever user-class `index` the
+ # inference picked first.
          m != "index" && m != "rindex" && m != "match" && m != "match?" &&
          m != "scan" && m != "sub" && m != "gsub" && m != "tr" &&
          m != "split" && m != "chars" && m != "bytes" && m != "lines" &&
@@ -11775,12 +11775,12 @@ class Compiler
          m != "to_i" && m != "to_f" && m != "to_sym" && m != "to_str" &&
          m != "chr" && m != "ord" && m != "bytesize" && m != "=~" &&
          m != "ljust" && m != "rjust" && m != "center" && m != "replace" && m != "clear" &&
-         # Hash-shared
+ # Hash-shared
          m != "keys" && m != "values" && m != "each_pair" && m != "each_key" && m != "each_value" &&
          m != "has_key?" && m != "has_value?" && m != "key?" && m != "value?" &&
          m != "merge" && m != "merge!" && m != "invert" &&
          m != "transform_keys" && m != "transform_values" && m != "delete" &&
-         # Integer-shared (`succ` is also Range/String etc.)
+ # Integer-shared (`succ` is also Range/String etc.)
          m != "succ" && m != "next" && m != "pred" && m != "digits" && m != "bit_length" &&
          m != "times" && m != "upto" && m != "downto" && m != "step" &&
          m != "abs" && m != "divmod" && m != "gcd" && m != "lcm" &&
@@ -11793,7 +11793,7 @@ class Compiler
   end
 
   def infer_ivar_types_from_writers
-    # Set up main scope for type inference
+ # Set up main scope for type inference
     push_scope
     stmts = get_body_stmts(@root_id)
     lnames = "".split(",")
@@ -11815,16 +11815,16 @@ class Compiler
       declare_var(lnames[k], ltypes[k])
       k = k + 1
     end
-    # Also scan inside method bodies
+ # Also scan inside method bodies
     i = 0
     while i < @meth_names.length
       push_scope
-      # Pin @current_method_name so current_lexical_scope_name can pull
-      # the module prefix out of `<Mod>_cls_<m>` style names. Without
-      # this, a `Foo.new` inside e.g. `Optcarrot::Driver.load` resolves
-      # `Foo` against the empty scope and lands on bare `Foo` instead
-      # of `Optcarrot_Foo`, which then poisons the local variable's
-      # recorded type.
+ # Pin @current_method_name so current_lexical_scope_name can pull
+ # the module prefix out of `<Mod>_cls_<m>` style names. Without
+ # this, a `Foo.new` inside e.g. `Optcarrot::Driver.load` resolves
+ # `Foo` against the empty scope and lands on bare `Foo` instead
+ # of `Optcarrot_Foo`, which then poisons the local variable's
+ # recorded type.
       saved_meth = @current_method_name
       @current_method_name = @meth_names[i]
       pnames = @meth_param_names[i].split(",")
@@ -11854,7 +11854,7 @@ class Compiler
       pop_scope
       i = i + 1
     end
-    # Scan class instance method bodies
+ # Scan class instance method bodies
     ci = 0
     while ci < @cls_names.length
       @current_class_idx = ci
@@ -11889,9 +11889,9 @@ class Compiler
         end
         bj = bj + 1
       end
-      # Also scan class method bodies (def self.<m>) so an
-      # attr_writer call on a freshly-`new`'d instance inside a
-      # `def self.from_raw(...)` factory widens the ivar's type.
+ # Also scan class method bodies (def self.<m>) so an
+ # attr_writer call on a freshly-`new`'d instance inside a
+ # `def self.from_raw(...)` factory widens the ivar's type.
       cm_bodies = @cls_cmeth_bodies[ci].split(";")
       cm_names = @cls_cmeth_names[ci].split(";")
       saved_meth = @current_method_name
@@ -11899,9 +11899,9 @@ class Compiler
       while cbj < cm_bodies.length
         cbid = cm_bodies[cbj].to_i
         if cbid >= 0
-          # Pin @current_method_name to the "<Class>_cls_<m>" form
-          # used by current_class_method_owning_class so implicit
-          # bare `new` inside the body resolves to obj_<Class>.
+ # Pin @current_method_name to the "<Class>_cls_<m>" form
+ # used by current_class_method_owning_class so implicit
+ # bare `new` inside the body resolves to obj_<Class>.
           if cbj < cm_names.length
             @current_method_name = @cls_names[ci] + "_cls_" + cm_names[cbj]
           end
@@ -11934,35 +11934,35 @@ class Compiler
       ci = ci + 1
     end
     @current_class_idx = -1
-    # Scan main-level code
+ # Scan main-level code
     scan_writer_calls(@root_id)
     pop_scope
-    # Every writer's concrete type observation has been recorded
-    # into @cls_ivar_observed_types[ci] (deduped per slot); widen
-    # any slot with 2+ distinct concrete types to poly. The
-    # narrow-then-overwrite path in update_ivar_type can otherwise
-    # leave the slot pinned to whichever writer's update_ivar_type
-    # call ran last, causing the loser's emit site to type-mismatch.
+ # Every writer's concrete type observation has been recorded
+ # into @cls_ivar_observed_types[ci] (deduped per slot); widen
+ # any slot with 2+ distinct concrete types to poly. The
+ # narrow-then-overwrite path in update_ivar_type can otherwise
+ # leave the slot pinned to whichever writer's update_ivar_type
+ # call ran last, causing the loser's emit site to type-mismatch.
     finalize_ivar_heterogeneity
   end
 
-  # Drop "obj_<bare>" observations from `obs` when (a) <bare> doesn't
-  # resolve to any registered class, AND (b) some other observation in
-  # the list is "obj_<scope>_<bare>" for the same trailing <bare> and
-  # <scope>_<bare> IS registered. Caller passes the raw split list of
-  # observed types; we return a filtered list with stale unqualified
-  # obj-names removed (their qualified peer carries the same slot type
-  # information). Used by finalize_ivar_heterogeneity so the
-  # distinct-count poly-widen decision doesn't flip a single-class
-  # ivar to poly just because Pass 1 recorded the bare name and a
-  # later pass recorded the qualified one.
+ # Drop "obj_<bare>" observations from `obs` when (a) <bare> doesn't
+ # resolve to any registered class, AND (b) some other observation in
+ # the list is "obj_<scope>_<bare>" for the same trailing <bare> and
+ # <scope>_<bare> IS registered. Caller passes the raw split list of
+ # observed types; we return a filtered list with stale unqualified
+ # obj-names removed (their qualified peer carries the same slot type
+ # information). Used by finalize_ivar_heterogeneity so the
+ # distinct-count poly-widen decision doesn't flip a single-class
+ # ivar to poly just because Pass 1 recorded the bare name and a
+ # later pass recorded the qualified one.
   def drop_stale_unqualified_obj_obs(obs)
     out = "".split(",")
-    # Type-prime locals as strings so spinel-self-compile picks the
-    # right C type (sp_str_sub_range / sp_str_concat returns
-    # `const char *`; without the empty-string seed scan_locals
-    # falls back to `mrb_int`, which then fails the `-Wint-conversion`
-    # bootstrap when this method is invoked from finalize_ivar_heterogeneity).
+ # Type-prime locals as strings so spinel-self-compile picks the
+ # right C type (sp_str_sub_range / sp_str_concat returns
+ # `const char *`; without the empty-string seed scan_locals
+ # falls back to `mrb_int`, which then fails the `-Wint-conversion`
+ # bootstrap when this method is invoked from finalize_ivar_heterogeneity).
     o = ""
     p = ""
     ob = ""
@@ -12016,30 +12016,30 @@ class Compiler
       while ivk < names.length
         if ivk < types.length && ivk < obs.length && types[ivk] != "poly"
           distinct = obs[ivk].split(",")
-          # Collapse stale unqualified obj-name observations against
-          # their qualified form before the distinct-count widening
-          # decision. A first-pass `@x = Foo.new(...)` recorded inside
-          # a class whose sibling `Foo` hadn't been registered yet
-          # stamped "obj_Foo" into the observation list; a later pass
-          # (with all classes registered) records the proper
-          # "obj_<scope>_Foo". They refer to the same class, but the
-          # raw distinct-count below would treat them as 2 types and
-          # widen the slot to poly. Mirror the update_ivar_type /
-          # unify_call_types normalization.
+ # Collapse stale unqualified obj-name observations against
+ # their qualified form before the distinct-count widening
+ # decision. A first-pass `@x = Foo.new(...)` recorded inside
+ # a class whose sibling `Foo` hadn't been registered yet
+ # stamped "obj_Foo" into the observation list; a later pass
+ # (with all classes registered) records the proper
+ # "obj_<scope>_Foo". They refer to the same class, but the
+ # raw distinct-count below would treat them as 2 types and
+ # widen the slot to poly. Mirror the update_ivar_type /
+ # unify_call_types normalization.
           distinct = drop_stale_unqualified_obj_obs(distinct)
           if distinct.length >= 2
-            # When every observed type is itself an array AND the
-            # current type is already `poly_array` (set by an earlier
-            # `[]=` widening — see scan_writer_calls), keep it as
-            # `poly_array` rather than collapsing to `poly`. The
-            # latter discards element-array semantics: reads on a
-            # `poly` slot dont dispatch through cls_id_to_storage,
-            # they box-and-unbox the entire ivar value. Optcarrot's
-            # `@fetch[a][a]` (heterogeneous IntArray + Method) only
-            # works when @fetch stays `poly_array`. For other
-            # combinations (mix of array and non-array, or arrays
-            # without prior poly_array marker), keep the existing
-            # widen-to-poly behavior.
+ # When every observed type is itself an array AND the
+ # current type is already `poly_array` (set by an earlier
+ # `[]=` widening — see scan_writer_calls), keep it as
+ # `poly_array` rather than collapsing to `poly`. The
+ # latter discards element-array semantics: reads on a
+ # `poly` slot dont dispatch through cls_id_to_storage,
+ # they box-and-unbox the entire ivar value. Optcarrot's
+ # `@fetch[a][a]` (heterogeneous IntArray + Method) only
+ # works when @fetch stays `poly_array`. For other
+ # combinations (mix of array and non-array, or arrays
+ # without prior poly_array marker), keep the existing
+ # widen-to-poly behavior.
             all_arrays = 1
             di = 0
             while di < distinct.length
@@ -12049,9 +12049,9 @@ class Compiler
               di = di + 1
             end
             if all_arrays == 1 && types[ivk] == "poly_array"
-              # Already poly_array; do nothing — keep it.
+ # Already poly_array; do nothing — keep it.
             elsif all_arrays == 1
-              # Compatible array shapes but not yet poly_array; widen.
+ # Compatible array shapes but not yet poly_array; widen.
               types[ivk] = "poly_array"
               @needs_rb_value = 1
               @needs_gc = 1
@@ -12073,13 +12073,13 @@ class Compiler
     end
   end
 
-  # Issue #430: when `mname` is an instance method on class `ci`
-  # whose body returns a bare `@<iname>` as its last expression,
-  # return that ivar name. Lets scan_writer_calls treat
-  # `<getter>.push(v)` and `<getter> << v` as if the push were
-  # against the ivar directly. Returns "" when the method
-  # doesn't match the simple getter shape or isn't defined on
-  # the class.
+ # when `mname` is an instance method on class `ci`
+ # whose body returns a bare `@<iname>` as its last expression,
+ # return that ivar name. Lets scan_writer_calls treat
+ # `<getter>.push(v)` and `<getter> << v` as if the push were
+ # against the ivar directly. Returns "" when the method
+ # doesn't match the simple getter shape or isn't defined on
+ # the class.
   def method_returns_ivar_in_class(ci, mname)
     if ci < 0
       return ""
@@ -12112,21 +12112,21 @@ class Compiler
     if nid < 0
       return
     end
-    # Direct ivar write: @left = expr (inside class methods)
+ # Direct ivar write: @left = expr (inside class methods)
     if @nd_type[nid] == "InstanceVariableWriteNode"
       if @current_class_idx >= 0
         iname = @nd_name[nid]
         expr_id = @nd_expression[nid]
-        # Drill through chained `@a = @b = ... = expr` so every chain
-        # participant sees the bottom rhs type — infer_type returns
-        # the default "int" for an InstanceVariableWriteNode expr,
-        # which would leave participants un-widened against a real
-        # concrete bottom type and force compile_stmt to emit
-        # type-mismatched stores. Issue #235: collecting *every*
-        # participant (not just the head) is required because a
-        # CallNode rhs (`@a = @b = make_int`) bypasses scan_ivars's
-        # dual-definite-literal widening and tail slots stay at
-        # their pre-existing concrete type.
+ # Drill through chained `@a = @b = ... = expr` so every chain
+ # participant sees the bottom rhs type — infer_type returns
+ # the default "int" for an InstanceVariableWriteNode expr,
+ # which would leave participants un-widened against a real
+ # concrete bottom type and force compile_stmt to emit
+ # type-mismatched stores. collecting *every*
+ # participant (not just the head) is required because a
+ # CallNode rhs (`@a = @b = make_int`) bypasses scan_ivars's
+ # dual-definite-literal widening and tail slots stay at
+ # their pre-existing concrete type.
         chain_inames = "".split(",")
         chain_inames.push(iname)
         bottom = expr_id
@@ -12134,33 +12134,33 @@ class Compiler
           chain_inames.push(@nd_name[bottom])
           bottom = @nd_expression[bottom]
         end
-        # Empty `{}` / `[]` literal: don't reset the ivar's tracked
-        # type to the default (`str_int_hash` / `int_array`), since a
-        # later `[]=` write may have already promoted the slot to a
-        # more specific type. Reseeding from the empty-default would
-        # widen the promoted type to poly on the next iteration.
+ # Empty `{}` / `[]` literal: don't reset the ivar's tracked
+ # type to the default (`str_int_hash` / `int_array`), since a
+ # later `[]=` write may have already promoted the slot to a
+ # more specific type. Reseeding from the empty-default would
+ # widen the promoted type to poly on the next iteration.
         if is_empty_hash_literal(bottom) == 0 && is_empty_array_literal(bottom) == 0
           at = infer_type(bottom)
-          # Record this writer's concrete type observation while
-          # the local-scope context is set up (params declared at
-          # their iteratively-widened ptypes). After all
-          # writer-scans finish, finalize_ivar_heterogeneity reads
-          # the accumulated per-slot list and widens to poly when
-          # 2+ distinct concrete types appear.
+ # Record this writer's concrete type observation while
+ # the local-scope context is set up (params declared at
+ # their iteratively-widened ptypes). After all
+ # writer-scans finish, finalize_ivar_heterogeneity reads
+ # the accumulated per-slot list and widens to poly when
+ # 2+ distinct concrete types appear.
           record_ivar_observation(@current_class_idx, iname, at, bottom)
-          # Chain participants bypass the `int` guard so that
-          # `@string_slot = @int_slot = expr_returning_int` widens
-          # the head to poly instead of leaving it stuck at
-          # `string`. The `nil` guard stays in place even for
-          # chains: `@a = @b = ... = nil` is handled at emit time
-          # by `compile_chained_ivar_writes`'s per-slot recurse
-          # path (NilNode lowers to a literal `0`, a null pointer
-          # constant valid for any slot type), and forcing nil
-          # into the slot type interacts badly with parent-cascade
-          # update_ivar_type — a subclass write that pins the same
-          # slot to a concrete obj type ping-pongs between obj_X
-          # and obj_X? across iter rounds and lands on poly,
-          # breaking the typed-pointer store at emit time.
+ # Chain participants bypass the `int` guard so that
+ # `@string_slot = @int_slot = expr_returning_int` widens
+ # the head to poly instead of leaving it stuck at
+ # `string`. The `nil` guard stays in place even for
+ # chains: `@a = @b = ... = nil` is handled at emit time
+ # by `compile_chained_ivar_writes`'s per-slot recurse
+ # path (NilNode lowers to a literal `0`, a null pointer
+ # constant valid for any slot type), and forcing nil
+ # into the slot type interacts badly with parent-cascade
+ # update_ivar_type — a subclass write that pins the same
+ # slot to a concrete obj type ping-pongs between obj_X
+ # and obj_X? across iter rounds and lands on poly,
+ # breaking the typed-pointer store at emit time.
           if chain_inames.length > 1 && at == "int"
             ci_idx = 0
             while ci_idx < chain_inames.length
@@ -12173,10 +12173,10 @@ class Compiler
         end
       end
     end
-    # `@x ||= expr` / `@x &&= expr`: writer-scan the rhs the same as a
-    # plain `@x = expr` so the slot widens from its `nil` seed to the
-    # rhs's actual type (`infer_type` resolves CallNode return types,
-    # unlike `infer_ivar_init_type` used at registration time).
+ # `@x ||= expr` / `@x &&= expr`: writer-scan the rhs the same as a
+ # plain `@x = expr` so the slot widens from its `nil` seed to the
+ # rhs's actual type (`infer_type` resolves CallNode return types,
+ # unlike `infer_ivar_init_type` used at registration time).
     if @nd_type[nid] == "InstanceVariableOrWriteNode" || @nd_type[nid] == "InstanceVariableAndWriteNode"
       if @current_class_idx >= 0
         iname = @nd_name[nid]
@@ -12190,12 +12190,12 @@ class Compiler
         end
       end
     end
-    # Multi-write to ivars: `@a, @b = pulse_0, pulse_1`. Mirrors the
-    # single-write branch above so each ivar's type is widened from
-    # the corresponding RHS slot. Without this the multi-write left
-    # the ivars at their initial "int" guess and the struct came out
-    # with mrb_int fields that the assigning method then tried to
-    # overwrite with pointer values.
+ # Multi-write to ivars: `@a, @b = pulse_0, pulse_1`. Mirrors the
+ # single-write branch above so each ivar's type is widened from
+ # the corresponding RHS slot. Without this the multi-write left
+ # the ivars at their initial "int" guess and the struct came out
+ # with mrb_int fields that the assigning method then tried to
+ # overwrite with pointer values.
     if @nd_type[nid] == "MultiWriteNode"
       if @current_class_idx >= 0
         targets_mw = parse_id_list(@nd_targets[nid])
@@ -12214,11 +12214,11 @@ class Compiler
         end
       end
     end
-    # IndexOrWriteNode (`recv[idx] ||= val`) — scan widens the hash type
-    # the same way the regular `[]=` CallNode path does. Without this,
-    # optcarrots `entries = {}; entries[k] ||= [...]` leaves `entries`
-    # at the str_int_hash default, so reads return int (lost cls_id)
-    # and downstream `(0..N).map { entries[k] }` collapses to IntArray.
+ # IndexOrWriteNode (`recv[idx] ||= val`) — scan widens the hash type
+ # the same way the regular `[]=` CallNode path does. Without this,
+ # optcarrots `entries = {}; entries[k] ||= [...]` leaves `entries`
+ # at the str_int_hash default, so reads return int (lost cls_id)
+ # and downstream `(0..N).map { entries[k] }` collapses to IntArray.
     if @nd_type[nid] == "IndexOrWriteNode" || @nd_type[nid] == "IndexAndWriteNode" || @nd_type[nid] == "IndexOperatorWriteNode"
       iow_recv = @nd_receiver[nid]
       iow_args_id = @nd_arguments[nid]
@@ -12228,7 +12228,7 @@ class Compiler
         if iow_args.length >= 1
           iow_kt = infer_type(iow_args[0])
           iow_vt = infer_type(iow_val)
-          # Widen the recv's hash type if it's still the empty-default
+ # Widen the recv's hash type if it's still the empty-default
           if @nd_type[iow_recv] == "InstanceVariableReadNode" && @current_class_idx >= 0
             iow_iname = @nd_name[iow_recv]
             iow_cur = cls_ivar_type(@current_class_idx, iow_iname)
@@ -12300,11 +12300,11 @@ class Compiler
           end
         end
       end
-      # `@h[k] = v` against an ivar still typed as the empty-hash
-      # default (str_int_hash) — promote based on the actual key/value
-      # types so the codegen picks the matching `sp_*Hash_set` (issue
-      # #64). Only the empty-default → another concrete hash type
-      # transition; richer mismatches stay where they are.
+ # `@h[k] = v` against an ivar still typed as the empty-hash
+ # default (str_int_hash) — promote based on the actual key/value
+ # types so the codegen picks the matching `sp_*Hash_set` (issue
+ # #64). Only the empty-default → another concrete hash type
+ # transition; richer mismatches stay where they are.
       if mname == "[]=" && @current_class_idx >= 0 && recv >= 0 && @nd_type[recv] == "InstanceVariableReadNode"
         iname = @nd_name[recv]
         cur_t = cls_ivar_type(@current_class_idx, iname)
@@ -12317,13 +12317,13 @@ class Compiler
               vt = infer_type(ai[ai.length - 1])
               promoted = promote_empty_hash_for(kt, vt)
               if promoted != "" && promoted != cur_t
-                # Direct assign: update_ivar_type would widen the
-                # existing-vs-new mismatch to `poly`, but we know this
-                # transition is just refining the empty-hash default.
+ # Direct assign: update_ivar_type would widen the
+ # existing-vs-new mismatch to `poly`, but we know this
+ # transition is just refining the empty-hash default.
                 replace_ivar_type(@current_class_idx, iname, promoted)
-                # Mark the runtime feature as needed before emit_features
-                # runs, so the corresponding `sp_*Hash_*` helpers are
-                # emitted into the generated C.
+ # Mark the runtime feature as needed before emit_features
+ # runs, so the corresponding `sp_*Hash_*` helpers are
+ # emitted into the generated C.
                 if promoted == "str_str_hash"
                   @needs_str_str_hash = 1
                 elsif promoted == "int_str_hash"
@@ -12345,29 +12345,29 @@ class Compiler
           end
         end
       end
-      # Issue #430: push through a getter method that returns the
-      # ivar. Recognise the canonical "lazy init + return" shape:
-      #
-      #   def errors
-      #     @errors = [] if @errors.nil?
-      #     @errors
-      #   end
-      #   ...
-      #   errors << "bad"
-      #
-      # The recv of `<<` is a bare call to `errors`, not the ivar
-      # directly. Resolve through that to the underlying ivar so
-      # the IntArray default (from `[]`) promotes to the correct
-      # element-typed array when the push args are non-int.
+ # push through a getter method that returns the
+ # ivar. Recognise the canonical "lazy init + return" shape:
+ #
+ # def errors
+ # @errors = [] if @errors.nil?
+ # @errors
+ # end
+ # ...
+ # errors << "bad"
+ #
+ # The recv of `<<` is a bare call to `errors`, not the ivar
+ # directly. Resolve through that to the underlying ivar so
+ # the IntArray default (from `[]`) promotes to the correct
+ # element-typed array when the push args are non-int.
       push_alias_iname = ""
       if (mname == "push" || mname == "<<") && @current_class_idx >= 0 && recv >= 0
         if @nd_type[recv] == "CallNode" && @nd_receiver[recv] < 0
-          getter_mname_430 = @nd_name[recv]
-          push_alias_iname = method_returns_ivar_in_class(@current_class_idx, getter_mname_430)
+          getter_mname = @nd_name[recv]
+          push_alias_iname = method_returns_ivar_in_class(@current_class_idx, getter_mname)
         end
         if @nd_type[recv] == "CallNode" && @nd_receiver[recv] >= 0 && @nd_type[@nd_receiver[recv]] == "SelfNode"
-          getter_mname_430s = @nd_name[recv]
-          push_alias_iname = method_returns_ivar_in_class(@current_class_idx, getter_mname_430s)
+          getter_mname_s = @nd_name[recv]
+          push_alias_iname = method_returns_ivar_in_class(@current_class_idx, getter_mname_s)
         end
       end
       if (mname == "push" || mname == "<<") && @current_class_idx >= 0 && push_alias_iname != ""
@@ -12419,10 +12419,10 @@ class Compiler
                   @needs_rb_value = 1
                   @needs_gc = 1
                 elsif is_ptr_array_type(promoted) == 1
-                  # ptr_array slots hold object pointers, so the
-                  # owning class needs gc_scan emitted; without
-                  # this flag the captured pointers leak and the
-                  # collector misses them. Gemini #241 review.
+ # ptr_array slots hold object pointers, so the
+ # owning class needs gc_scan emitted; without
+ # this flag the captured pointers leak and the
+ # collector misses them. Gemini review.
                   @needs_gc = 1
                 end
               end
@@ -12430,12 +12430,12 @@ class Compiler
           end
         end
       end
-      # `@arr[i] = v` against an ivar typed `int_array` (the
-      # `[nil] * N` empty default) should widen to match the value
-      # type the same way `<<` / `push` does. Without this, optcarrot's
-      # `@fetch[addr] = method(:peek_X)` writes a Method into an
-      # int_array slot — the read side then can't recover and `[].call`
-      # dispatches against int.
+ # `@arr[i] = v` against an ivar typed `int_array` (the
+ # `[nil] * N` empty default) should widen to match the value
+ # type the same way `<<` / `push` does. Without this, optcarrot's
+ # `@fetch[addr] = method(:peek_X)` writes a Method into an
+ # int_array slot — the read side then can't recover and `[].call`
+ # dispatches against int.
       if mname == "[]=" && @current_class_idx >= 0 && recv >= 0 && @nd_type[recv] == "InstanceVariableReadNode"
         iname = @nd_name[recv]
         cur_t = cls_ivar_type(@current_class_idx, iname)
@@ -12450,18 +12450,18 @@ class Compiler
             end
           end
         elsif cur_t == "obj_Method_ptr_array"
-          # Specific case: `<X>_ptr_array<Method>` widened from int_array
-          # by the prior empty_array_promotion_for. A subsequent write
-          # of a different element type (e.g. optcarrots `@fetch[i] =
-          # @ram` where @ram is IntArray) would silently void*-cast
-          # into the typed Method slot. Widen to poly_array so the
-          # cls_id dispatch catches both Method and the other type at
-          # runtime. Restricted to Method here because the other
-          # `<X>_ptr_array` shapes (e.g. obj_IntArray_ptr_array for
-          # `@sp_map = [@sp_map_buffer[0], ...]`) dont need this and
-          # widening them too aggressively breaks downstream
-          # operations (`clear` etc.) that have separate poly_array
-          # codepaths only in stmt context.
+ # Specific case: `<X>_ptr_array<Method>` widened from int_array
+ # by the prior empty_array_promotion_for. A subsequent write
+ # of a different element type (e.g. optcarrots `@fetch[i] =
+ # @ram` where @ram is IntArray) would silently void*-cast
+ # into the typed Method slot. Widen to poly_array so the
+ # cls_id dispatch catches both Method and the other type at
+ # runtime. Restricted to Method here because the other
+ # `<X>_ptr_array` shapes (e.g. obj_IntArray_ptr_array for
+ # `@sp_map = [@sp_map_buffer[0], ...]`) dont need this and
+ # widening them too aggressively breaks downstream
+ # operations (`clear` etc.) that have separate poly_array
+ # codepaths only in stmt context.
           args_id = @nd_arguments[nid]
           if args_id >= 0
             ai = get_args(args_id)
@@ -12485,18 +12485,18 @@ class Compiler
             @needs_rb_value = 1
             @needs_gc = 1
           elsif is_ptr_array_type(promoted) == 1
-            # ptr_array slots hold object pointers, so the
-            # owning class needs gc_scan emitted; without
-            # this flag the captured pointers leak and the
-            # collector misses them. Gemini #241 review.
+ # ptr_array slots hold object pointers, so the
+ # owning class needs gc_scan emitted; without
+ # this flag the captured pointers leak and the
+ # collector misses them. Gemini review.
             @needs_gc = 1
           end
         end
       end
     end
-    # Recurse via the centralized child walker (push_child_ids covers
-    # the full set of AST slots — visiting a few extra slots is a
-    # no-op for nodes scan_writer_calls doesn't recognise).
+ # Recurse via the centralized child walker (push_child_ids covers
+ # the full set of AST slots — visiting a few extra slots is a
+ # no-op for nodes scan_writer_calls doesn't recognise).
     cs = []
     push_child_ids(nid, cs)
     k = 0
@@ -12507,7 +12507,7 @@ class Compiler
   end
 
   def infer_writer_param_types
-    # For setter methods (def x=(v); @x = v; end), infer param type from ivar type
+ # For setter methods (def x=(v); @x = v; end), infer param type from ivar type
     ci = 0
     while ci < @cls_names.length
       mnames = @cls_meth_names[ci].split(";")
@@ -12524,7 +12524,7 @@ class Compiler
           if mn[mn.length - 1] == "="
             bname = mn[0, mn.length - 1]
             iname = "@" + bname
-            # Find ivar type
+ # Find ivar type
             ik = 0
             while ik < ivar_names.length
               if ivar_names[ik] == iname
@@ -12555,11 +12555,11 @@ class Compiler
   end
 
   def infer_lambda_param_types
-    # Scan all call sites in the program AST for calls to top-level methods
-    # where lambda arguments are passed. Update param types accordingly.
+ # Scan all call sites in the program AST for calls to top-level methods
+ # where lambda arguments are passed. Update param types accordingly.
     scan_lambda_call_sites(@root_id)
-    # Second pass: scan method bodies for parameters used as lambda receivers
-    # or passed to functions that expect lambda args (transitive closure)
+ # Second pass: scan method bodies for parameters used as lambda receivers
+ # or passed to functions that expect lambda args (transitive closure)
     changed = 1
     while changed == 1
       changed = 0
@@ -12573,8 +12573,8 @@ class Compiler
           while pk < pnames.length
             if pk < ptypes.length
               if ptypes[pk] != "lambda"
-                # Check if param is used as lambda receiver (e.g., param[...])
-                # or passed to a function that expects lambda
+ # Check if param is used as lambda receiver (e.g., param[...])
+ # or passed to a function that expects lambda
                 if param_used_as_lambda(pnames[pk], bid) == 1
                   ptypes[pk] = "lambda"
                   changed = 1
@@ -12595,7 +12595,7 @@ class Compiler
       return 0
     end
     t = @nd_type[nid]
-    # Handle StatementsNode by iterating its statements
+ # Handle StatementsNode by iterating its statements
     if t == "StatementsNode"
       stmts2 = parse_id_list(@nd_stmts[nid])
       k = 0
@@ -12610,13 +12610,13 @@ class Compiler
     if t == "CallNode"
       mname = @nd_name[nid]
       recv = @nd_receiver[nid]
-      # Check if param is used as receiver of [] with a lambda argument
-      # (distinguishes lambda call from array indexing)
+ # Check if param is used as receiver of [] with a lambda argument
+ # (distinguishes lambda call from array indexing)
       if mname == "[]"
         if recv >= 0
           if @nd_type[recv] == "LocalVariableReadNode"
             if @nd_name[recv] == pname
-              # Only flag as lambda if the argument is a lambda
+ # Only flag as lambda if the argument is a lambda
               args_id5 = @nd_arguments[nid]
               if args_id5 >= 0
                 aargs5 = get_args(args_id5)
@@ -12628,7 +12628,7 @@ class Compiler
               end
             end
           end
-          # Check if param is passed as argument to [] on a lambda receiver
+ # Check if param is passed as argument to [] on a lambda receiver
           rt = infer_type(recv)
           if rt == "lambda"
             args_id3 = @nd_arguments[nid]
@@ -12647,7 +12647,7 @@ class Compiler
           end
         end
       end
-      # Check if param is passed to a function that expects lambda
+ # Check if param is passed to a function that expects lambda
       if recv < 0
         fmi = find_method_idx(mname)
         if fmi >= 0
@@ -12672,7 +12672,7 @@ class Compiler
         end
       end
     end
-    # Recurse into children
+ # Recurse into children
     if @nd_body[nid] >= 0
       bstmts = get_stmts(@nd_body[nid])
       if bstmts.length > 0
@@ -12739,7 +12739,7 @@ class Compiler
         return 1
       end
     end
-    # Check StatementsNode stmts
+ # Check StatementsNode stmts
     stmts3 = parse_id_list(@nd_stmts[nid])
     k3 = 0
     while k3 < stmts3.length
@@ -12759,7 +12759,7 @@ class Compiler
     if t == "CallNode"
       mname = @nd_name[nid]
       recv = @nd_receiver[nid]
-      # Only bare function calls (no receiver) can be top-level methods
+ # Only bare function calls (no receiver) can be top-level methods
       if recv < 0
         mi = find_method_idx(mname)
         if mi >= 0
@@ -12788,7 +12788,7 @@ class Compiler
         end
       end
     end
-    # Recurse into children
+ # Recurse into children
     if @nd_body[nid] >= 0
       bstmts = get_stmts(@nd_body[nid])
       if bstmts.length > 0
@@ -12854,47 +12854,47 @@ class Compiler
   end
 
   def infer_all_returns
-    # Pre-pass: infer class method param types from body usage
+ # Pre-pass: infer class method param types from body usage
     infer_cls_meth_param_from_body
-    # Pre-pass: scan for .new calls to infer constructor param types
+ # Pre-pass: scan for .new calls to infer constructor param types
     infer_constructor_types
-    # Bare `new(args)` in an inherited class method body widens
-    # the subclass's `initialize` ptypes via the cls method's
-    # already-widened ptypes. Runs after infer_constructor_types
-    # so the cls method ptypes (set by scan_new_calls' caller-side
-    # widening) are current; runs inside the iterative loop so
-    # subsequent rounds pick up cls method widening from new call
-    # sites.
+ # Bare `new(args)` in an inherited class method body widens
+ # the subclass's `initialize` ptypes via the cls method's
+ # already-widened ptypes. Runs after infer_constructor_types
+ # so the cls method ptypes (set by scan_new_calls' caller-side
+ # widening) are current; runs inside the iterative loop so
+ # subsequent rounds pick up cls method widening from new call
+ # sites.
     propagate_bare_new_to_subclass_initialize
-    # `super` inside a child's `#initialize` calls the parent's
-    # initialize with the child's params. Propagate the child's
-    # ptypes (already widened by scan_new_calls' constructor branch
-    # for `Child.new(args)` call sites) into the parent's ptypes so
-    # the parent's body sees the right param types for `@apu = apu`
-    # ivar widening — without this the parent's slot stays at the
-    # default `mrb_int` even when every `Child.new` site passes a
-    # typed pointer.
+ # `super` inside a child's `#initialize` calls the parent's
+ # initialize with the child's params. Propagate the child's
+ # ptypes (already widened by scan_new_calls' constructor branch
+ # for `Child.new(args)` call sites) into the parent's ptypes so
+ # the parent's body sees the right param types for `@apu = apu`
+ # ivar widening — without this the parent's slot stays at the
+ # default `mrb_int` even when every `Child.new` site passes a
+ # typed pointer.
     propagate_super_init_to_parent
-    # Update ivar types from constructor params
+ # Update ivar types from constructor params
     update_ivar_types_from_params
-    # Infer setter param types from ivar types
+ # Infer setter param types from ivar types
     infer_writer_param_types
-    # Widen param slot types when a body reassigns the param to an
-    # incompatible value (e.g. `def f(hclk); hclk = "forever" if
-    # hclk.nil?; end` — call sites pass int, body assigns string,
-    # so the slot becomes poly).
+ # Widen param slot types when a body reassigns the param to an
+ # incompatible value (e.g. `def f(hclk); hclk = "forever" if
+ # hclk.nil?; end` — call sites pass int, body assigns string,
+ # so the slot becomes poly).
     widen_param_types_from_body_writes
 
-    # Top-level methods
+ # Top-level methods
     i = 0
     while i < @meth_names.length
       push_scope
-      # Open class self type
+ # Open class self type
       mfn = @meth_names[i]
-      # Pin @current_method_name so current_lexical_scope_name can
-      # peel `<Mod>_cls_<m>` and resolve bare class refs in the body
-      # (e.g. `Video.new` inside `Top::Drv.load` resolves Video to
-      # Top_Video instead of bare Video).
+ # Pin @current_method_name so current_lexical_scope_name can
+ # peel `<Mod>_cls_<m>` and resolve bare class refs in the body
+ # (e.g. `Video.new` inside `Top::Drv.load` resolves Video to
+ # Top_Video instead of bare Video).
       saved_meth_ar = @current_method_name
       @current_method_name = mfn
       if mfn.start_with?("__oc_Integer_")
@@ -12917,14 +12917,14 @@ class Compiler
         declare_var(pnames[j], pt)
         j = j + 1
       end
-      # Also declare locals for better return type inference.
-      # Route through refine_method_body_locals so the same
-      # multi-pass refinement precompute_all_scope_decls runs at
-      # end-of-analyze applies here too — without it #412's
-      # int_array -> ptr_array upgrade (and #411's nil ->
-      # nullable_pointer promotion) only land at scope-decl emit
-      # time, after `infer_body_return` has already pinned the
-      # function's return type at the unrefined value.
+ # Also declare locals for better return type inference.
+ # Route through refine_method_body_locals so the same
+ # multi-pass refinement precompute_all_scope_decls runs at
+ # end-of-analyze applies here too — without it's
+ # int_array -> ptr_array upgrade (and's nil ->
+ # nullable_pointer promotion) only land at scope-decl emit
+ # time, after `infer_body_return` has already pinned the
+ # function's return type at the unrefined value.
       if @meth_body_ids[i] >= 0
         lnames = "".split(",")
         ltypes = "".split(",")
@@ -12937,7 +12937,7 @@ class Compiler
       i = i + 1
     end
 
-    # Class methods
+ # Class methods
     i = 0
     while i < @cls_names.length
       @current_class_idx = i
@@ -12960,17 +12960,17 @@ class Compiler
           ptypes = all_ptypes[j].split(",")
         end
 
-        # Infer param types for initialize
+ # Infer param types for initialize
         if mnames[j] == "initialize"
           k = 0
           while k < pnames.length
-            # Two sources of param types feed this slot:
-            #   existing_pt: from infer_constructor_types scanning Foo.new(...)
-            #     call sites (already widened to "poly" via unify_call_types
-            #     when call sites disagree).
-            #   body_pt: from scanning the initialize body for `@x = param`
-            #     ivar writes; "int" means "no info" (the fallback).
-            # Body inference must not silently clobber call-site evidence.
+ # Two sources of param types feed this slot:
+ # existing_pt: from infer_constructor_types scanning Foo.new(...)
+ # call sites (already widened to "poly" via unify_call_types
+ # when call sites disagree).
+ # body_pt: from scanning the initialize body for `@x = param`
+ # ivar writes; "int" means "no info" (the fallback).
+ # Body inference must not silently clobber call-site evidence.
             existing_pt = "int"
             if k < ptypes.length
               existing_pt = ptypes[k]
@@ -12979,13 +12979,13 @@ class Compiler
             pt = body_pt
             if existing_pt != "int" && existing_pt != "nil"
               if body_pt == "int" || body_pt == "nil"
-                # Body has no info; keep call-site type.
+ # Body has no info; keep call-site type.
                 pt = existing_pt
               elsif existing_pt == "poly"
-                # Call sites already widened to poly; do not narrow.
+ # Call sites already widened to poly; do not narrow.
                 pt = "poly"
               elsif body_pt != existing_pt && body_pt != "poly"
-                # Two concrete types disagree; demote to poly.
+ # Two concrete types disagree; demote to poly.
                 @needs_rb_value = 1
                 pt = "poly"
               end
@@ -12996,7 +12996,7 @@ class Compiler
             declare_var(pnames[k], pt)
             k = k + 1
           end
-          # Update ptypes in class storage
+ # Update ptypes in class storage
           new_ptypes = ptypes.join(",")
           if j < all_ptypes.length
             all_ptypes[j] = new_ptypes
@@ -13019,7 +13019,7 @@ class Compiler
         if j < bodies.length
           bid = bodies[j].to_i
         end
-        # Declare locals for better return type inference
+ # Declare locals for better return type inference
         if bid >= 0
           rlnames = "".split(",")
           rltypes = "".split(",")
@@ -13029,13 +13029,13 @@ class Compiler
             declare_var(rlnames[rlk], rltypes[rlk])
             rlk = rlk + 1
           end
-          # Second pass: full scan_locals so the empty-hash promotion
-          # path (issue #133) sees the in-scope param/local types and
-          # promotes `out = {}` correctly when the iterated value is
-          # poly. The full scanner also marks polymorphic locals if it
-          # encounters disagreeing concrete-literal writes; that's a
-          # superset of scan_locals_first_type's "never-poly" rule but
-          # produces strictly more accurate types for return inference.
+ # Second pass: full scan_locals so the empty-hash promotion
+ # path sees the in-scope param/local types and
+ # promotes `out = {}` correctly when the iterated value is
+ # poly. The full scanner also marks polymorphic locals if it
+ # encounters disagreeing concrete-literal writes; that's a
+ # superset of scan_locals_first_type's "never-poly" rule but
+ # produces strictly more accurate types for return inference.
           rlnames2 = "".split(",")
           rltypes2 = "".split(",")
           scan_locals(bid, rlnames2, rltypes2, pnames)
@@ -13050,8 +13050,8 @@ class Compiler
               mk2 = mk2 + 1
             end
             if rltypes2[rlk2] != "int" && rltypes2[rlk2] != cur
-              # Same merge widening as the top-level path: hash variants
-              # escalate to poly_hash, int/nil → concrete, etc.
+ # Same merge widening as the top-level path: hash variants
+ # escalate to poly_hash, int/nil → concrete, etc.
               if cur == "int" || cur == "nil" ||
                  ((rltypes2[rlk2] == "str_poly_hash" || rltypes2[rlk2] == "sym_poly_hash") && cur != rltypes2[rlk2])
                 set_var_type(rlnames2[rlk2], rltypes2[rlk2])
@@ -13073,17 +13073,17 @@ class Compiler
         if j < returns.length
           returns[j] = rt
         end
-        # Save incrementally so later methods can see updated return types
+ # Save incrementally so later methods can see updated return types
         @cls_meth_returns[i] = returns.join(";")
         @cls_meth_return_cache = {}
         pop_scope
         j = j + 1
       end
 
-      # Class methods. Issue #207: mirror the param/local scope
-      # setup the instance-method side does so a `def self.<m>`
-      # body's return type sees its locals (instance = new etc.)
-      # and bare `new` resolves via current_class_method_owning_class.
+ # Class methods. mirror the param/local scope
+ # setup the instance-method side does so a `def self.<m>`
+ # body's return type sees its locals (instance = new etc.)
+ # and bare `new` resolves via current_class_method_owning_class.
       cmnames = @cls_cmeth_names[i].split(";")
       cm_bodies = @cls_cmeth_bodies[i].split(";")
       cm_returns = @cls_cmeth_returns[i].split(";")
@@ -13116,14 +13116,14 @@ class Compiler
           cpk = cpk + 1
         end
         if bid >= 0
-          # Issue #411: route through refine_method_body_locals so a
-          # `result = nil; ...; result = obj` shape upgrades the
-          # local from "nil" to `obj_<C>?` before infer_body_return
-          # reads the tail expression. Without this, the cmeth's
-          # return type stays "nil" -> `mrb_int` even though the
-          # actually-emitted local is correctly typed `sp_<C> *`,
-          # so the function signature and the body's `return`
-          # statement disagree at the C boundary.
+ # route through refine_method_body_locals so a
+ # `result = nil; ...; result = obj` shape upgrades the
+ # local from "nil" to `obj_<C>?` before infer_body_return
+ # reads the tail expression. Without this, the cmeth's
+ # return type stays "nil" -> `mrb_int` even though the
+ # actually-emitted local is correctly typed `sp_<C> *`,
+ # so the function signature and the body's `return`
+ # statement disagree at the C boundary.
           ml = "".split(",")
           mt = "".split(",")
           refine_method_body_locals(bid, ml, mt, cpnames)
@@ -13143,10 +13143,10 @@ class Compiler
   end
 
   def infer_init_param_type(ci, pname)
-    # Synthetic Struct.new(...) constructors (body id -2) have no AST
-    # body to scan — the implicit rule is "param pname → @pname = pname",
-    # so the param type must match the ivar type. update_ivar_types_from_params
-    # has already propagated call-site-inferred types into ivars by this point.
+ # Synthetic Struct.new(...) constructors (body id -2) have no AST
+ # body to scan — the implicit rule is "param pname → @pname = pname",
+ # so the param type must match the ivar type. update_ivar_types_from_params
+ # has already propagated call-site-inferred types into ivars by this point.
     init_idx0 = cls_find_method_direct(ci, "initialize")
     if init_idx0 >= 0
       bodies0 = @cls_meth_bodies[ci].split(";")
@@ -13154,7 +13154,7 @@ class Compiler
         return cls_ivar_type(ci, "@" + pname)
       end
     end
-    # Check if param is assigned to an ivar in initialize
+ # Check if param is assigned to an ivar in initialize
     mnames = @cls_meth_names[ci].split(";")
     bodies = @cls_meth_bodies[ci].split(";")
     j = 0
@@ -13177,7 +13177,7 @@ class Compiler
                 end
               end
             end
-            # Also check super calls
+ # Also check super calls
             if @nd_type[sid] == "SuperNode"
               super_args = @nd_arguments[sid]
               if super_args >= 0
@@ -13186,7 +13186,7 @@ class Compiler
                 while sk < sa_ids.length
                   if @nd_type[sa_ids[sk]] == "LocalVariableReadNode"
                     if @nd_name[sa_ids[sk]] == pname
-                      # This param is passed to parent's initialize at position sk
+ # This param is passed to parent's initialize at position sk
                       if @cls_parents[ci] != ""
                         parent_ci = find_class_idx(@cls_parents[ci])
                         if parent_ci >= 0
@@ -13224,13 +13224,13 @@ class Compiler
     if stmts.length == 0
       return "void"
     end
-    # Collect all explicit return types
+ # Collect all explicit return types
     types = "".split(",")
     collect_return_types_nid(body_id, types)
-    # Add implicit return (last expression)
+ # Add implicit return (last expression)
     last_type = infer_type(stmts.last)
     types.push(last_type)
-    # Unify all return path types
+ # Unify all return path types
     unify_return_type(types)
   end
 
@@ -13252,8 +13252,8 @@ class Compiler
       if args_id >= 0
         arg_ids = get_args(args_id)
         if arg_ids.length > 1
-          # `return a, b` materializes as a fixed-arity tuple. Heterogeneous
-          # element types are preserved unboxed (no poly_array fallback).
+ # `return a, b` materializes as a fixed-arity tuple. Heterogeneous
+ # element types are preserved unboxed (no poly_array fallback).
           types.push(tuple_type_from_elems(arg_ids))
           return
         end
@@ -13265,7 +13265,7 @@ class Compiler
       types.push("nil")
       return
     end
-    # Don't recurse into nested method definitions
+ # Don't recurse into nested method definitions
     if @nd_type[nid] == "DefNode"
       return
     end
@@ -13323,17 +13323,17 @@ class Compiler
         if result == ""
           result = t
         elsif base_type(result) == base_type(t)
-          # Same base type — prefer nullable version
+ # Same base type — prefer nullable version
           if is_nullable_type(t) == 1
             result = t
           end
         elsif result == "int"
-          # int is default/unresolved — real type takes priority
+ # int is default/unresolved — real type takes priority
           result = t
         elsif t == "int"
-          # int is default/unresolved — keep existing result
+ # int is default/unresolved — keep existing result
         else
-          # Genuinely different types
+ # Genuinely different types
           return "poly"
         end
       end
@@ -13356,12 +13356,12 @@ class Compiler
   end
 
   def fix_lambda_return_types
-    # For methods that return "lambda", check if they are called from
-    # contexts that expect primitive types. If so, downgrade the return type.
+ # For methods that return "lambda", check if they are called from
+ # contexts that expect primitive types. If so, downgrade the return type.
     i = 0
     while i < @meth_names.length
       if @meth_return_types[i] == "lambda"
-        # Scan call sites to see what type the return value is used as
+ # Scan call sites to see what type the return value is used as
         usage = scan_method_return_usage(@meth_names[i], @root_id)
         if usage == "int"
           @meth_return_types[i] = "int"
@@ -13385,15 +13385,15 @@ class Compiler
     if t == "CallNode"
       cn = @nd_name[nid]
       recv = @nd_receiver[nid]
-      # Check if this call is our method and its result is used somewhere
+ # Check if this call is our method and its result is used somewhere
       if recv < 0
         if cn == mname
-          # This is a call to our method - check parent context
-          # We can't easily check parent here, so check all call sites
+ # This is a call to our method - check parent context
+ # We can't easily check parent here, so check all call sites
           return ""
         end
       end
-      # Check if our method is called as an argument to another call
+ # Check if our method is called as an argument to another call
       args_id = @nd_arguments[nid]
       if args_id >= 0
         aargs = get_args(args_id)
@@ -13401,18 +13401,18 @@ class Compiler
           if @nd_type[aid] == "CallNode"
             if @nd_name[aid] == mname
               if @nd_receiver[aid] < 0
-                # Our method is called as argument - check what the parent expects
+ # Our method is called as argument - check what the parent expects
                 if cn == "slice"
                   return "int"
                 end
-                # For until/if/while conditions, need bool
+ # For until/if/while conditions, need bool
               end
             end
           end
         }
       end
     end
-    # Check if method is called in a negation context (boolean)
+ # Check if method is called in a negation context (boolean)
     if t == "CallNode"
       cn = @nd_name[nid]
       if cn == "!"
@@ -13428,7 +13428,7 @@ class Compiler
         end
       end
     end
-    # Check UntilNode predicate
+ # Check UntilNode predicate
     if t == "UntilNode"
       pred = @nd_predicate[nid]
       if pred >= 0
@@ -13441,7 +13441,7 @@ class Compiler
         end
       end
     end
-    # Recurse
+ # Recurse
     result = ""
     if @nd_body[nid] >= 0
       bstmts = get_stmts(@nd_body[nid])
@@ -13517,10 +13517,10 @@ class Compiler
     result
   end
 
-  # Map a simple-literal AST node to its canonical type name. Returns ""
-  # for anything that isn't a leaf-literal (hashes, arrays, calls, etc.).
-  # Used by pre_scan_simple_local_writes to seed @scope_names before
-  # scan_locals's first pass runs.
+ # Map a simple-literal AST node to its canonical type name. Returns ""
+ # for anything that isn't a leaf-literal (hashes, arrays, calls, etc.).
+ # Used by pre_scan_simple_local_writes to seed @scope_names before
+ # scan_locals's first pass runs.
   def simple_literal_type(nid)
     if nid < 0
       return ""
@@ -13550,13 +13550,13 @@ class Compiler
     ""
   end
 
-  # Pre-populate @scope_names with simple-literal local writes so that
-  # scan_locals's pass-1 inference can resolve LocalVariableReadNode
-  # references during type inference. Without this, hash shorthand
-  # `{first:}` whose key resolves to a previously-written string-valued
-  # local mis-types because find_var_type runs against an empty scope and
-  # falls back to "int". Limited to leaf-literal initializers; method
-  # calls and composite literals still go through the regular passes.
+ # Pre-populate @scope_names with simple-literal local writes so that
+ # scan_locals's pass-1 inference can resolve LocalVariableReadNode
+ # references during type inference. Without this, hash shorthand
+ # `{first:}` whose key resolves to a previously-written string-valued
+ # local mis-types because find_var_type runs against an empty scope and
+ # falls back to "int". Limited to leaf-literal initializers; method
+ # calls and composite literals still go through the regular passes.
   def pre_scan_simple_local_writes(stmts)
     stmts.each { |sid|
       if @nd_type[sid] == "LocalVariableWriteNode"
@@ -13571,10 +13571,10 @@ class Compiler
     }
   end
 
-  # ---- Feature detection ----
+ # ---- Feature detection ----
   def detect_features
-    # Set up a temporary scope with main-level locals so feature detection
-    # can infer types of local variables correctly
+ # Set up a temporary scope with main-level locals so feature detection
+ # can infer types of local variables correctly
     push_scope
     stmts = get_body_stmts(@root_id)
     pre_scan_simple_local_writes(stmts)
@@ -13618,16 +13618,16 @@ class Compiler
       end
     end
     if t == "InterpolatedRegularExpressionNode" || t == "InterpolatedMatchLastLineNode"
-      # Pre-flag so emit_regexp_runtime fires (defines sp_re_init) even
-      # when the program uses ONLY interpolated regexes -- without this,
-      # the linker fails on the unreferenced sp_re_init main() call.
+ # Pre-flag so emit_regexp_runtime fires (defines sp_re_init) even
+ # when the program uses ONLY interpolated regexes -- without this,
+ # the linker fails on the unreferenced sp_re_init main() call.
       @needs_regexp = 1
     end
     if t == "InterpolatedRegularExpressionNode"
-      # Register this AST site so emit_dyn_regex_helpers produces a
-      # dedicated `sp_re_dyn_<idx>` cache for it. Idempotent: a node
-      # visited twice (e.g. through type-inference + emit passes) keeps
-      # its first-assigned index.
+ # Register this AST site so emit_dyn_regex_helpers produces a
+ # dedicated `sp_re_dyn_<idx>` cache for it. Idempotent: a node
+ # visited twice (e.g. through type-inference + emit passes) keeps
+ # its first-assigned index.
       already_dyn = 0
       di = 0
       while di < @dyn_regex_node_ids.length
@@ -13643,12 +13643,12 @@ class Compiler
     end
     if t == "RegularExpressionNode"
       @needs_regexp = 1
-      # Collect pattern and flags
+ # Collect pattern and flags
       pat = @nd_unescaped[nid]
       flags = regex_engine_flags(nid)
-      # Idempotent: identical patterns share the same compiled global,
-      # so a second visit (e.g. via the LocalVariableWriteNode pre-scan
-      # below) is a no-op.
+ # Idempotent: identical patterns share the same compiled global,
+ # so a second visit (e.g. via the LocalVariableWriteNode pre-scan
+ # below) is a no-op.
       already = 0
       ri0 = 0
       while ri0 < @regexp_patterns.length
@@ -13662,17 +13662,17 @@ class Compiler
         @regexp_flags.push(flags)
       end
     end
-    # Track `var = /lit/` so a regex held in a local can be dispatched
-    # by find_regexp_index. A name with multiple writes (any kind, any
-    # regex literal) is marked ambiguous (-1) and falls through.
+ # Track `var = /lit/` so a regex held in a local can be dispatched
+ # by find_regexp_index. A name with multiple writes (any kind, any
+ # regex literal) is marked ambiguous (-1) and falls through.
     if t == "LocalVariableWriteNode"
       lname = @nd_name[nid]
       vid = @nd_expression[nid]
       this_idx = -1
       if vid >= 0 && @nd_type[vid] == "RegularExpressionNode"
-        # Register the pattern up front (the recursive scan after this
-        # block would do it too, but we need the index now to record
-        # the local-name → pattern mapping).
+ # Register the pattern up front (the recursive scan after this
+ # block would do it too, but we need the index now to record
+ # the local-name → pattern mapping).
         scan_features(vid)
         rpat = @nd_unescaped[vid]
         ri = 0
@@ -13688,7 +13688,7 @@ class Compiler
       while i2 < @local_regex_names.length
         if @local_regex_names[i2] == lname
           found = 1
-          # Any second write (regex or not) marks ambiguous.
+ # Any second write (regex or not) marks ambiguous.
           if @local_regex_idx[i2] != this_idx
             @local_regex_idx[i2] = -1
           end
@@ -13719,8 +13719,8 @@ class Compiler
     end
     if t == "HashNode"
       if is_int_array_lowered_hash(nid) == 1
-        # Lowered to Array — same @needs_* flag set as the
-        # ArrayNode arm above derives from `infer_array_elem_type`.
+ # Lowered to Array — same @needs_* flag set as the
+ # ArrayNode arm above derives from `infer_array_elem_type`.
         et = infer_int_keyed_hash_as_array_type(nid)
         if et == "str_array"
           @needs_str_array = 1
@@ -13752,11 +13752,11 @@ class Compiler
     end
 
     if t == "GlobalVariableWriteNode"
-      # `alias $copy $orig` -- a $copy = ... write must register
-      # the type under $orig's slot, not a separate $copy slot,
-      # otherwise the type-consistency check below would later see
-      # $orig and $copy as two slots that resolve to the same C
-      # global and fire a spurious type-mismatch error.
+ # `alias $copy $orig` -- a $copy = ... write must register
+ # the type under $orig's slot, not a separate $copy slot,
+ # otherwise the type-consistency check below would later see
+ # $orig and $copy as two slots that resolve to the same C
+ # global and fire a spurious type-mismatch error.
       gname = resolve_gvar_alias(@nd_name[nid])
       if gname != "$stderr" && gname != "$stdout" && gname != "$?"
         gt = infer_type(@nd_expression[nid])
@@ -13764,7 +13764,7 @@ class Compiler
           @gvar_names.push(gname)
           @gvar_types.push(gt)
         else
-          # Check type consistency
+ # Check type consistency
           gi = 0
           while gi < @gvar_names.length
             if @gvar_names[gi] == gname
@@ -13779,8 +13779,8 @@ class Compiler
       end
     end
     if t == "GlobalVariableReadNode"
-      # Same alias resolution as the write side -- $copy reads must
-      # land on $orig's slot.
+ # Same alias resolution as the write side -- $copy reads must
+ # land on $orig's slot.
       gname = resolve_gvar_alias(@nd_name[nid])
       if gname != "$stderr" && gname != "$stdout" && gname != "$?"
         if not_in(gname, @gvar_names) == 1
@@ -13791,7 +13791,7 @@ class Compiler
     end
     if t == "CallNode"
       mname = @nd_name[nid]
-      # String methods that always need string helpers
+ # String methods that always need string helpers
       if mname == "to_s" || mname == "upcase" || mname == "downcase" ||
          mname == "strip" || mname == "chomp" || mname == "chop" || mname == "slice" ||
          mname == "include?" || mname == "start_with?" || mname == "end_with?" ||
@@ -13809,24 +13809,24 @@ class Compiler
       end
       if mname == "to_sym" || mname == "intern"
         if @nd_receiver[nid] >= 0
-          # Fire for poly receivers and not-yet-typed locals
-          # (default `int` from LocalVariableReadNode against an
-          # empty scope) too, not just statically-known strings.
-          # scan_features runs once on @root_id before the
-          # yield-arg-type fixpoint resolves block-param receivers,
-          # so a shape like `attrs.each { |k, v| row[k.to_sym] = v
-          # }` would otherwise miss the flag while
-          # compile_int_method_expr still emits `sp_sym_intern(...)`
-          # — leaving a linker error against a missing definition.
+ # Fire for poly receivers and not-yet-typed locals
+ # (default `int` from LocalVariableReadNode against an
+ # empty scope) too, not just statically-known strings.
+ # scan_features runs once on @root_id before the
+ # yield-arg-type fixpoint resolves block-param receivers,
+ # so a shape like `attrs.each { |k, v| row[k.to_sym] = v
+ # }` would otherwise miss the flag while
+ # compile_int_method_expr still emits `sp_sym_intern(...)`
+ # — leaving a linker error against a missing definition.
           rt = infer_type(@nd_receiver[nid])
           if rt == "string" || rt == "poly" || rt == "int"
             @needs_sym_intern = 1
           end
         end
       end
-      # `:foo.upcase` / `:foo.downcase` lower to sp_str_upcase /
-      # sp_str_downcase on the symbol's name string and re-intern via
-      # sp_sym_intern. Mark the dynamic-pool path so it gets emitted.
+ # `:foo.upcase` / `:foo.downcase` lower to sp_str_upcase /
+ # sp_str_downcase on the symbol's name string and re-intern via
+ # sp_sym_intern. Mark the dynamic-pool path so it gets emitted.
       if mname == "upcase" || mname == "downcase"
         if @nd_receiver[nid] >= 0
           if infer_type(@nd_receiver[nid]) == "symbol"
@@ -13834,21 +13834,21 @@ class Compiler
           end
         end
       end
-      # `sym_array.tally` returns a sym_int_hash. The runtime helper
-      # sp_SymArray_tally lives next to the sp_SymIntHash typedef which
-      # is gated on @needs_sym_int_hash, so flag the dependency.
+ # `sym_array.tally` returns a sym_int_hash. The runtime helper
+ # sp_SymArray_tally lives next to the sp_SymIntHash typedef which
+ # is gated on @needs_sym_int_hash, so flag the dependency.
       if mname == "tally"
         if @nd_receiver[nid] >= 0 && infer_type(@nd_receiver[nid]) == "sym_array"
           @needs_sym_int_hash = 1
         end
       end
-      # Methods that need string helpers only when receiver is string
+ # Methods that need string helpers only when receiver is string
       if mname == "+" || mname == "*" || mname == "reverse"
         if @nd_receiver[nid] >= 0
           rt = infer_type(@nd_receiver[nid])
           if rt == "string"
-            # Long string concat chains emit SP_GC_ROOT temps, so the
-            # enclosing function needs SP_GC_SAVE() in its header.
+ # Long string concat chains emit SP_GC_ROOT temps, so the
+ # enclosing function needs SP_GC_SAVE() in its header.
             if mname == "+"
               @needs_gc = 1
             end
@@ -13862,7 +13862,7 @@ class Compiler
             @needs_gc = 1
             rn = @nd_name[@nd_receiver[nid]]
             if rn == "Array"
-              # Check fill value type for Array.new(n, val)
+ # Check fill value type for Array.new(n, val)
               args_id2 = @nd_arguments[nid]
               if args_id2 >= 0
                 aargs2 = get_args(args_id2)
@@ -13955,9 +13955,9 @@ class Compiler
       if mname == "system"
         @needs_system = 1
       end
-      # Hash variants are emitted on-demand. A multi-key dig step
-      # references every variant of the key family (poly + typed),
-      # so flag them all — otherwise the generated C fails to link.
+ # Hash variants are emitted on-demand. A multi-key dig step
+ # references every variant of the key family (poly + typed),
+ # so flag them all — otherwise the generated C fails to link.
       if mname == "dig"
         if @nd_receiver[nid] >= 0
           drt = infer_type(@nd_receiver[nid])
@@ -14021,24 +14021,24 @@ class Compiler
         end
       end
     end
-    # Recurse
+ # Recurse
     scan_features_children(nid)
   end
 
-  # Push every child node id of `nid` into `acc`. Centralizes the
-  # AST slot-by-slot recursion that ~10 different scan/collect passes
-  # (scan_features_children, scan_writer_calls, body_has_yield,
-  # body_max_yield_arity, ieval_walk, collect_constructed_class_names,
-  # subtree_has_setter_on_params, subtree_has_ivar_write, …) used to
-  # open-code identically. Slot coverage matches the most-thorough
-  # walker (scan_features_children) — adding a new ref slot in alloc
-  # only requires updating this one helper.
-  #
-  # The accumulator-into-an-array shape is deliberate: callers iterate
-  # over the result with their own loop, which lets early-exit walkers
-  # (`body_has_yield`) bail mid-iteration cleanly. A yielding
-  # form would lock the call site into a yield-block-forwarding path
-  # and complicate dispatch unnecessarily.
+ # Push every child node id of `nid` into `acc`. Centralizes the
+ # AST slot-by-slot recursion that ~10 different scan/collect passes
+ # (scan_features_children, scan_writer_calls, body_has_yield,
+ # body_max_yield_arity, ieval_walk, collect_constructed_class_names,
+ # subtree_has_setter_on_params, subtree_has_ivar_write, …) used to
+ # open-code identically. Slot coverage matches the most-thorough
+ # walker (scan_features_children) — adding a new ref slot in alloc
+ # only requires updating this one helper.
+ #
+ # The accumulator-into-an-array shape is deliberate: callers iterate
+ # over the result with their own loop, which lets early-exit walkers
+ # (`body_has_yield`) bail mid-iteration cleanly. A yielding
+ # form would lock the call site into a yield-block-forwarding path
+ # and complicate dispatch unnecessarily.
   def push_child_ids(nid, acc)
     if @nd_body[nid] >= 0
       acc.push(@nd_body[nid])
@@ -14181,11 +14181,11 @@ class Compiler
     end
   end
 
-  # ---- Code generation ----
+ # ---- Code generation ----
   def infer_main_call_types
-    # Scan main-level code for function calls and infer param types from arguments
+ # Scan main-level code for function calls and infer param types from arguments
     stmts = get_body_stmts(@root_id)
-    # First, figure out main local types
+ # First, figure out main local types
     push_scope
     lnames = "".split(",")
     ltypes = "".split(",")
@@ -14204,22 +14204,22 @@ class Compiler
       declare_var(lnames[k], ltypes[k])
       k = k + 1
     end
-    # Now scan call sites to update param types
+ # Now scan call sites to update param types
     scan_new_calls(@root_id)
     pop_scope
   end
 
-  # Like infer_type but resolves default "int" from unresolved ivar accessors
+ # Like infer_type but resolves default "int" from unresolved ivar accessors
   def infer_type_deep(nid)
     at = infer_type(nid)
     if at == "int" && @nd_type[nid] == "CallNode"
       recv = @nd_receiver[nid]
       if recv >= 0
         rt = infer_type(recv)
-        # If receiver type is default "int" from an unscoped parameter, try to resolve
+ # If receiver type is default "int" from an unscoped parameter, try to resolve
         if rt == "int" && @nd_type[recv] == "LocalVariableReadNode"
           vn = @nd_name[recv]
-          # Check if it's a method parameter with a known type
+ # Check if it's a method parameter with a known type
           mi = 0
           while mi < @meth_names.length
             pnames = @meth_param_names[mi].split(",")
@@ -14246,7 +14246,7 @@ class Compiler
             rk = 0
             while rk < readers.length
               if readers[rk] == mname
-                # Resolve ivar type from initialize body
+ # Resolve ivar type from initialize body
                 ivt = resolve_ivar_from_init(ci, "@" + mname)
                 if ivt != "" && ivt != "int"
                   return ivt
@@ -14261,14 +14261,14 @@ class Compiler
     at
   end
 
-  # Resolve an ivar's type by scanning the initialize method body
+ # Resolve an ivar's type by scanning the initialize method body
   def resolve_ivar_from_init(ci, iname)
-    # Check if already resolved
+ # Check if already resolved
     ivt = cls_ivar_type(ci, iname)
     if ivt != "int"
       return ivt
     end
-    # Scan initialize body for @ivar = param assignments
+ # Scan initialize body for @ivar = param assignments
     bj = cls_find_method_direct(ci, "initialize")
     if bj >= 0
       bodies = @cls_meth_bodies[ci].split(";")
@@ -14308,7 +14308,7 @@ class Compiler
         end
       end
     end
-    # Recurse
+ # Recurse
     if @nd_body[nid] >= 0
       resolve_ivar_from_body(ci, @nd_body[nid], iname, pnames, ptypes)
     end
@@ -14321,7 +14321,7 @@ class Compiler
   end
 
   def detect_poly_params
-    # Scan all call sites to detect functions called with different param types
+ # Scan all call sites to detect functions called with different param types
     stmts = get_body_stmts(@root_id)
     i = 0
     while i < stmts.length
@@ -14349,30 +14349,30 @@ class Compiler
               at = infer_type_deep(arg_ids[k])
               if k < ptypes.length
                 ct = ptypes[k]
-                # Skip explicit rest params; normal int_array params still
-                # participate in call-site type checks.
+ # Skip explicit rest params; normal int_array params still
+ # participate in call-site type checks.
                 if k == rest_param_idx
                   k = k + 1
                   next
                 end
-                # An empty `[]` literal at the call site is
-                # compatible with any concrete typed-array param.
-                # Skip the ct != at mismatch check so `foo([])`
-                # against a body-promoted `str_array` param
-                # doesn't bump the param back to poly.
+ # An empty `[]` literal at the call site is
+ # compatible with any concrete typed-array param.
+ # Skip the ct != at mismatch check so `foo([])`
+ # against a body-promoted `str_array` param
+ # doesn't bump the param back to poly.
                 if is_empty_array_literal(arg_ids[k]) == 1
                   if ct == "str_array" || ct == "float_array" || ct == "sym_array" || is_ptr_array_type(ct) == 1
                     k = k + 1
                     next
                   end
                 end
-                # Issue #397: an empty `{}` literal at the call site is
-                # compatible with any concrete hash variant the body
-                # widened the param to. Without this, the body-widened
-                # `ct` and the call-site `at` (still `str_int_hash` from
-                # the empty-hash default) disagree and detect_poly_params
-                # folds the param back to poly, and the call site ends
-                # up boxing the hash through poly dispatch.
+ # an empty `{}` literal at the call site is
+ # compatible with any concrete hash variant the body
+ # widened the param to. Without this, the body-widened
+ # `ct` and the call-site `at` (still `str_int_hash` from
+ # the empty-hash default) disagree and detect_poly_params
+ # folds the param back to poly, and the call site ends
+ # up boxing the hash through poly dispatch.
                 if is_empty_hash_literal(arg_ids[k]) == 1
                   if is_hash_type(ct) == 1
                     k = k + 1
@@ -14381,40 +14381,40 @@ class Compiler
                 end
                 if ct != at
                   if ct != "poly"
-                    # Only mark as poly if both types are meaningful
-                    # (not just default "int" vs actual type)
+ # Only mark as poly if both types are meaningful
+ # (not just default "int" vs actual type)
                     if ct == "int"
-                      # First real type seen - update, don't mark poly
+ # First real type seen - update, don't mark poly
                       ptypes[k] = at
                     else
                       if at == "int"
-                        # Check if arg is a literal int (genuine int value)
+ # Check if arg is a literal int (genuine int value)
                         if k < arg_ids.length
                           if @nd_type[arg_ids[k]] == "IntegerNode"
                             ptypes[k] = "poly"
                             @needs_rb_value = 1
                           end
                         end
-                        # otherwise arg is int variable, param already has a type - keep it
+ # otherwise arg is int variable, param already has a type - keep it
                       else
-                        # Check nullable compatibility: T and T? are compatible
+ # Check nullable compatibility: T and T? are compatible
                         if base_type(ct) == base_type(at)
-                          # Same base type — use nullable version
+ # Same base type — use nullable version
                           if is_nullable_type(at) == 1
                             ptypes[k] = at
                           elsif is_nullable_type(ct) == 0 && is_nullable_pointer_type(ct) == 1
                             ptypes[k] = ct + "?"
                           end
                         elsif at == "nil" && is_nullable_pointer_type(ct) == 1
-                          # nil + T → T?
+ # nil + T → T?
                           if is_nullable_type(ct) == 0
                             ptypes[k] = ct + "?"
                           end
                         elsif ct == "nil" && is_nullable_pointer_type(at) == 1
-                          # T + nil (ct was nil, at is T) → T?
+ # T + nil (ct was nil, at is T) → T?
                           ptypes[k] = at + "?"
                         else
-                          # Genuinely different types - mark poly
+ # Genuinely different types - mark poly
                           ptypes[k] = "poly"
                           @needs_rb_value = 1
                         end
@@ -14430,7 +14430,7 @@ class Compiler
         end
       end
     end
-    # Recurse
+ # Recurse
     if @nd_body[nid] >= 0
       detect_poly_in_node(@nd_body[nid])
     end
@@ -14473,7 +14473,7 @@ class Compiler
   end
 
   def detect_poly_locals
-    # Detect local variables assigned different types in main scope
+ # Detect local variables assigned different types in main scope
     stmts = get_body_stmts(@root_id)
     local_types = "".split(",")
     local_names = "".split(",")
@@ -14506,12 +14506,12 @@ class Compiler
           old = types[idx]
           if old != "poly"
             if at == "nil" && is_nullable_pointer_type(old) == 1
-              # T + nil → T? (nullable)
+ # T + nil → T? (nullable)
               if old[old.length - 1] != "?"
                 types[idx] = old + "?"
               end
             elsif old == "nil" && is_nullable_pointer_type(at) == 1
-              # nil + T → T? (nullable)
+ # nil + T → T? (nullable)
               types[idx] = at + "?"
             else
               types[idx] = "poly"
@@ -14524,7 +14524,7 @@ class Compiler
         types.push(at)
       end
     end
-    # Recurse
+ # Recurse
     if @nd_body[nid] >= 0
       scan_poly_assigns(@nd_body[nid], names, types)
     end
@@ -14546,20 +14546,20 @@ class Compiler
   end
 
   def infer_function_body_call_types
-    # Scan each top-level method body for calls to other functions
-    # and infer param types from local variable types in those bodies
+ # Scan each top-level method body for calls to other functions
+ # and infer param types from local variable types in those bodies
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        # Build local scope for this function
+ # Build local scope for this function
         push_scope
-        # Pin @current_method_name so current_lexical_scope_name's
-        # `<Mod>_cls_<m>` peel resolves bare class refs in the
-        # body. Without this, `Inner.new(x)` inside `M.make`
-        # would find_class_idx("Inner") (returning -1; the class
-        # is registered as `M_Inner`) and skip param widening —
-        # leaving the inner class's initialize ptypes un-widened.
+ # Pin @current_method_name so current_lexical_scope_name's
+ # `<Mod>_cls_<m>` peel resolves bare class refs in the
+ # body. Without this, `Inner.new(x)` inside `M.make`
+ # would find_class_idx("Inner") (returning -1; the class
+ # is registered as `M_Inner`) and skip param widening —
+ # leaving the inner class's initialize ptypes un-widened.
         saved_method_name = @current_method_name
         @current_method_name = @meth_names[mi]
         pnames = @meth_param_names[mi].split(",")
@@ -14571,7 +14571,7 @@ class Compiler
           end
           pk = pk + 1
         end
-        # Scan locals in the body
+ # Scan locals in the body
         lnames = "".split(",")
         ltypes = "".split(",")
         scan_locals(bid, lnames, ltypes, pnames)
@@ -14580,7 +14580,7 @@ class Compiler
           declare_var(lnames[lk], ltypes[lk])
           lk = lk + 1
         end
-        # Now scan for calls within this function body
+ # Now scan for calls within this function body
         scan_new_calls(bid)
         @current_method_name = saved_method_name
         pop_scope
@@ -14590,7 +14590,7 @@ class Compiler
   end
 
   def scan_locals_first_type(nid, names, types, params)
-    # Like scan_locals but never marks poly - just keeps first type seen
+ # Like scan_locals but never marks poly - just keeps first type seen
     if nid < 0
       return
     end
@@ -14653,10 +14653,10 @@ class Compiler
           if not_in(lname, names) == 1
             if not_in(lname, params) == 1
               names.push(lname)
-              # For an ArrayNode literal RHS we know each right's actual
-              # element index; use it so heterogeneous literals like
-              # [1, "x", 2.0] type each target precisely. Other RHS
-              # shapes use index 0 (typed-array element type is uniform).
+ # For an ArrayNode literal RHS we know each right's actual
+ # element index; use it so heterogeneous literals like
+ # [1, "x", 2.0] type each target precisely. Other RHS
+ # shapes use index 0 (typed-array element type is uniform).
               t_idx = 0
               if r_total > 0
                 t_idx = r_total - rights2.length + r_idx
@@ -14671,7 +14671,7 @@ class Compiler
         r_idx = r_idx + 1
       }
     end
-    # Recurse
+ # Recurse
     if @nd_body[nid] >= 0
       scan_locals_first_type(@nd_body[nid], names, types, params)
     end
@@ -14723,15 +14723,15 @@ class Compiler
   end
 
   def infer_class_body_call_types
-    # Scan class method bodies for calls to other methods in the same class.
-    # Update called method param types from argument types at call sites.
-    # Run multiple passes for propagation.
+ # Scan class method bodies for calls to other methods in the same class.
+ # Update called method param types from argument types at call sites.
+ # Run multiple passes for propagation.
     pass = 0
-    # Stop this local propagation loop once the class-body call type tables
-    # stop changing; later passes would rescan the same bodies without
-    # teaching any callee a new argument type. Keep the previous pass's
-    # signature instead of recomputing it at the top of every pass, because
-    # the prior `cur_sig` is exactly the next pass's `prev_sig`.
+ # Stop this local propagation loop once the class-body call type tables
+ # stop changing; later passes would rescan the same bodies without
+ # teaching any callee a new argument type. Keep the previous pass's
+ # signature instead of recomputing it at the top of every pass, because
+ # the prior `cur_sig` is exactly the next pass's `prev_sig`.
     prev_sig = class_body_call_type_signature
     while pass < 5
       ci = 0
@@ -14747,7 +14747,7 @@ class Compiler
           if bid >= 0
             @current_class_idx = ci
             push_scope
-            # Declare params in scope with current types
+ # Declare params in scope with current types
             pnames_arr = cls_meth_pnames_get(ci, mi)
             ptypes_arr = cls_meth_ptypes_get(ci, mi)
             pk = 0
@@ -14761,7 +14761,7 @@ class Compiler
               end
               pk = pk + 1
             end
-            # Scan locals using first-type-only (no poly marking)
+ # Scan locals using first-type-only (no poly marking)
             lnames = "".split(",")
             ltypes = "".split(",")
             scan_locals_first_type(bid, lnames, ltypes, pnames_arr)
@@ -14770,7 +14770,7 @@ class Compiler
               declare_var(lnames[lk], ltypes[lk])
               lk = lk + 1
             end
-            # Second pass: rescan with locals now in scope for better inference
+ # Second pass: rescan with locals now in scope for better inference
             lnames2 = "".split(",")
             ltypes2 = "".split(",")
             scan_locals_first_type(bid, lnames2, ltypes2, pnames_arr)
@@ -14781,19 +14781,19 @@ class Compiler
               end
               lk2 = lk2 + 1
             end
-            # Scan for calls to other methods in same class
+ # Scan for calls to other methods in same class
             scan_cls_method_calls(ci, bid)
-            # Also scan for constructor calls to infer param types
+ # Also scan for constructor calls to infer param types
             scan_new_calls(bid)
             pop_scope
             @current_class_idx = -1
           end
           mi = mi + 1
         end
-        # Also iterate this class's class methods (def self.<m>)
-        # so a `params.fetch(:k, "")` call inside a `def
-        # self.from_raw` widens P.fetch's default param via the
-        # receiver-method unify path inside scan_new_calls.
+ # Also iterate this class's class methods (def self.<m>)
+ # so a `params.fetch(:k, "")` call inside a `def
+ # self.from_raw` widens P.fetch's default param via the
+ # receiver-method unify path inside scan_new_calls.
         cm_names = @cls_cmeth_names[ci].split(";")
         cm_bodies = @cls_cmeth_bodies[ci].split(";")
         cm_params = @cls_cmeth_params[ci].split("|")
@@ -14858,9 +14858,9 @@ class Compiler
     if nid < 0
       return
     end
-    # Apply the same is_a? narrow that scan_new_calls uses, so a
-    # self call inside the then-arm sees the narrowed receiver
-    # type.
+ # Apply the same is_a? narrow that scan_new_calls uses, so a
+ # self call inside the then-arm sees the narrowed receiver
+ # type.
     if @nd_type[nid] == "IfNode"
       pred = @nd_predicate[nid]
       if pred >= 0
@@ -14891,19 +14891,19 @@ class Compiler
     end
     if @nd_type[nid] == "CallNode"
       mname = @nd_name[nid]
-      # Handle implicit self calls (no receiver) to same-class methods
+ # Handle implicit self calls (no receiver) to same-class methods
       if @nd_receiver[nid] < 0
         midx = cls_find_method_direct(ci, mname)
         if midx >= 0
           args_id = @nd_arguments[nid]
           if args_id >= 0
             arg_ids = get_args(args_id)
-            # Unify rather than only-widen-from-int. A no-recv
-            # self-call inside the same class is the path that
-            # e.g. `def boot; add_mappings(0x..0x, ...); end`
-            # inside CPU#boot lands on; disagreeing arg types
-            # from different self-calls need to widen to poly
-            # rather than freezing on the first non-int call site.
+ # Unify rather than only-widen-from-int. A no-recv
+ # self-call inside the same class is the path that
+ # e.g. `def boot; add_mappings(0x..0x, ...); end`
+ # inside CPU#boot lands on; disagreeing arg types
+ # from different self-calls need to widen to poly
+ # rather than freezing on the first non-int call site.
             ptypes = cls_meth_ptypes_get(ci, midx)
             if ptypes.length > 0
               pnames = cls_meth_pnames_get(ci, midx)
@@ -14914,7 +14914,7 @@ class Compiler
         end
       end
     end
-    # Recurse into children
+ # Recurse into children
     if @nd_body[nid] >= 0
       scan_cls_method_calls(ci, @nd_body[nid])
     end
@@ -14982,7 +14982,7 @@ class Compiler
       k = 0
       while k < names.length
         if k < types.length && (types[k] == "nil" || types[k] == "poly")
-          # Check if this ivar has an attr_writer
+ # Check if this ivar has an attr_writer
           ibase = names[k]
           if ibase.length > 1 && ibase[0] == "@"
             ibase = ibase[1, ibase.length - 1]
@@ -15006,31 +15006,31 @@ class Compiler
     end
   end
 
-  # Build a string fingerprint of the arrays that iterative type inference
-  # refines. Identical fingerprints between successive iterations means a
-  # fixed point has been reached and further iterations are wasted work.
+ # Build a string fingerprint of the arrays that iterative type inference
+ # refines. Identical fingerprints between successive iterations means a
+ # fixed point has been reached and further iterations are wasted work.
   def inference_signature
     @meth_return_types.join("|") + "/" + @cls_ivar_types.join("|") + "/" + @meth_param_types.join("|") + "/" + @cls_meth_ptypes.join("/")
   end
 
-  # `inference_signature` covers the wider analyze-phase fixpoint, including
-  # return and ivar types that `infer_class_body_call_types` does not refine
-  # directly. This narrower fingerprint tracks only the param-type tables that
-  # can affect the next class-body call pass, so an unrelated wider signature
-  # change does not force this local loop to spend all five passes.
+ # `inference_signature` covers the wider analyze-phase fixpoint, including
+ # return and ivar types that `infer_class_body_call_types` does not refine
+ # directly. This narrower fingerprint tracks only the param-type tables that
+ # can affect the next class-body call pass, so an unrelated wider signature
+ # change does not force this local loop to spend all five passes.
   def class_body_call_type_signature
     @meth_param_types.join("|") + "/" + @cls_meth_ptypes.join("/") + "/" + @cls_cmeth_ptypes.join("/")
   end
 
 
-  # End-to-end whole-program analysis. Splits cleanly out of `compile`
-  # so the same work can be invoked once and its results serialized
-  # into an IR file, then loaded by a separate codegen step that runs
-  # only `generate_code`. Everything that mutates analysis-derived
-  # state (the iterative type-inference fixpoint, `detect_features`,
-  # `detect_value_types`, `recalc_needs_gc`, sym/toplevel-ivar
-  # collection, live-method computation) belongs here so codegen can
-  # treat its inputs as read-only.
+ # End-to-end whole-program analysis. Splits cleanly out of `compile`
+ # so the same work can be invoked once and its results serialized
+ # into an IR file, then loaded by a separate codegen step that runs
+ # only `generate_code`. Everything that mutates analysis-derived
+ # state (the iterative type-inference fixpoint, `detect_features`,
+ # `detect_value_types`, `recalc_needs_gc`, sym/toplevel-ivar
+ # collection, live-method computation) belongs here so codegen can
+ # treat its inputs as read-only.
   def analyze_phase
     collect_all
     infer_main_call_types
@@ -15038,8 +15038,8 @@ class Compiler
     infer_class_body_call_types
     infer_ieval_body_call_types
     detect_poly_locals
-    # Iterative type inference: converge param types, return types, ivar types.
-    # Stop early when the signature of these three arrays stops changing.
+ # Iterative type inference: converge param types, return types, ivar types.
+ # Stop early when the signature of these three arrays stops changing.
     iter = 0
     prev_sig = inference_signature
     while iter < 4
@@ -15050,12 +15050,12 @@ class Compiler
       infer_param_array_type_from_body
       narrow_param_types_from_body_method_calls
       narrow_param_hash_types_from_body_writes
-      # Issue #424: propagate hash-each block-arg types into
-      # nested cmeth/method-call param widening. Runs inside
-      # the iterative loop so a later iteration of
-      # narrow_param_hash_types_from_body_writes (which may
-      # pin the enclosing param to a more specific hash variant)
-      # gets its k/v types fed downstream too.
+ # propagate hash-each block-arg types into
+ # nested cmeth/method-call param widening. Runs inside
+ # the iterative loop so a later iteration of
+ # narrow_param_hash_types_from_body_writes (which may
+ # pin the enclosing param to a more specific hash variant)
+ # gets its k/v types fed downstream too.
       widen_cmeths_via_hash_each_blocks
       detect_poly_params
       cur_sig = inference_signature
@@ -15065,39 +15065,39 @@ class Compiler
       prev_sig = cur_sig
       iter = iter + 1
     end
-    # Fix nil/poly-typed ivars with attr_writer to nullable self type
-    # e.g. @left = nil in Node with attr_accessor :left → obj_Node?
-    # Must run after iterative loop to override poly from type conflicts
+ # Fix nil/poly-typed ivars with attr_writer to nullable self type
+ # e.g. @left = nil in Node with attr_accessor :left → obj_Node?
+ # Must run after iterative loop to override poly from type conflicts
     fix_nil_ivar_self_refs
-    # Re-run returns with corrected ivar types
+ # Re-run returns with corrected ivar types
     infer_all_returns
     infer_function_body_call_types
     infer_class_body_call_types
     infer_ivar_types_from_writers
     infer_all_returns
-    # Param types are now stable, so module ivar refinement (which
-    # infers hash / array specialization from `@h[k] = v` writes in
-    # class-method bodies) sees the right key / value types instead
-    # of the placeholder "int" they'd carry at module-collect time.
-    # After refining, re-run return / call-type inference so methods
-    # that read or push the refined const see the new shape (e.g. a
-    # `def self.add(s); @items << s; end` whose return is now
-    # `sp_StrArray *` rather than the placeholder `sp_IntArray *`).
+ # Param types are now stable, so module ivar refinement (which
+ # infers hash / array specialization from `@h[k] = v` writes in
+ # class-method bodies) sees the right key / value types instead
+ # of the placeholder "int" they'd carry at module-collect time.
+ # After refining, re-run return / call-type inference so methods
+ # that read or push the refined const see the new shape (e.g. a
+ # `def self.add(s); @items << s; end` whose return is now
+ # `sp_StrArray *` rather than the placeholder `sp_IntArray *`).
     refine_all_module_ivar_types
     infer_all_returns
     infer_function_body_call_types
     infer_class_body_call_types
     infer_all_returns
-    # Fix lambda return types based on call-site usage
+ # Fix lambda return types based on call-site usage
     fix_lambda_return_types
-    # Pre-detect bigint variables before feature detection
+ # Pre-detect bigint variables before feature detection
     pre_detect_bigint
     detect_features
-    # The remaining state-mutating steps used to live at the top of
-    # `generate_code`. Moving them into the analysis phase means a
-    # later codegen step can rely on @cls_is_value_type, @needs_gc,
-    # @sym_names, @toplevel_ivar_*, and @cls_cmeth_live being already
-    # populated.
+ # The remaining state-mutating steps used to live at the top of
+ # `generate_code`. Moving them into the analysis phase means a
+ # later codegen step can rely on @cls_is_value_type, @needs_gc,
+ # @sym_names, @toplevel_ivar_*, and @cls_cmeth_live being already
+ # populated.
     detect_value_types
     recalc_needs_gc
     collect_sym_names
@@ -15110,15 +15110,15 @@ class Compiler
   end
 
 
-  # ============================================================
-  # Emission
-  # ============================================================
-  #
-  # End of pre-emission analysis. From here down, the codegen
-  # consumes the tables built above and writes C: header, runtime
-  # blocks, struct/forward decls, class methods, top-level methods,
-  # main(). emit_header is the entry point; generate_code (above)
-  # orchestrates the order.
+ # ============================================================
+ # Emission
+ # ============================================================
+ #
+ # End of pre-emission analysis. From here down, the codegen
+ # consumes the tables built above and writes C: header, runtime
+ # blocks, struct/forward decls, class methods, top-level methods,
+ # main(). emit_header is the entry point; generate_code (above)
+ # orchestrates the order.
 
   def pre_detect_bigint
     stmts = get_body_stmts(@root_id)
@@ -15131,21 +15131,21 @@ class Compiler
     end
   end
 
-  # Detect variables that need bigint promotion
-  # Pattern: x = x * y (or x *= y) inside a while loop
+ # Detect variables that need bigint promotion
+ # Pattern: x = x * y (or x *= y) inside a while loop
 
   def scan_bigint_candidates(nid, bigint_names)
     if nid < 0
       return
     end
-    # x *= y inside while — candidate
+ # x *= y inside while — candidate
     if @nd_type[nid] == "WhileNode"
       body = @nd_body[nid]
       if body >= 0
         scan_bigint_in_loop(body, bigint_names)
       end
     end
-    # Recurse
+ # Recurse
     if @nd_body[nid] >= 0
       scan_bigint_candidates(@nd_body[nid], bigint_names)
     end
@@ -15157,8 +15157,8 @@ class Compiler
     end
   end
 
-  # Scan loop for simple assignments (x = y) and store as delimited string
-  # Format: "dest1:src1,dest2:src2,..."
+ # Scan loop for simple assignments (x = y) and store as delimited string
+ # Format: "dest1:src1,dest2:src2,..."
   def scan_loop_assigns(nid)
     if nid < 0
       return
@@ -15183,8 +15183,8 @@ class Compiler
     end
   end
 
-  # Check if var_name can reach target_name via assignment chains
-  # Assignment map is stored in @bi_assigns as "dest:src,dest:src,..."
+ # Check if var_name can reach target_name via assignment chains
+ # Assignment map is stored in @bi_assigns as "dest:src,dest:src,..."
   def bi_reaches(var_name, target_name, depth)
     if var_name == target_name
       return 1
@@ -15192,7 +15192,7 @@ class Compiler
     if depth > 10
       return 0
     end
-    # Search for assignments where src == var_name
+ # Search for assignments where src == var_name
     pairs = @bi_assigns.split(",")
     i = 0
     while i < pairs.length
@@ -15209,9 +15209,9 @@ class Compiler
     return 0
   end
 
-  # Check if addition x = a + b has fibonacci-like growth (both operands
-  # are variables that reach x via the assignment chain). Rejects i = i + 1
-  # where one side is a constant.
+ # Check if addition x = a + b has fibonacci-like growth (both operands
+ # are variables that reach x via the assignment chain). Rejects i = i + 1
+ # where one side is a constant.
   def add_is_unbounded(lname, expr)
     recv = @nd_receiver[expr]
     left_reaches = 0
@@ -15230,14 +15230,14 @@ class Compiler
         end
       end
     end
-    # Both sides must be reachable (fibonacci: c = a + b, a ← b, b ← c)
+ # Both sides must be reachable (fibonacci: c = a + b, a ← b, b ← c)
     if left_reaches == 1 && right_reaches == 1
       return 1
     end
     0
   end
 
-  # Check if binary op x = a OP b has unbounded growth (self-referential via assigns)
+ # Check if binary op x = a OP b has unbounded growth (self-referential via assigns)
   def op_is_unbounded(lname, expr)
     recv = @nd_receiver[expr]
     if recv >= 0 && @nd_type[recv] == "LocalVariableReadNode"
@@ -15275,9 +15275,9 @@ class Compiler
             end
           end
         end
-        # For +, only promote when BOTH operands are variables that
-        # reach lname (fibonacci pattern: c = a + b where a,b grow).
-        # Reject i = i + 1 (constant RHS → linear, fits int64).
+ # For +, only promote when BOTH operands are variables that
+ # reach lname (fibonacci pattern: c = a + b where a,b grow).
+ # Reject i = i + 1 (constant RHS → linear, fits int64).
         if op == "+"
           if add_is_unbounded(lname, expr) == 1
             if not_in(lname, bigint_names) == 1
@@ -15295,8 +15295,8 @@ class Compiler
           bigint_names.push(lname)
         end
       end
-      # += is only unbounded if self-referential with another growing var
-      # (not detected here since OpWriteNode is always x += expr)
+ # += is only unbounded if self-referential with another growing var
+ # (not detected here since OpWriteNode is always x += expr)
     end
     if @nd_body[nid] >= 0
       scan_bigint_in_loop_node((@nd_body[nid]), bigint_names)
@@ -15313,18 +15313,18 @@ class Compiler
   end
 
   def scan_bigint_in_loop(nid, bigint_names)
-    # First pass: collect all simple assignments as delimited string
+ # First pass: collect all simple assignments as delimited string
     @bi_assigns = ""
     scan_loop_assigns(nid)
-    # Second pass: find multiplications and check if they're unbounded
+ # Second pass: find multiplications and check if they're unbounded
     scan_bigint_in_loop_node(nid, bigint_names)
   end
 
-  # Bigint promotion helpers — moved here from codegen.rb so the
-  # cache-fill pass (refine_locals_multi_pass_full) can run identical
-  # promotion logic before walk_and_cache visits the body. Keeping
-  # them here also means codegen no longer needs them once it stops
-  # doing its own scope refinement.
+ # Bigint promotion helpers — moved here from codegen.rb so the
+ # cache-fill pass (refine_locals_multi_pass_full) can run identical
+ # promotion logic before walk_and_cache visits the body. Keeping
+ # them here also means codegen no longer needs them once it stops
+ # doing its own scope refinement.
   def detect_bigint_vars(stmts, names, types)
     bigint_names = "".split(",")
     stmts.each { |sid|
@@ -15447,17 +15447,17 @@ class Compiler
 
 
 
-  # Symbol-keyed hash with integer values. Keys are sp_sym (mrb_int);
-  # the empty-slot sentinel is -1 (= invalid sp_sym, same as default).
+ # Symbol-keyed hash with integer values. Keys are sp_sym (mrb_int);
+ # the empty-slot sentinel is -1 (= invalid sp_sym, same as default).
 
-  # Symbol-keyed hash with string values.
+ # Symbol-keyed hash with string values.
 
-  # Symbol type Phase 2, Step 1: collect all SymbolNode content strings
-  # into @sym_names as a separate pass (dedup, stable order).
+ # Symbol type Phase 2, Step 1: collect all SymbolNode content strings
+ # into @sym_names as a separate pass (dedup, stable order).
   def collect_sym_names
-    # Build into a local array and assign at the end.
-    # (Pushing directly to @sym_names in this loop triggers a
-    # self-host codegen regression — see HANDOFF notes.)
+ # Build into a local array and assign at the end.
+ # (Pushing directly to @sym_names in this loop triggers a
+ # self-host codegen regression — see HANDOFF notes.)
     local = "".split(",")
     i = 0
     while i < @nd_type.length
@@ -15468,8 +15468,8 @@ class Compiler
           local.push(sname)
         end
       end
-      # Also collect "literal".to_sym / .intern receivers so the
-      # static-intern optimization can resolve them to SPS_ constants.
+ # Also collect "literal".to_sym / .intern receivers so the
+ # static-intern optimization can resolve them to SPS_ constants.
       if t == "CallNode"
         mn = @nd_name[i]
         if mn == "to_sym" || mn == "intern"
@@ -15487,10 +15487,10 @@ class Compiler
     @sym_names = local
   end
 
-  # Symbol type Phase 2, Step 2: emit the intern table and helpers.
-  # SymbolNode now compiles to sp_sym values that index into sp_sym_names.
+ # Symbol type Phase 2, Step 2: emit the intern table and helpers.
+ # SymbolNode now compiles to sp_sym values that index into sp_sym_names.
 
-  # Index of symbol name in @sym_names, or -1 if not found.
+ # Index of symbol name in @sym_names, or -1 if not found.
   def sym_name_index(name)
     i = 0
     while i < @sym_names.length
@@ -15502,18 +15502,18 @@ class Compiler
     -1
   end
 
-  # Compile an expression in a string-context. Wraps with sp_sym_to_s
-  # when the expression has type "symbol", otherwise returns the raw
-  # expression. Used at boundaries where Symbol values flow into APIs
-  # that still expect const char * (catch/throw tag, hash key, etc.).
+ # Compile an expression in a string-context. Wraps with sp_sym_to_s
+ # when the expression has type "symbol", otherwise returns the raw
+ # expression. Used at boundaries where Symbol values flow into APIs
+ # that still expect const char * (catch/throw tag, hash key, etc.).
 
-  # Compile a symbol literal (by name) to a sp_sym C expression.
-  # Prefers SPS_<name> for valid-C-identifier names, otherwise emits
-  # the raw integer cast.
+ # Compile a symbol literal (by name) to a sp_sym C expression.
+ # Prefers SPS_<name> for valid-C-identifier names, otherwise emits
+ # the raw integer cast.
   def compile_symbol_literal(name)
     idx = sym_name_index(name)
     if idx < 0
-      # Should not happen — collect_sym_names has already run.
+ # Should not happen — collect_sym_names has already run.
       return "sp_sym_intern(" + c_string_literal(name) + ")"
     end
     if sym_is_c_ident(name) == 1
@@ -15522,7 +15522,7 @@ class Compiler
     "((sp_sym)" + idx.to_s + ")"
   end
 
-  # True (1) iff s is a non-empty valid C identifier: [A-Za-z_][A-Za-z0-9_]*
+ # True (1) iff s is a non-empty valid C identifier: [A-Za-z_][A-Za-z0-9_]*
   def sym_is_c_ident(s)
     if s.length == 0
       return 0
@@ -15552,17 +15552,17 @@ class Compiler
   end
 
 
-  # Per-call-site cached helper for InterpolatedRegularExpressionNode.
-  # Each AST source location gets a `sp_re_dyn_<idx>(const char *new_pat)`
-  # function with its own function-scope statics for the cached pattern
-  # string and compiled engine pattern. On a cache hit (strcmp match) we
-  # return the existing pattern; on a miss we re_free the old one and
-  # recompile with the call-site's baked flags. This bounds heap to one
-  # `mrb_regexp_pattern` per call site (count fixed at AOT compile time)
-  # and matches Ruby's per-source-location dynamic-regexp cache. The old
-  # `sp_re_runtime_compile` leaked a fresh pattern every evaluation.
+ # Per-call-site cached helper for InterpolatedRegularExpressionNode.
+ # Each AST source location gets a `sp_re_dyn_<idx>(const char *new_pat)`
+ # function with its own function-scope statics for the cached pattern
+ # string and compiled engine pattern. On a cache hit (strcmp match) we
+ # return the existing pattern; on a miss we re_free the old one and
+ # recompile with the call-site's baked flags. This bounds heap to one
+ # `mrb_regexp_pattern` per call site (count fixed at AOT compile time)
+ # and matches Ruby's per-source-location dynamic-regexp cache. The old
+ # `sp_re_runtime_compile` leaked a fresh pattern every evaluation.
 
-  # ---- Struct emission ----
+ # ---- Struct emission ----
 
   def is_value_type_ivar(t)
     if t == "int" || t == "float" || t == "bool" || t == "string"
@@ -15581,10 +15581,10 @@ class Compiler
   end
 
 
-  # The C expression that should be used wherever bare `self`
-  # would normally appear (e.g. as the first arg to a same-class
-  # method dispatch). Defaults to `"self"`; default-arg inlining
-  # overrides it via `@self_override`.
+ # The C expression that should be used wherever bare `self`
+ # would normally appear (e.g. as the first arg to a same-class
+ # method dispatch). Defaults to `"self"`; default-arg inlining
+ # overrides it via `@self_override`.
 
   def subtree_has_ivar_write(nid)
     if nid < 0 || nid >= @nd_count
@@ -15607,17 +15607,17 @@ class Compiler
   end
 
   def is_simple_writer_method(mn, bid)
-    # Check if method is a simple attr_writer pattern: def x=(v); @x = v; end
-    # The RHS must be a bare reference to the parameter — `@x = v * 2`
-    # is NOT a simple writer and must not bypass dispatch.
+ # Check if method is a simple attr_writer pattern: def x=(v); @x = v; end
+ # The RHS must be a bare reference to the parameter — `@x = v * 2`
+ # is NOT a simple writer and must not bypass dispatch.
     if mn.length <= 1 || mn[mn.length - 1] != "="
       return 0
     end
     if bid < 0 || bid >= @nd_count
       return 0
     end
-    # Find the single InstanceVariableWriteNode body (directly or wrapped
-    # in a StatementsNode of length 1).
+ # Find the single InstanceVariableWriteNode body (directly or wrapped
+ # in a StatementsNode of length 1).
     t = @nd_type[bid]
     iv_id = -1
     if t == "InstanceVariableWriteNode"
@@ -15637,7 +15637,7 @@ class Compiler
     if iv_id < 0
       return 0
     end
-    # RHS must be a bare LocalVariableReadNode for the writer's single param.
+ # RHS must be a bare LocalVariableReadNode for the writer's single param.
     rhs = @nd_value[iv_id]
     if rhs < 0 || @nd_type[rhs] != "LocalVariableReadNode"
       return 0
@@ -15657,7 +15657,7 @@ class Compiler
     while mi < mnames.length
       mn = mnames[mi]
       if mn != "initialize"
-        # Skip registered attr_writers
+ # Skip registered attr_writers
         is_writer = 0
         bname = ""
         if mn.length > 1 && mn[mn.length - 1] == "="
@@ -15670,7 +15670,7 @@ class Compiler
             wi = wi + 1
           end
         end
-        # Also skip simple writer methods: def x=(v); @x = v; end
+ # Also skip simple writer methods: def x=(v); @x = v; end
         if is_writer == 0 && mi < bodies.length
           bid = bodies[mi].to_i
           if is_simple_writer_method(mn, bid) == 1
@@ -15690,8 +15690,8 @@ class Compiler
   end
 
   def auto_register_attr_writers
-    # Detect manual attr_writer patterns: def x=(v); @x = v; end
-    # and register them as attr_writers for direct field access
+ # Detect manual attr_writer patterns: def x=(v); @x = v; end
+ # and register them as attr_writers for direct field access
     i = 0
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
@@ -15705,7 +15705,7 @@ class Compiler
           bname = ""
           if mn.length > 1 && mn[mn.length - 1] == "="
             bname = mn[0, mn.length - 1]
-            # Check if already registered
+ # Check if already registered
             already = 0
             wi = 0
             while wi < writers.length
@@ -15729,7 +15729,7 @@ class Compiler
   end
 
   def is_simple_reader_method(mn, bid)
-    # Check if method is a simple attr_reader pattern: def x; @x; end
+ # Check if method is a simple attr_reader pattern: def x; @x; end
     if bid < 0 || bid >= @nd_count
       return 0
     end
@@ -15799,7 +15799,7 @@ class Compiler
       return ""
     end
     t = @nd_type[nid]
-    # Check: CallNode with setter name, receiver is a param
+ # Check: CallNode with setter name, receiver is a param
     if t == "CallNode"
       mn = @nd_name[nid]
       if mn != "" && mn.length > 1 && mn[mn.length - 1] == "="
@@ -15829,10 +15829,10 @@ class Compiler
     ""
   end
 
-  # Walk `nid`'s subtree and collect every `Cls.new(...)` class name
-  # into `out`. Used by detect_poly_returned_types to enumerate the
-  # classes returned (directly or via a temp) from a poly-returning
-  # method body.
+ # Walk `nid`'s subtree and collect every `Cls.new(...)` class name
+ # into `out`. Used by detect_poly_returned_types to enumerate the
+ # classes returned (directly or via a temp) from a poly-returning
+ # method body.
   def collect_constructed_class_names(nid, out)
     if nid < 0
       return
@@ -15861,14 +15861,14 @@ class Compiler
   end
 
   def detect_poly_returned_types
-    # Find object types `obj_<C>` constructed inside a method whose
-    # inferred return type is `poly`. The return path boxes the value
-    # into an `sp_RbVal` (`void *` payload); a value-type-eligible
-    # class would emit `sp_box_obj(sp_<C>_new(...), ci)` which feeds a
-    # struct-by-value into a `void *` slot — a C type error. Excluding
-    # such classes from the value-type optimization keeps `<C>` heap-
-    # allocated, so the constructor returns `sp_<C> *` and boxing is
-    # well-typed. Mirrors the ptr_array exclusion (PR #87).
+ # Find object types `obj_<C>` constructed inside a method whose
+ # inferred return type is `poly`. The return path boxes the value
+ # into an `sp_RbVal` (`void *` payload); a value-type-eligible
+ # class would emit `sp_box_obj(sp_<C>_new(...), ci)` which feeds a
+ # struct-by-value into a `void *` slot — a C type error. Excluding
+ # such classes from the value-type optimization keeps `<C>` heap-
+ # allocated, so the constructor returns `sp_<C> *` and boxing is
+ # well-typed. Mirrors the ptr_array exclusion .
     @poly_returned_types = "".split(",")
     mi = 0
     while mi < @meth_names.length
@@ -15898,28 +15898,28 @@ class Compiler
     end
   end
 
-  # Track classes whose instances flow into a poly-typed param
-  # slot at any call site. The boxing helper `sp_box_obj(p, ci)`
-  # takes `void *p`; a value-type-eligible class would emit
-  # `sp_box_obj(sp_<C>_new(...), ci)` or `sp_box_obj(local, ci)`
-  # where `local` is the value-type struct, feeding a
-  # struct-by-value into a `void *` slot — a C type error.
-  # Excluding such classes from the value-type optimization keeps
-  # `<C>` heap-allocated, so the boxing argument is always a
-  # stable pointer.
-  #
-  # Surfaces when kwargs widening collapses two or more concrete
-  # obj-typed call sites for the same kwarg into "poly" — at that
-  # point the call site starts boxing the instance, hitting the
-  # same struct-by-void-* mismatch the ptr_array / poly-return
-  # passes already guard against.
+ # Track classes whose instances flow into a poly-typed param
+ # slot at any call site. The boxing helper `sp_box_obj(p, ci)`
+ # takes `void *p`; a value-type-eligible class would emit
+ # `sp_box_obj(sp_<C>_new(...), ci)` or `sp_box_obj(local, ci)`
+ # where `local` is the value-type struct, feeding a
+ # struct-by-value into a `void *` slot — a C type error.
+ # Excluding such classes from the value-type optimization keeps
+ # `<C>` heap-allocated, so the boxing argument is always a
+ # stable pointer.
+ #
+ # Surfaces when kwargs widening collapses two or more concrete
+ # obj-typed call sites for the same kwarg into "poly" — at that
+ # point the call site starts boxing the instance, hitting the
+ # same struct-by-void-* mismatch the ptr_array / poly-return
+ # passes already guard against.
   def detect_poly_arg_passed_types
     @poly_arg_passed_types = "".split(",")
     nid = 0
     while nid < @nd_type.length
       if @nd_type[nid] == "CallNode"
-        # Top-level / module class method (no recv, or recv is module
-        # constant). Look up the callee in @meth_*.
+ # Top-level / module class method (no recv, or recv is module
+ # constant). Look up the callee in @meth_*.
         mfn = ""
         recv = @nd_receiver[nid]
         mname = @nd_name[nid]
@@ -15945,7 +15945,7 @@ class Compiler
             end
           end
         end
-        # Constructor `<C>.new(args)` — params live in @cls_meth_*.
+ # Constructor `<C>.new(args)` — params live in @cls_meth_*.
         if mname == "new" && recv >= 0
           cname2 = constructor_class_name(recv)
           if cname2 != ""
@@ -16025,11 +16025,11 @@ class Compiler
   end
 
   def detect_ptr_array_stored_types
-    # Find object types `obj_<C>` that appear as the element type of an
-    # array literal. Such an array becomes a `sp_PtrArray *` whose
-    # `_push` takes `void *`; if `<C>` were optimized into a value type
-    # then `sp_<C>_new(...)` would return the struct by value and the
-    # generated push call would be a C type error.
+ # Find object types `obj_<C>` that appear as the element type of an
+ # array literal. Such an array becomes a `sp_PtrArray *` whose
+ # `_push` takes `void *`; if `<C>` were optimized into a value type
+ # then `sp_<C>_new(...)` would return the struct by value and the
+ # generated push call would be a C type error.
     @ptr_array_stored_types = "".split(",")
     nid = 0
     while nid < @nd_type.length
@@ -16044,12 +16044,12 @@ class Compiler
           end
         end
       end
-      # Push-promotion path (issue #91): an empty `[]` grows into an
-      # `obj_<C>_ptr_array` via later `push(Foo.new(...))` / `<< Foo.new(...)`
-      # calls. The literal-walk above doesn't see this because no
-      # `[Foo.new(...)]` literal exists. Inspect every push-style call
-      # and, if the argument's inferred type is `obj_<C>`, add `<C>`
-      # to the exclusion so it stays heap-allocated.
+ # Push-promotion path : an empty `[]` grows into an
+ # `obj_<C>_ptr_array` via later `push(Foo.new(...))` / `<< Foo.new(...)`
+ # calls. The literal-walk above doesn't see this because no
+ # `[Foo.new(...)]` literal exists. Inspect every push-style call
+ # and, if the argument's inferred type is `obj_<C>`, add `<C>`
+ # to the exclusion so it stays heap-allocated.
       if @nd_type[nid] == "CallNode"
         mname = @nd_name[nid]
         if mname == "push" || mname == "<<" || mname == "unshift" || mname == "prepend"
@@ -16074,7 +16074,7 @@ class Compiler
   end
 
   def detect_param_mutated_types
-    # Find classes whose instances are mutated when passed as method parameters
+ # Find classes whose instances are mutated when passed as method parameters
     @param_mutated_types = "".split(",")
     i = 0
     while i < @cls_names.length
@@ -16093,7 +16093,7 @@ class Compiler
             if mi < all_ptypes.length
               ptypes = all_ptypes[mi].split(",")
             end
-            # Collect object-type param names
+ # Collect object-type param names
             obj_param_names = "".split(",")
             obj_param_types = "".split(",")
             pj = 0
@@ -16111,7 +16111,7 @@ class Compiler
             if obj_param_names.length > 0 && bid >= 0
               mutated_name = subtree_has_setter_on_params(bid, obj_param_names)
               if mutated_name != ""
-                # Find the type of the mutated param
+ # Find the type of the mutated param
                 pj = 0
                 while pj < obj_param_names.length
                   if obj_param_names[pj] == mutated_name
@@ -16127,7 +16127,7 @@ class Compiler
       end
       i = i + 1
     end
-    # Also check toplevel functions
+ # Also check toplevel functions
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -16165,19 +16165,19 @@ class Compiler
     end
   end
 
-  # Build the set of class indices whose instances are captured by a
-  # `method(:foo)` / `<obj>.method(:foo)` and end up stored in a
-  # heap-allocated Method's `@self_obj`. Such classes must stay
-  # heap-allocated — value-type optimization would put `self` on the
-  # caller's stack, and the captured pointer would dangle when the
-  # binding method returns. Ref #215.
-  #
-  # The walk needs scope set up so `infer_type` on a chained
-  # `<recv>.method(:foo)` can resolve `<recv>` (a local, an ivar via
-  # attr_reader, or a chained call) back to its `obj_<X>` type.
+ # Build the set of class indices whose instances are captured by a
+ # `method(:foo)` / `<obj>.method(:foo)` and end up stored in a
+ # heap-allocated Method's `@self_obj`. Such classes must stay
+ # heap-allocated — value-type optimization would put `self` on the
+ # caller's stack, and the captured pointer would dangle when the
+ # binding method returns. .
+ #
+ # The walk needs scope set up so `infer_type` on a chained
+ # `<recv>.method(:foo)` can resolve `<recv>` (a local, an ivar via
+ # attr_reader, or a chained call) back to its `obj_<X>` type.
   def detect_method_taken_classes
     @method_taken_class_indices = "".split(",")
-    # Walk class methods first.
+ # Walk class methods first.
     i = 0
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
@@ -16210,7 +16210,7 @@ class Compiler
       end
       i = i + 1
     end
-    # Walk top-level methods.
+ # Walk top-level methods.
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -16219,9 +16219,9 @@ class Compiler
       end
       mi = mi + 1
     end
-    # Walk the top-level main script body too — `bm = make().method(:foo)`
-    # at script scope must propagate the captured-receiver class into
-    # the heap-stay set just like the same shape inside a method body.
+ # Walk the top-level main script body too — `bm = make().method(:foo)`
+ # at script scope must propagate the captured-receiver class into
+ # the heap-stay set just like the same shape inside a method body.
     if @nd_type[@root_id] == "ProgramNode"
       stmts = get_body_stmts(@root_id)
       push_scope
@@ -16306,9 +16306,9 @@ class Compiler
   end
 
   def recalc_needs_gc
-    # Recalculate @needs_gc: only needed if non-value-type classes are used
+ # Recalculate @needs_gc: only needed if non-value-type classes are used
     @needs_gc = 0
-    # Non-value-type class exists → GC needed
+ # Non-value-type class exists → GC needed
     i = 0
     while i < @cls_names.length
       if @cls_is_value_type[i] == 0
@@ -16316,9 +16316,9 @@ class Compiler
       end
       i = i + 1
     end
-    # If there were other GC triggers (arrays, hashes, etc.) but no heap classes,
-    # those built-in types handle their own memory (malloc/free), not GC.
-    # However, IntArray/StrArray etc. ARE GC-allocated, so we need to check.
+ # If there were other GC triggers (arrays, hashes, etc.) but no heap classes,
+ # those built-in types handle their own memory (malloc/free), not GC.
+ # However, IntArray/StrArray etc. ARE GC-allocated, so we need to check.
     if @needs_gc == 0
       if @needs_int_array == 1 || @needs_float_array == 1 || @needs_str_array == 1
         @needs_gc = 1
@@ -16349,14 +16349,14 @@ class Compiler
     detect_poly_returned_types
     detect_poly_arg_passed_types
     detect_method_taken_classes
-    # Multiple passes: value type detection depends on other classes
+ # Multiple passes: value type detection depends on other classes
     2.times do
       i = 0
       while i < @cls_names.length
         names = @cls_ivar_names[i].split(";")
         types = @cls_ivar_types[i].split(";")
-        # Value-type candidates: small immutable scalar classes.
-        # Limit to 8 ivars so the struct stays register-friendly.
+ # Value-type candidates: small immutable scalar classes.
+ # Limit to 8 ivars so the struct stays register-friendly.
         if names.length > 0 && names.length <= 8
           all_val = 1
           j = 0
@@ -16366,7 +16366,7 @@ class Compiler
             end
             j = j + 1
           end
-          # Exclude classes with self-mutating methods or attr_writers
+ # Exclude classes with self-mutating methods or attr_writers
           if all_val == 1
             if cls_has_self_mutating_methods(i) == 1
               all_val = 0
@@ -16376,13 +16376,13 @@ class Compiler
               all_val = 0
             end
           end
-          # Exclude classes involved in inheritance
+ # Exclude classes involved in inheritance
           if all_val == 1
-            # Has a parent class
+ # Has a parent class
             if @cls_parents[i] != ""
               all_val = 0
             end
-            # Has subclasses
+ # Has subclasses
             si = 0
             while si < @cls_names.length
               if @cls_parents[si] == @cls_names[i]
@@ -16391,7 +16391,7 @@ class Compiler
               si = si + 1
             end
           end
-          # Exclude classes whose instances are param-mutated
+ # Exclude classes whose instances are param-mutated
           if all_val == 1
             type_str = "obj_" + @cls_names[i]
             pmi = 0
@@ -16402,10 +16402,10 @@ class Compiler
               pmi = pmi + 1
             end
           end
-          # Exclude classes whose instances are pushed into a ptr_array
-          # (array literal of `obj_<C>` becomes a `sp_PtrArray *` whose
-          # `_push` takes `void *`; a value-type return from `Foo.new`
-          # is a struct by value and can't be passed through `void *`).
+ # Exclude classes whose instances are pushed into a ptr_array
+ # (array literal of `obj_<C>` becomes a `sp_PtrArray *` whose
+ # `_push` takes `void *`; a value-type return from `Foo.new`
+ # is a struct by value and can't be passed through `void *`).
           if all_val == 1
             type_str = "obj_" + @cls_names[i]
             psi = 0
@@ -16416,10 +16416,10 @@ class Compiler
               psi = psi + 1
             end
           end
-          # Exclude classes constructed inside a method whose inferred
-          # return type is `poly`. The poly return path boxes via
-          # `sp_box_obj(sp_<C>_new(...), ci)` — same struct-by-value /
-          # void* mismatch as the ptr_array case (issue #118).
+ # Exclude classes constructed inside a method whose inferred
+ # return type is `poly`. The poly return path boxes via
+ # `sp_box_obj(sp_<C>_new(...), ci)` — same struct-by-value /
+ # void* mismatch as the ptr_array case .
           if all_val == 1
             type_str = "obj_" + @cls_names[i]
             pri = 0
@@ -16430,11 +16430,11 @@ class Compiler
               pri = pri + 1
             end
           end
-          # Same value-type exclusion for classes whose instances
-          # flow into a poly-typed param at any call site. When
-          # kwargs widening collapses two obj types into "poly",
-          # the call site boxes a value-type instance and
-          # mismatches sp_box_obj's `void *` slot.
+ # Same value-type exclusion for classes whose instances
+ # flow into a poly-typed param at any call site. When
+ # kwargs widening collapses two obj types into "poly",
+ # the call site boxes a value-type instance and
+ # mismatches sp_box_obj's `void *` slot.
           if all_val == 1
             type_str314 = "obj_" + @cls_names[i]
             pai = 0
@@ -16445,12 +16445,12 @@ class Compiler
               pai = pai + 1
             end
           end
-          # Exclude classes whose instances are captured by a Method
-          # (via `method(:foo)` on self, or `<obj>.method(:foo)` from
-          # anywhere). The captured receiver must be a stable heap
-          # pointer; value-type instances live on the caller's stack
-          # and the pointer would dangle once the binding method
-          # returns. Ref #215.
+ # Exclude classes whose instances are captured by a Method
+ # (via `method(:foo)` on self, or `<obj>.method(:foo)` from
+ # anywhere). The captured receiver must be a stable heap
+ # pointer; value-type instances live on the caller's stack
+ # and the pointer would dangle once the binding method
+ # returns. .
           if all_val == 1
             if not_in(i.to_s, @method_taken_class_indices) == 0
               all_val = 0
@@ -16463,12 +16463,12 @@ class Compiler
         i = i + 1
       end
     end
-    # SRA eligibility (Phase 2a): like value-type but allows attr_writer.
-    # The per-instance escape check happens separately at use sites.
+ # SRA eligibility (Phase 2a): like value-type but allows attr_writer.
+ # The per-instance escape check happens separately at use sites.
     i = 0
     while i < @cls_names.length
       if @cls_is_value_type[i] == 1
-        # Already handled as value-type; SRA redundant for these.
+ # Already handled as value-type; SRA redundant for these.
         i = i + 1
         next
       end
@@ -16486,7 +16486,7 @@ class Compiler
         end
         j = j + 1
       end
-      # No inheritance
+ # No inheritance
       if eligible == 1 && @cls_parents[i] != ""
         eligible = 0
       end
@@ -16499,7 +16499,7 @@ class Compiler
           si = si + 1
         end
       end
-      # Only initialize + attr_* methods (no custom methods).
+ # Only initialize + attr_* methods (no custom methods).
       if eligible == 1
         mnames = @cls_meth_names[i].split(";")
         readers = @cls_attr_readers[i].split(";")
@@ -16507,20 +16507,20 @@ class Compiler
         mk = 0
         while mk < mnames.length
           mn = mnames[mk]
-          # allowed: initialize, any attr_reader/writer name
+ # allowed: initialize, any attr_reader/writer name
           if mn != "initialize" && not_in(mn, readers) == 1 && not_in(mn, writers) == 1
             eligible = 0
           end
           mk = mk + 1
         end
       end
-      # Method-captured receivers must stay heap-allocated. SRA
-      # explodes the instance into stack-resident scalars, which is
-      # the same dangling-pointer hazard as value-type. Defensive:
-      # current test corpus doesn't exercise an SRA-eligible class
-      # (initialize + attr_* only) being captured, but a future
-      # `class X; attr_accessor :n; end` followed by
-      # `X.new(...).method(:n)` would. Ref #215.
+ # Method-captured receivers must stay heap-allocated. SRA
+ # explodes the instance into stack-resident scalars, which is
+ # the same dangling-pointer hazard as value-type. Defensive:
+ # current test corpus doesn't exercise an SRA-eligible class
+ # (initialize + attr_* only) being captured, but a future
+ # `class X; attr_accessor :n; end` followed by
+ # `X.new(...).method(:n)` would. .
       if eligible == 1
         if not_in(i.to_s, @method_taken_class_indices) == 0
           eligible = 0
@@ -16533,12 +16533,12 @@ class Compiler
     end
   end
 
-  # Return "static inline " for short methods so gcc has permission
-  # to inline them, or "static " otherwise.  Body of ≤ 3 statements,
-  # no yield, and not self-recursive are considered inlineable.
+ # Return "static inline " for short methods so gcc has permission
+ # to inline them, or "static " otherwise. Body of ≤ 3 statements,
+ # no yield, and not self-recursive are considered inlineable.
 
 
-  # Return 1 if any CallNode in the subtree invokes mname.
+ # Return 1 if any CallNode in the subtree invokes mname.
 
 
 
@@ -16569,56 +16569,56 @@ class Compiler
 
 
 
-  # ---- Forward declarations ----
+ # ---- Forward declarations ----
 
 
 
-  # Build the block fn-pointer C signature from the yield call
-  # sites' inferred arg types. block_params_csig alone returns
-  # `mrb_int, mrb_int, ...` regardless of what's yielded; this
-  # variant inspects the body so a method that yields (String,
-  # sp_RbVal) gets `void (*)(const char *, sp_RbVal, void *)` —
-  # matching the emitted `_block(lv_k, lv_v, _benv)` call site.
-  #
-  # Called BEFORE the function's scope has been pushed, so
-  # locally-declared vars referenced in yield args (`yield k, v`
-  # where `k`, `v` were assigned from typed expressions) are not
-  # in @scope_names. Run scan_locals on the body and push a
-  # temporary scope so body_yield_arg_types' infer_type calls
-  # resolve those reads. Re-runs at both forward-decl emit time
-  # and impl emit time; results converge once @meth_* / @cls_*
-  # tables stabilize through the type-inference fixpoint.
+ # Build the block fn-pointer C signature from the yield call
+ # sites' inferred arg types. block_params_csig alone returns
+ # `mrb_int, mrb_int, ...` regardless of what's yielded; this
+ # variant inspects the body so a method that yields (String,
+ # sp_RbVal) gets `void (*)(const char *, sp_RbVal, void *)` —
+ # matching the emitted `_block(lv_k, lv_v, _benv)` call site.
+ #
+ # Called BEFORE the function's scope has been pushed, so
+ # locally-declared vars referenced in yield args (`yield k, v`
+ # where `k`, `v` were assigned from typed expressions) are not
+ # in @scope_names. Run scan_locals on the body and push a
+ # temporary scope so body_yield_arg_types' infer_type calls
+ # resolve those reads. Re-runs at both forward-decl emit time
+ # and impl emit time; results converge once @meth_* / @cls_*
+ # tables stabilize through the type-inference fixpoint.
 
-  # Walk `nid` for YieldNode, accumulating the per-position arg
-  # type into `types`. Stops at nested DefNode boundaries (those
-  # introduce a new method scope with its own yield arity).
-  # Mirrors body_max_yield_arity's traversal shape.
+ # Walk `nid` for YieldNode, accumulating the per-position arg
+ # type into `types`. Stops at nested DefNode boundaries (those
+ # introduce a new method scope with its own yield arity).
+ # Mirrors body_max_yield_arity's traversal shape.
 
 
-  # Max number of args used in any `yield` inside the top-level method
-  # at @meth_body_ids[mi]. Floor of 1 — yield-using methods always have
-  # at least one mrb_int slot (the no-arg `yield` form is padded to 0).
+ # Max number of args used in any `yield` inside the top-level method
+ # at @meth_body_ids[mi]. Floor of 1 — yield-using methods always have
+ # at least one mrb_int slot (the no-arg `yield` form is padded to 0).
 
-  # Same as method_yield_arity, but resolved through the class method
-  # body table @cls_meth_bodies (parallel to @cls_meth_has_yield).
+ # Same as method_yield_arity, but resolved through the class method
+ # body table @cls_meth_bodies (parallel to @cls_meth_has_yield).
 
-  # Comma-joined string of `arity` mrb_int slots — the variable-arity
-  # portion of the `_block` function-pointer signature.
+ # Comma-joined string of `arity` mrb_int slots — the variable-arity
+ # portion of the `_block` function-pointer signature.
 
-  # Returns 1 if the (ci, midx) method declares a `&block` parameter,
-  # 0 otherwise. Ruby syntax requires `&block` to be the trailing
-  # param, so we check only the last slot — a proc-typed slot in any
-  # other position is a positional proc argument, not a block param.
-  # Mirrors cls_method_has_yield: call sites use it to decide whether
-  # to omit the trailing &block slot from default-padding.
+ # Returns 1 if the (ci, midx) method declares a `&block` parameter,
+ # 0 otherwise. Ruby syntax requires `&block` to be the trailing
+ # param, so we check only the last slot — a proc-typed slot in any
+ # other position is a positional proc argument, not a block param.
+ # Mirrors cls_method_has_yield: call sites use it to decide whether
+ # to omit the trailing &block slot from default-padding.
 
-  # Returns the name of a method's `&block` parameter (the trailing
-  # proc-typed slot in pnames), or "" if the method doesn't take
-  # one. Ruby syntax requires `&block` to be the trailing param, so
-  # a proc-typed slot in any other position is a positional proc
-  # argument. Mirrors cls_method_has_block_param's trailing-only
-  # check. Used at method-emit time to set @current_method_block_param
-  # so block_given? can resolve to (lv_<name> != NULL).
+ # Returns the name of a method's `&block` parameter (the trailing
+ # proc-typed slot in pnames), or "" if the method doesn't take
+ # one. Ruby syntax requires `&block` to be the trailing param, so
+ # a proc-typed slot in any other position is a positional proc
+ # argument. Mirrors cls_method_has_block_param's trailing-only
+ # check. Used at method-emit time to set @current_method_block_param
+ # so block_given? can resolve to (lv_<name> != NULL).
 
   def cls_find_method_direct(ci, mname)
     ck = ci.to_s + ":" + mname
@@ -16638,13 +16638,13 @@ class Compiler
     -1
   end
 
-  # Helpers for the per-method split-join boilerplate around
-  # @cls_meth_ptypes / @cls_cmeth_ptypes / @cls_meth_params /
-  # @cls_cmeth_params. Each table stores per-class strings where
-  # methods are pipe-separated (`|`) and per-method names/types
-  # are comma-separated (`,`).  Without these, every read site
-  # opens with two split() calls + bound checks and every write
-  # site closes with two join() calls.
+ # Helpers for the per-method split-join boilerplate around
+ # @cls_meth_ptypes / @cls_cmeth_ptypes / @cls_meth_params /
+ # @cls_cmeth_params. Each table stores per-class strings where
+ # methods are pipe-separated (`|`) and per-method names/types
+ # are comma-separated (`,`). Without these, every read site
+ # opens with two split() calls + bound checks and every write
+ # site closes with two join() calls.
   def cls_meth_ptypes_get(ci, midx)
     if ci < 0 || ci >= @cls_meth_ptypes.length || midx < 0
       return "".split(",")
@@ -16675,9 +16675,9 @@ class Compiler
     @cmp_outer_split[midx] = ptypes.join(",")
     @cls_meth_ptypes[ci] = @cmp_outer_split.join("|")
     @cls_meth_ptypes_version = @cls_meth_ptypes_version + 1
-    # The cache slot was mutated in place to match the new joined
-    # string, so it stays valid — keep the local version in sync
-    # so subsequent reads with the same ci skip the outer split.
+ # The cache slot was mutated in place to match the new joined
+ # string, so it stays valid — keep the local version in sync
+ # so subsequent reads with the same ci skip the outer split.
     @cmp_outer_version = @cls_meth_ptypes_version
   end
 
@@ -16744,19 +16744,19 @@ class Compiler
     @ccmn_outer_split[midx].split(",")
   end
 
-  # Walk the inheritance chain starting at class `ci` looking for the
-  # first ancestor that defines `mname` directly. Returns that class's
-  # name, or "" if no ancestor defines it. Used by the
-  # `method(:foo)` codegen to build the C symbol of the bound function:
-  # an inherited method's generated C function lives under the
-  # *defining* class (`sp_Parent_foo`), not the receiver's own class
-  # (`sp_Child_foo`), so `&sp_Child_foo` would be an unresolved symbol
-  # at link time. When this returns "" the codegen falls back to a
-  # null fn_ptr — Ruby's NoMethodError-on-invoke equivalent. Ref #215.
+ # Walk the inheritance chain starting at class `ci` looking for the
+ # first ancestor that defines `mname` directly. Returns that class's
+ # name, or "" if no ancestor defines it. Used by the
+ # `method(:foo)` codegen to build the C symbol of the bound function:
+ # an inherited method's generated C function lives under the
+ # *defining* class (`sp_Parent_foo`), not the receiver's own class
+ # (`sp_Child_foo`), so `&sp_Child_foo` would be an unresolved symbol
+ # at link time. When this returns "" the codegen falls back to a
+ # null fn_ptr — Ruby's NoMethodError-on-invoke equivalent. .
 
 
   def find_init_class(ci)
-    # Find which class in the chain has initialize
+ # Find which class in the chain has initialize
     init_idx = cls_find_method_direct(ci, "initialize")
     if init_idx >= 0
       return ci
@@ -16774,22 +16774,22 @@ class Compiler
 
 
 
-  # ---- Emit class methods ----
+ # ---- Emit class methods ----
 
-  # Dead-code elimination for class methods. An uncalled
-  # `def self.factory(attrs); new(attrs); ...; end` on a parent
-  # class whose own `initialize` has different arity would emit a
-  # body that doesn't C-compile (`sp_<class>_new(args)` against a
-  # 0-arg constructor; or, with a default-arg `initialize`,
-  # against a typed param the uncalled method itself can't have
-  # inferred). The reachability set seeds from explicit
-  # `<Class>.<m>(...)` call sites in the AST, then propagates
-  # through bare/self calls inside live cls method bodies; anything
-  # not reached is skipped at forward-decl + body emit time.
-  #
-  # Live entries are stored as `<ClassName>::<methodName>` joined
-  # by `;` in @cls_cmeth_live. Idempotent: marking an already-live
-  # entry is a no-op.
+ # Dead-code elimination for class methods. An uncalled
+ # `def self.factory(attrs); new(attrs); ...; end` on a parent
+ # class whose own `initialize` has different arity would emit a
+ # body that doesn't C-compile (`sp_<class>_new(args)` against a
+ # 0-arg constructor; or, with a default-arg `initialize`,
+ # against a typed param the uncalled method itself can't have
+ # inferred). The reachability set seeds from explicit
+ # `<Class>.<m>(...)` call sites in the AST, then propagates
+ # through bare/self calls inside live cls method bodies; anything
+ # not reached is skipped at forward-decl + body emit time.
+ #
+ # Live entries are stored as `<ClassName>::<methodName>` joined
+ # by `;` in @cls_cmeth_live. Idempotent: marking an already-live
+ # entry is a no-op.
   def compute_live_cls_methods
     @cls_cmeth_live = ""
     collect_cls_calls(@root_id, -1)
@@ -16826,32 +16826,32 @@ class Compiler
       iter = iter + 1
     end
   end
-  # Issue #393. Mark instance methods reachable from the program
-  # entry. Anything not marked gets a stub body at emit time
-  # (`(void)params; return default;`) so an uncalled `def f(x); @typed = x; end`
-  # whose param defaulted to int doesn't fail C-compile against a
-  # narrower ivar slot.
-  #
-  # Conservative liveness: a method `M` on class `C` is live iff:
-  #   1. `M` == "initialize" (constructor synth always reaches it).
-  #   2. Some CallNode anywhere in the program names `M`.
-  #   3. Some SymbolNode anywhere has value `M` (covers method(:M) /
-  #      define_method(:M) / send(:M, ...) reflection sites).
-  # This over-approximates -- a method named "size" on user class `C`
-  # is marked live whenever ANY call site (even an unrelated
-  # `arr.size`) names "size". That's fine for the DCE goal; the
-  # downside is false-negatives (a genuinely-unused method we keep)
-  # rather than false-positives (a live method we strip).
+ # . Mark instance methods reachable from the program
+ # entry. Anything not marked gets a stub body at emit time
+ # (`(void)params; return default;`) so an uncalled `def f(x); @typed = x; end`
+ # whose param defaulted to int doesn't fail C-compile against a
+ # narrower ivar slot.
+ #
+ # Conservative liveness: a method `M` on class `C` is live iff:
+ # 1. `M` == "initialize" (constructor synth always reaches it).
+ # 2. Some CallNode anywhere in the program names `M`.
+ # 3. Some SymbolNode anywhere has value `M` (covers method(:M) /
+ # define_method(:M) / send(:M, ...) reflection sites).
+ # This over-approximates -- a method named "size" on user class `C`
+ # is marked live whenever ANY call site (even an unrelated
+ # `arr.size`) names "size". That's fine for the DCE goal; the
+ # downside is false-negatives (a genuinely-unused method we keep)
+ # rather than false-positives (a live method we strip).
   def compute_live_instance_methods
     @cls_meth_live = ""
-    # Step 1: methods whose name is always-implicitly-dispatched are
-    # marked live unconditionally. `<=>` is reached by Comparable's
-    # `<` / `>` etc. operators (compile_call_expr's cmp_owner arm
-    # synthesises the call, so `<=>` itself never appears as a
-    # CallNode name in the AST — and the conservative "name appears
-    # somewhere" rule below would miss it). Same for the bracket
-    # operators, common conversion methods, and `inspect` / `to_s`
-    # called by string interpolation, `puts`, etc.
+ # Step 1: methods whose name is always-implicitly-dispatched are
+ # marked live unconditionally. `<=>` is reached by Comparable's
+ # `<` / `>` etc. operators (compile_call_expr's cmp_owner arm
+ # synthesises the call, so `<=>` itself never appears as a
+ # CallNode name in the AST — and the conservative "name appears
+ # somewhere" rule below would miss it). Same for the bracket
+ # operators, common conversion methods, and `inspect` / `to_s`
+ # called by string interpolation, `puts`, etc.
     always_live = ["initialize", "<=>", "==", "!=", "eql?", "hash",
                    "to_s", "inspect", "to_a", "to_i", "to_f", "to_str",
                    "[]", "[]=", "each", "<", ">", "<=", ">=",
@@ -16872,25 +16872,25 @@ class Compiler
       end
       ci = ci + 1
     end
-    # Step 2/3: collect every CallNode name + SymbolNode value, mark
-    # methods on every class that has them.
-    # `"".split(",")` initializer types `used` as a str_array, since
-    # `acc` in collect_used_method_names is pushed strings only.
+ # Step 2/3: collect every CallNode name + SymbolNode value, mark
+ # methods on every class that has them.
+ # `"".split(",")` initializer types `used` as a str_array, since
+ # `acc` in collect_used_method_names is pushed strings only.
     used = "".split(",")
     collect_used_method_names(@root_id, used)
-    # Lifted instance_eval blocks: their bodies were detached from
-    # @root_id by ieval_rewrite_call and stashed in @ieval_body_ids,
-    # so a walk from @root_id misses any `get("/")` / similar call
-    # buried inside `app.instance_eval { get("/") }`. Walk them too.
+ # Lifted instance_eval blocks: their bodies were detached from
+ # @root_id by ieval_rewrite_call and stashed in @ieval_body_ids,
+ # so a walk from @root_id misses any `get("/")` / similar call
+ # buried inside `app.instance_eval { get("/") }`. Walk them too.
     ie = 0
     while ie < @ieval_body_ids.length
       collect_used_method_names(@ieval_body_ids[ie], used)
       ie = ie + 1
     end
-    # User-defined method bodies: top-level methods (@meth_body_ids)
-    # and instance / class methods (@cls_meth_bodies + @cls_cmeth_bodies).
-    # The @root_id walk hits class definitions but those routes only to
-    # ClassNode -> body, not to each method body's nested call sites.
+ # User-defined method bodies: top-level methods (@meth_body_ids)
+ # and instance / class methods (@cls_meth_bodies + @cls_cmeth_bodies).
+ # The @root_id walk hits class definitions but those routes only to
+ # ClassNode -> body, not to each method body's nested call sites.
     mi_b = 0
     while mi_b < @meth_body_ids.length
       collect_used_method_names(@meth_body_ids[mi_b], used)
@@ -16937,10 +16937,10 @@ class Compiler
     end
   end
 
-  # Walk the AST collecting CallNode names + SymbolNode values into
-  # `acc`. Used by compute_live_instance_methods. Iterative (explicit
-  # stack via `push_child_ids`) so we don't recurse into 600+-deep
-  # method bodies and blow the stack.
+ # Walk the AST collecting CallNode names + SymbolNode values into
+ # `acc`. Used by compute_live_instance_methods. Iterative (explicit
+ # stack via `push_child_ids`) so we don't recurse into 600+-deep
+ # method bodies and blow the stack.
   def collect_used_method_names(nid, acc)
     if nid < 0
       return
@@ -17005,11 +17005,11 @@ class Compiler
     if @cls_cmeth_live == nil || @cls_cmeth_live == ""
       return 0
     end
-    # Sentinel-bracketed lookup so "Foo::bar" doesn't match
-    # "Foo::barbaz". `String#include?` returns a clean true/false in
-    # both CRuby and spinel; `String#index` works in CRuby but in
-    # spinel returns mrb_int (-1 / 0+) and `ix == nil` compiles to
-    # `ix == 0`, misclassifying the first-listed entry as missing.
+ # Sentinel-bracketed lookup so "Foo::bar" doesn't match
+ # "Foo::barbaz". `String#include?` returns a clean true/false in
+ # both CRuby and spinel; `String#index` works in CRuby but in
+ # spinel returns mrb_int (-1 / 0+) and `ix == nil` compiles to
+ # `ix == 0`, misclassifying the first-listed entry as missing.
     needle = ";" + @cls_names[ci] + "::" + mname + ";"
     haystack = ";" + @cls_cmeth_live + ";"
     if haystack.include?(needle)
@@ -17045,18 +17045,18 @@ class Compiler
     end
   end
 
-  # Walk the subtree at `nid`, marking cls methods reached by:
-  #   - `<Const>.<m>(...)`            (any context)
-  #   - `self.<m>(...)`               (only when ctx_ci >= 0, i.e.
-  #     we're walking inside a cls method body of class ctx_ci)
-  #   - bare `<m>(...)` with no recv  (ditto; `<m>` resolves to
-  #     a cls method on ctx_ci if one exists with that name)
-  #
-  # ctx_ci is propagated unchanged through normal nodes, but cleared
-  # to -1 when descending into a DefNode body (a nested method has
-  # its own scope; bare calls there resolve to top-level methods or
-  # to that DefNode's own class context, neither of which we want
-  # to attribute to the outer cls method).
+ # Walk the subtree at `nid`, marking cls methods reached by:
+ # - `<Const>.<m>(...)` (any context)
+ # - `self.<m>(...)` (only when ctx_ci >= 0, i.e.
+ # we're walking inside a cls method body of class ctx_ci)
+ # - bare `<m>(...)` with no recv (ditto; `<m>` resolves to
+ # a cls method on ctx_ci if one exists with that name)
+ #
+ # ctx_ci is propagated unchanged through normal nodes, but cleared
+ # to -1 when descending into a DefNode body (a nested method has
+ # its own scope; bare calls there resolve to top-level methods or
+ # to that DefNode's own class context, neither of which we want
+ # to attribute to the outer cls method).
   def collect_cls_calls(nid, ctx_ci)
     if nid < 0
       return
@@ -17068,13 +17068,13 @@ class Compiler
         if @nd_type[recv] == "ConstantReadNode" || @nd_type[recv] == "ConstantPathNode"
           cname = constructor_class_name(recv)
           if cname != ""
-            # constructor_class_name resolves via lexical scope, but
-            # this DCE walker runs without method-body context. Fall
-            # back to suffix-matching when the unscoped name doesn't
-            # match a registered class — `CPU` (called inside
-            # `Optcarrot::CPU`) needs to mark `Optcarrot_CPU::poke_nop`
-            # live, but cname is plain `CPU`. Walks every cls name
-            # and marks any matching suffix.
+ # constructor_class_name resolves via lexical scope, but
+ # this DCE walker runs without method-body context. Fall
+ # back to suffix-matching when the unscoped name doesn't
+ # match a registered class — `CPU` (called inside
+ # `Optcarrot::CPU`) needs to mark `Optcarrot_CPU::poke_nop`
+ # live, but cname is plain `CPU`. Walks every cls name
+ # and marks any matching suffix.
             cm_lit_for_method = ""
             if mname == "method"
               args_ic = @nd_arguments[nid]
@@ -17093,13 +17093,13 @@ class Compiler
               cn_full = @cls_names[mark_idx]
               if cn_full == cname || cn_full.end_with?("_" + cname)
                 cls_cmeth_mark_live(mark_idx, mname)
-                # `Klass.method(:cls_meth)` — keeps the *named* cls
-                # method live so the adapter trampoline emitted by
-                # compile_constant_recv_expr resolves to a real
-                # symbol at link time. Without this, the cls method
-                # is DCE'd (no direct call site, only an indirect
-                # bind) and the adapter references an undefined
-                # function.
+ # `Klass.method(:cls_meth)` — keeps the *named* cls
+ # method live so the adapter trampoline emitted by
+ # compile_constant_recv_expr resolves to a real
+ # symbol at link time. Without this, the cls method
+ # is DCE'd (no direct call site, only an indirect
+ # bind) and the adapter references an undefined
+ # function.
                 if cm_lit_for_method != ""
                   cls_cmeth_mark_live(mark_idx, cm_lit_for_method)
                 end
@@ -17111,12 +17111,12 @@ class Compiler
         if @nd_type[recv] == "SelfNode" && ctx_ci >= 0
           cls_cmeth_mark_live(ctx_ci, mname)
         end
-        # `<Module>.<acc>.<method>` where `<Module>.<acc>` was
-        # constant-folded by resolve_module_singleton_accessors to
-        # one or more class names. The receiver is a CallNode at
-        # AST level, so the ConstantReadNode branch above doesn't
-        # catch it; look up the fold and mark each resolved
-        # class's cls method live.
+ # `<Module>.<acc>.<method>` where `<Module>.<acc>` was
+ # constant-folded by resolve_module_singleton_accessors to
+ # one or more class names. The receiver is a CallNode at
+ # AST level, so the ConstantReadNode branch above doesn't
+ # catch it; look up the fold and mark each resolved
+ # class's cls method live.
         if @nd_type[recv] == "CallNode"
           inner_recv = @nd_receiver[recv]
           if inner_recv >= 0 && @nd_type[inner_recv] == "ConstantReadNode"
@@ -17134,22 +17134,22 @@ class Compiler
               end
             end
           end
-          # Issue #419: `<obj>.class.<cmeth>` — recv is a `class`
-          # CallNode. The lowered call dispatches to <C>::cmeth at
-          # codegen time when the inner recv has a known obj_<C>
-          # type. At DCE time we don't have method-body scope
-          # context (so infer_type on a LocalVariableReadNode here
-          # falls back to "int"), so over-approximate: mark cmeth
-          # live on every class that defines one. Matches the
-          # ConstantReadNode / SymbolNode arms above which take the
-          # same shape — DCE prefers false-negatives (a kept-but-
-          # unused method) over false-positives (a stripped live
-          # method that produces a linker error).
+ # `<obj>.class.<cmeth>` — recv is a `class`
+ # CallNode. The lowered call dispatches to <C>::cmeth at
+ # codegen time when the inner recv has a known obj_<C>
+ # type. At DCE time we don't have method-body scope
+ # context (so infer_type on a LocalVariableReadNode here
+ # falls back to "int"), so over-approximate: mark cmeth
+ # live on every class that defines one. Matches the
+ # ConstantReadNode / SymbolNode arms above which take the
+ # same shape — DCE prefers false-negatives (a kept-but-
+ # unused method) over false-positives (a stripped live
+ # method that produces a linker error).
           if @nd_name[recv] == "class"
-            mark_idx_419 = 0
-            while mark_idx_419 < @cls_names.length
-              cls_cmeth_mark_live(mark_idx_419, mname)
-              mark_idx_419 = mark_idx_419 + 1
+            mark_idx = 0
+            while mark_idx < @cls_names.length
+              cls_cmeth_mark_live(mark_idx, mname)
+              mark_idx = mark_idx + 1
             end
           end
         end
@@ -17159,19 +17159,19 @@ class Compiler
         end
       end
     end
-    # In phase A (ctx_ci < 0, walking top-level / class-body /
-    # module-body context), descend into DefNode bodies so
-    # `<Const>.<m>(...)` call sites inside instance methods get
-    # picked up — `def initialize; @x = TheClass.new_inner; end`
-    # otherwise leaves `TheClass::new_inner` un-marked and DCE
-    # drops the body while the call site remains, producing a
-    # linker error. Bare/self calls inside the descended body
-    # stay unmatched because ctx_ci is still -1.
-    #
-    # In phase B (ctx_ci >= 0, walking inside a live cls method
-    # body), skip nested DefNodes — their scope differs and
-    # bare/self calls inside should not be attributed to the
-    # outer cls method's class.
+ # In phase A (ctx_ci < 0, walking top-level / class-body /
+ # module-body context), descend into DefNode bodies so
+ # `<Const>.<m>(...)` call sites inside instance methods get
+ # picked up — `def initialize; @x = TheClass.new_inner; end`
+ # otherwise leaves `TheClass::new_inner` un-marked and DCE
+ # drops the body while the call site remains, producing a
+ # linker error. Bare/self calls inside the descended body
+ # stay unmatched because ctx_ci is still -1.
+ #
+ # In phase B (ctx_ci >= 0, walking inside a live cls method
+ # body), skip nested DefNodes — their scope differs and
+ # bare/self calls inside should not be attributed to the
+ # outer cls method's class.
     if @nd_type[nid] == "DefNode" && ctx_ci >= 0
       return
     end
@@ -17242,24 +17242,24 @@ class Compiler
 
 
 
-  # Builds the trailing portion of a call-args list — each non-empty
-  # piece prefixed with ", ", empties skipped. Returns "" when both
-  # are empty. Mirrors build_params_str: callers concatenate the
-  # result onto a self/recv prefix to form the full arg list.
+ # Builds the trailing portion of a call-args list — each non-empty
+ # piece prefixed with ", ", empties skipped. Returns "" when both
+ # are empty. Mirrors build_params_str: callers concatenate the
+ # result onto a self/recv prefix to form the full arg list.
 
-  # ---- Emit top-level methods ----
+ # ---- Emit top-level methods ----
 
-  # `END { ... }` -- one zero-arg static C function per registered
-  # PostExecutionNode body. main() registers them via atexit() at
-  # startup. atexit invokes handlers LIFO, matching CRuby's
-  # reverse-of-source-order END execution.
-
-
+ # `END { ... }` -- one zero-arg static C function per registered
+ # PostExecutionNode body. main() registers them via atexit() at
+ # startup. atexit invokes handlers LIFO, matching CRuby's
+ # reverse-of-source-order END execution.
 
 
-  # Returns 1 if `nid` is an explicit literal value (not a placeholder or
-  # inferred fallback). Used by scan_locals to distinguish a genuine int
-  # write like `x = 1` from a defaulted "int" from an unresolved read.
+
+
+ # Returns 1 if `nid` is an explicit literal value (not a placeholder or
+ # inferred fallback). Used by scan_locals to distinguish a genuine int
+ # write like `x = 1` from a defaulted "int" from an unresolved read.
   def is_literal_value_expr(nid)
     if nid < 0
       return 0
@@ -17287,20 +17287,20 @@ class Compiler
     if nid < 0
       return
     end
-    # Parallel to `names`: "1" if this local's current stored type was set
-    # by an explicit literal write, "" otherwise. Reset when called with
-    # a fresh (empty) names array.
+ # Parallel to `names`: "1" if this local's current stored type was set
+ # by an explicit literal write, "" otherwise. Reset when called with
+ # a fresh (empty) names array.
     if names.length == 0
       @scan_literal_flags = "".split(",")
-      # Parallel to `names`: "1" if every write to this local so far was
-      # an empty `[]` literal — used to defer the array element type
-      # until first `push` (issue #58). A subsequent write with a
-      # concrete element resets the flag to "".
+ # Parallel to `names`: "1" if every write to this local so far was
+ # an empty `[]` literal — used to defer the array element type
+ # until first `push` . A subsequent write with a
+ # concrete element resets the flag to "".
       @scan_empty_flags = "".split(",")
-      # Parallel to `names`: "1" if the FIRST write to this local was an
-      # empty `{}` literal — promote_empty_hash_local_writes uses this to
-      # decide whether to refine str_int_hash (the empty-hash default)
-      # to a more specific variant on first []= write.
+ # Parallel to `names`: "1" if the FIRST write to this local was an
+ # empty `{}` literal — promote_empty_hash_local_writes uses this to
+ # decide whether to refine str_int_hash (the empty-hash default)
+ # to a more specific variant on first []= write.
       @scan_empty_hash_flags = "".split(",")
     end
     if @nd_type[nid] == "MultiWriteNode"
@@ -17321,10 +17321,10 @@ class Compiler
           end
         end
         if @nd_type[tid] == "MultiTargetNode"
-          # Nested LHS: `a, (b, c) = 1, [2, 3]`. The inner targets'
-          # local-variable names need to be declared in this scope
-          # too, with the per-element type derived from the matching
-          # outer-RHS slot's array type.
+ # Nested LHS: `a, (b, c) = 1, [2, 3]`. The inner targets'
+ # local-variable names need to be declared in this scope
+ # too, with the per-element type derived from the matching
+ # outer-RHS slot's array type.
           inner_targets = parse_id_list(@nd_targets[tid])
           inner_slot_type = multi_write_target_type(val_id2, ti2)
           inner_elem_type = nested_target_elem_type(inner_slot_type)
@@ -17405,16 +17405,16 @@ class Compiler
           else
             @scan_literal_flags.push("")
           end
-          # Track empty-array literal so a later push() can promote
-          # the local's element type (issue #58).
+ # Track empty-array literal so a later push() can promote
+ # the local's element type .
           if is_empty_array_literal(@nd_expression[nid]) == 1
             @scan_empty_flags.push("1")
           else
             @scan_empty_flags.push("")
           end
-          # Track empty-hash literal so a later []= write can promote
-          # the local's hash variant from the str_int_hash default to
-          # whatever key/value types the first []= pins.
+ # Track empty-hash literal so a later []= write can promote
+ # the local's hash variant from the str_int_hash default to
+ # whatever key/value types the first []= pins.
           if is_empty_hash_literal(@nd_expression[nid]) == 1
             @scan_empty_hash_flags.push("1")
           else
@@ -17423,10 +17423,10 @@ class Compiler
         end
       else
         if not_in(lname, params) == 1
-          # Check if type changed
+ # Check if type changed
           at = infer_type(@nd_expression[nid])
-          # Concrete (non-empty) array overwrite clears the deferred
-          # element-type flag — a `[1,2,3]` write commits to int_array.
+ # Concrete (non-empty) array overwrite clears the deferred
+ # element-type flag — a `[1,2,3]` write commits to int_array.
           if is_empty_array_literal(@nd_expression[nid]) == 0
             ei = 0
             while ei < names.length
@@ -17436,9 +17436,9 @@ class Compiler
               ei = ei + 1
             end
           end
-          # Same shape for empty-hash flag: a non-empty-hash overwrite
-          # commits the local to whatever concrete hash type was
-          # assigned, so a later []= shouldn't trigger promotion.
+ # Same shape for empty-hash flag: a non-empty-hash overwrite
+ # commits the local to whatever concrete hash type was
+ # assigned, so a later []= shouldn't trigger promotion.
           if is_empty_hash_literal(@nd_expression[nid]) == 0
             ehi = 0
             while ehi < names.length
@@ -17462,10 +17462,10 @@ class Compiler
                     ki = ki + 1
                     next
                   end
-                  # Genuine polymorphism: both the first write and this
-                  # write were explicit literals, and their types differ.
-                  # This catches `x = 1; x = "hello"` which the legacy
-                  # "int is fallback" rule below would silently coerce.
+ # Genuine polymorphism: both the first write and this
+ # write were explicit literals, and their types differ.
+ # This catches `x = 1; x = "hello"` which the legacy
+ # "int is fallback" rule below would silently coerce.
                   if ki < @scan_literal_flags.length && @scan_literal_flags[ki] == "1" && is_literal_value_expr(@nd_expression[nid]) == 1 && at != "nil" && types[ki] != "nil"
                     types[ki] = "poly"
                     @needs_rb_value = 1
@@ -17473,7 +17473,7 @@ class Compiler
                     ki = ki + 1
                     next
                   end
-                  # Don't mark poly if new type is fallback "int" and existing is richer
+ # Don't mark poly if new type is fallback "int" and existing is richer
                   if at != "int"
                     if types[ki] == "int"
                       types[ki] = at
@@ -17488,12 +17488,12 @@ class Compiler
                         types[ki] = at + "?"
                       end
                     elsif base_type(types[ki]) == at
-                      # T? and T are compatible — keep T?
+ # T? and T are compatible — keep T?
                     elsif base_type(at) == types[ki]
-                      # T and T? → upgrade to T?
+ # T and T? → upgrade to T?
                       types[ki] = at
                     elsif base_type(types[ki]) == base_type(at)
-                      # T? and T? — same base
+ # T? and T? — same base
                     else
                       types[ki] = "poly"
                       @needs_rb_value = 1
@@ -17521,7 +17521,7 @@ class Compiler
         end
       else
         if not_in(lname, params) == 1
-          # If RHS is float, promote to float
+ # If RHS is float, promote to float
           if rhs_type == "float"
             ki = 0
             while ki < names.length
@@ -17536,7 +17536,7 @@ class Compiler
         end
       end
     end
-    # Detect array element type from push/<<: arr.push(x) or arr << x
+ # Detect array element type from push/<<: arr.push(x) or arr << x
     if @nd_type[nid] == "CallNode"
       if @nd_name[nid] == "push" || @nd_name[nid] == "<<"
         recv = @nd_receiver[nid]
@@ -17547,7 +17547,7 @@ class Compiler
             aargs = get_args(args_id)
             if aargs.length > 0
               arg_type = infer_type(aargs[0])
-              # If arg is arr[i] where arr is in names, get element type
+ # If arg is arr[i] where arr is in names, get element type
               if arg_type == "int" && @nd_type[aargs[0]] == "CallNode"
                 if @nd_name[aargs[0]] == "[]"
                   arr_recv = @nd_receiver[aargs[0]]
@@ -17603,8 +17603,8 @@ class Compiler
                   ki = ki + 1
                 end
               elsif arg_type == "symbol"
-                # sym_array uses sp_IntArray storage, so int_array
-                # helpers stay required even after promotion.
+ # sym_array uses sp_IntArray storage, so int_array
+ # helpers stay required even after promotion.
                 @needs_int_array = 1
                 ki = 0
                 while ki < names.length
@@ -17633,18 +17633,18 @@ class Compiler
         end
       end
     end
-    # Empty-array param promotion at instance-method call sites
-    # (`obj.method(arg)`). Same forward/backward propagation as
-    # the top-level branch below, but reads/writes the per-class
-    # @cls_meth_ptypes / @cls_meth_ptypes_empty storage.
+ # Empty-array param promotion at instance-method call sites
+ # (`obj.method(arg)`). Same forward/backward propagation as
+ # the top-level branch below, but reads/writes the per-class
+ # @cls_meth_ptypes / @cls_meth_ptypes_empty storage.
     if @nd_type[nid] == "CallNode"
       icm_recv = @nd_receiver[nid]
       if icm_recv >= 0
         icm_rt = infer_type(icm_recv)
-        # When the receiver is a local declared in this same
-        # scan_locals pass (`r = Recorder.new` followed by `r.method(...)`),
-        # infer_type still returns "int" because we haven't called
-        # declare_var yet. Fall back to the names/types accumulator.
+ # When the receiver is a local declared in this same
+ # scan_locals pass (`r = Recorder.new` followed by `r.method(...)`),
+ # infer_type still returns "int" because we haven't called
+ # declare_var yet. Fall back to the names/types accumulator.
         if icm_rt == "int" && @nd_type[icm_recv] == "LocalVariableReadNode"
           icm_recv_name = @nd_name[icm_recv]
           icm_ni0 = 0
@@ -17661,7 +17661,7 @@ class Compiler
           if icm_ci >= 0
             icm_mname = @nd_name[nid]
             icm_midx = cls_find_method_direct(icm_ci, icm_mname)
-            # Walk parents if not found on the receiver class itself
+ # Walk parents if not found on the receiver class itself
             icm_owner_ci = icm_ci
             if icm_midx < 0
               icm_owner_name = find_method_owner(icm_ci, icm_mname)
@@ -17744,16 +17744,16 @@ class Compiler
         end
       end
     end
-    # Empty-array param promotion at top-level function call
-    # sites. Two directions in one place:
-    #   (a) Forward: if `arg` is `[]` literal or a local with the
-    #       empty flag set, mark @meth_param_empty[mi][k] = "1" so
-    #       a later body-promotion pass can refine the param type.
-    #   (b) Backward: if @meth_param_types[mi][k] has already been
-    #       promoted to a concrete typed-array (str_array, etc.)
-    #       and `arg` is a local with the empty flag, upgrade the
-    #       local's type to match — this propagates the deferred
-    #       resolution back to the caller's variable.
+ # Empty-array param promotion at top-level function call
+ # sites. Two directions in one place:
+ # (a) Forward: if `arg` is `[]` literal or a local with the
+ # empty flag set, mark @meth_param_empty[mi][k] = "1" so
+ # a later body-promotion pass can refine the param type.
+ # (b) Backward: if @meth_param_types[mi][k] has already been
+ # promoted to a concrete typed-array (str_array, etc.)
+ # and `arg` is a local with the empty flag, upgrade the
+ # local's type to match — this propagates the deferred
+ # resolution back to the caller's variable.
     if @nd_type[nid] == "CallNode"
       if @nd_receiver[nid] < 0
         ea_mname = @nd_name[nid]
@@ -17798,7 +17798,7 @@ class Compiler
                   ea_changed = 1
                 end
               end
-              # Backward: param already promoted, lift the local too.
+ # Backward: param already promoted, lift the local too.
               if ea_local_idx >= 0 && ea_k < ea_ptypes.length
                 ea_pt = ea_ptypes[ea_k]
                 if types[ea_local_idx] == "int_array" && ea_local_idx < @scan_empty_flags.length && @scan_empty_flags[ea_local_idx] == "1"
@@ -17824,23 +17824,23 @@ class Compiler
         end
       end
     end
-    # `local[k] = v` on a local declared as the empty-hash default
-    # (str_int_hash from `local = {}`) — promote based on the actual
-    # key/value types so the C declaration picks the matching
-    # sp_*Hash struct. Mirrors the ivar-side promotion in
-    # scan_writer_calls. Only fires when @scan_empty_hash_flags
-    # confirms every prior write to this local was an empty-hash
-    # literal — concretely-typed hashes (`h = {"a" => 1}`) keep
-    # their declared type even when later []= writes mix value
-    # types.
-    # IndexOrWriteNode (`h[k] ||= v`), IndexAndWriteNode (`h[k] &&= v`),
-    # IndexOperatorWriteNode (`h[k] += v` etc.) — each implicitly does
-    # an `h[k] = ...` write, so widen the local hash type the same way
-    # as the regular `[]=` CallNode below. Without this, optcarrots
-    # `entries = {}; entries[key] ||= [...]` leaves `entries` at the
-    # str_int_hash default — `entries[key]` reads return mrb_int and
-    # the surrounding `.map { entries[key] }` collapses to IntArray,
-    # losing the cls_id chain on the value pointers.
+ # `local[k] = v` on a local declared as the empty-hash default
+ # (str_int_hash from `local = {}`) — promote based on the actual
+ # key/value types so the C declaration picks the matching
+ # sp_*Hash struct. Mirrors the ivar-side promotion in
+ # scan_writer_calls. Only fires when @scan_empty_hash_flags
+ # confirms every prior write to this local was an empty-hash
+ # literal — concretely-typed hashes (`h = {"a" => 1}`) keep
+ # their declared type even when later []= writes mix value
+ # types.
+ # IndexOrWriteNode (`h[k] ||= v`), IndexAndWriteNode (`h[k] &&= v`),
+ # IndexOperatorWriteNode (`h[k] += v` etc.) — each implicitly does
+ # an `h[k] = ...` write, so widen the local hash type the same way
+ # as the regular `[]=` CallNode below. Without this, optcarrots
+ # `entries = {}; entries[key] ||= [...]` leaves `entries` at the
+ # str_int_hash default — `entries[key]` reads return mrb_int and
+ # the surrounding `.map { entries[key] }` collapses to IntArray,
+ # losing the cls_id chain on the value pointers.
     if @nd_type[nid] == "IndexOrWriteNode" || @nd_type[nid] == "IndexAndWriteNode" || @nd_type[nid] == "IndexOperatorWriteNode"
       iow_recv = @nd_receiver[nid]
       iow_args_id = @nd_arguments[nid]
@@ -17904,36 +17904,36 @@ class Compiler
               while ki < names.length
                 if names[ki] == hname
                   cur = types[ki]
-                  # An empty-hash-tracked local is still "promotable"
-                  # while it sits on str_int_hash (the default empty
-                  # shape) OR on any non-poly hash variant we previously
-                  # promoted it to from str_int_hash. Issue #133: a
-                  # later pass discovers the iterated value type is
-                  # actually poly (each-rebuild over a poly_hash whose
-                  # source type wasn't known at first scan), and we
-                  # need to escalate sym_int_hash → sym_poly_hash etc.
+ # An empty-hash-tracked local is still "promotable"
+ # while it sits on str_int_hash (the default empty
+ # shape) OR on any non-poly hash variant we previously
+ # promoted it to from str_int_hash. a
+ # later pass discovers the iterated value type is
+ # actually poly (each-rebuild over a poly_hash whose
+ # source type wasn't known at first scan), and we
+ # need to escalate sym_int_hash → sym_poly_hash etc.
                   promotable = (cur == "str_int_hash" ||
                                 cur == "str_str_hash" ||
                                 cur == "int_str_hash" ||
                                 cur == "sym_int_hash" ||
                                 cur == "sym_str_hash")
                   if promotable && ki < @scan_empty_hash_flags.length && @scan_empty_hash_flags[ki] == "1"
-                    # Block params (e.g. `|k, v|` in `each`) aren't
-                    # yet `declare_var`'d when scan_locals walks
-                    # the block body, so a bare `infer_type(v)`
-                    # falls back to "int" even though scan_locals
-                    # has already collected v's actual type into
-                    # `types[]`. Prefer that local types array when
-                    # the argument is a LocalVariableReadNode we
-                    # recorded; fall back to infer_type otherwise.
+ # Block params (e.g. `|k, v|` in `each`) aren't
+ # yet `declare_var`'d when scan_locals walks
+ # the block body, so a bare `infer_type(v)`
+ # falls back to "int" even though scan_locals
+ # has already collected v's actual type into
+ # `types[]`. Prefer that local types array when
+ # the argument is a LocalVariableReadNode we
+ # recorded; fall back to infer_type otherwise.
                     key_type = scan_locals_arg_type(aargs[0], names, types, params)
                     val_type = scan_locals_arg_type(aargs[aargs.length - 1], names, types, params)
                     promoted = promote_empty_hash_for(key_type, val_type)
                     if promoted != "" && promoted != cur
                       types[ki] = promoted
-                      # Clear the flag only when reaching the terminal
-                      # poly_hash variant — int/str variants still need
-                      # to be re-promotable on a later poly write.
+ # Clear the flag only when reaching the terminal
+ # poly_hash variant — int/str variants still need
+ # to be re-promotable on a later poly write.
                       if promoted == "str_poly_hash" || promoted == "sym_poly_hash"
                         @scan_empty_hash_flags[ki] = ""
                       end
@@ -17973,7 +17973,7 @@ class Compiler
           lname = @nd_name[tgt]
           if not_in(lname, names) == 1
             if not_in(lname, params) == 1
-              # Infer element type from collection
+ # Infer element type from collection
               elem_type = "int"
               coll = @nd_collection[nid]
               if coll >= 0
@@ -17996,7 +17996,7 @@ class Compiler
         end
       end
     end
-    # Rescue reference (=> e) needs to be declared as a local
+ # Rescue reference (=> e) needs to be declared as a local
     if @nd_type[nid] == "RescueNode"
       ref = @nd_reference[nid]
       if ref >= 0
@@ -18012,7 +18012,7 @@ class Compiler
         end
       end
     end
-    # Detect << on string local variable: widen to mutable_str
+ # Detect << on string local variable: widen to mutable_str
     if @nd_type[nid] == "CallNode"
       if @nd_name[nid] == "<<"
         recv = @nd_receiver[nid]
@@ -18033,7 +18033,7 @@ class Compiler
         end
       end
     end
-    # Block parameters need to be declared as locals
+ # Block parameters need to be declared as locals
     if @nd_type[nid] == "CallNode"
       blk = @nd_block[nid]
       if blk >= 0
@@ -18046,7 +18046,7 @@ class Compiler
             if not_in(nbname, names) == 1
               if not_in(nbname, params) == 1
                 names.push(nbname)
-                # Infer type from receiver element type
+ # Infer type from receiver element type
                 nrt = ""
                 if @nd_receiver[nid] >= 0
                   nrt = infer_type(@nd_receiver[nid])
@@ -18068,11 +18068,11 @@ class Compiler
                 elsif nrt == "sym_array"
                   types.push("symbol")
                 elsif is_ptr_array_type(nrt) == 1
-                  # When the iterated element is itself an array and the
-                  # block uses _1, _2, ... (max >= 2), Ruby destructures
-                  # the yielded sub-array into the numbered slots. Each
-                  # _i then takes the *inner* element type, not the
-                  # outer ptr_array element type.
+ # When the iterated element is itself an array and the
+ # block uses _1, _2, ... (max >= 2), Ruby destructures
+ # the yielded sub-array into the numbered slots. Each
+ # _i then takes the *inner* element type, not the
+ # outer ptr_array element type.
                   ptr_elem = ptr_array_elem_type(nrt)
                   if nmax >= 2 && is_array_type(ptr_elem) == 1
                     types.push(elem_type_of_array(ptr_elem))
@@ -18103,11 +18103,11 @@ class Compiler
                   @scan_literal_flags.push("")
                   @scan_empty_flags.push("")
                   @scan_empty_hash_flags.push("")
-                  # Infer type from receiver context
+ # Infer type from receiver context
                   recv_type = ""
                   if @nd_receiver[nid] >= 0
                     recv_type = infer_type(@nd_receiver[nid])
-                    # If type is int and receiver is local var, check names array
+ # If type is int and receiver is local var, check names array
                     if recv_type == "int"
                       if @nd_type[@nd_receiver[nid]] == "LocalVariableReadNode"
                         rname = @nd_name[@nd_receiver[nid]]
@@ -18120,9 +18120,9 @@ class Compiler
                         end
                       end
                     end
-                    # For chained calls like int_str_hash.keys.each, infer_type
-                    # returns "str_array" because map's type isn't in @scope_names
-                    # during the scan. Resolve by checking the names array.
+ # For chained calls like int_str_hash.keys.each, infer_type
+ # returns "str_array" because map's type isn't in @scope_names
+ # during the scan. Resolve by checking the names array.
                     if recv_type == "str_array"
                       rnode = @nd_receiver[nid]
                       if @nd_type[rnode] == "CallNode" && @nd_name[rnode] == "keys"
@@ -18146,14 +18146,14 @@ class Compiler
                     bk = bk + 1
                     next
                   end
-                  # Issue #395 string-yield sub-variant: when calling
-                  # a yield-bearing method on a user class
-                  # (`c.each { |k| ... }`), infer the block param's
-                  # type from the method's yield-arg type. Without
-                  # this, `k` defaults to mrb_int at the parent
-                  # scope, but the yield expansion assigns the
-                  # method's `n = @keys[i]` (a `const char *`) to
-                  # it -- mismatch.
+ # string-yield sub-variant: when calling
+ # a yield-bearing method on a user class
+ # (`c.each { |k| ... }`), infer the block param's
+ # type from the method's yield-arg type. Without
+ # this, `k` defaults to mrb_int at the parent
+ # scope, but the yield expansion assigns the
+ # method's `n = @keys[i]` (a `const char *`) to
+ # it -- mismatch.
                   if is_obj_type(recv_type) == 1
                     cn_each = recv_type[4, recv_type.length - 4]
                     cci_each = find_class_idx(cn_each)
@@ -18172,13 +18172,13 @@ class Compiler
                             ka = ka + 1
                           end
                           ybid_each = cls_method_body_id(owner_ci_each, owner_midx_each)
-                          # Push a temporary scope with the yielding
-                          # method's locals declared so body_yield_arg_types'
-                          # infer_type calls resolve LocalVariableReadNodes
-                          # to their actual types -- without this, a yield
-                          # arg like `n` (a `const char *` local in the
-                          # method) would just read as `int` (the no-scope
-                          # default) and we'd miss the body-driven type.
+ # Push a temporary scope with the yielding
+ # method's locals declared so body_yield_arg_types'
+ # infer_type calls resolve LocalVariableReadNodes
+ # to their actual types -- without this, a yield
+ # arg like `n` (a `const char *` local in the
+ # method) would just read as `int` (the no-scope
+ # default) and we'd miss the body-driven type.
                           if ybid_each >= 0
                             push_scope
                             yl_names = "".split(",")
@@ -18207,7 +18207,7 @@ class Compiler
                   if mname == "times" || mname == "upto" || mname == "downto"
                     types.push("int")
                   elsif mname == "each" || mname == "each_pair" || mname == "map" || mname == "select" || mname == "filter" || mname == "reject" || mname == "find" || mname == "detect" || mname == "any?" || mname == "all?" || mname == "none?" || mname == "one?" || mname == "count" || mname == "min" || mname == "max" || mname == "sum" || mname == "min_by" || mname == "max_by" || mname == "sort_by" || mname == "flat_map" || mname == "filter_map" || mname == "cycle" || mname == "partition"
-                    # Element iteration: infer block param from collection type
+ # Element iteration: infer block param from collection type
                     if recv_type == "str_array"
                       types.push("string")
                     elsif recv_type == "float_array"
@@ -18263,7 +18263,7 @@ class Compiler
                       types.push("int")
                     end
                   elsif mname == "zip"
-                    # Both params get element type from receiver
+ # Both params get element type from receiver
                     if recv_type == "str_array"
                       types.push("string")
                     elsif recv_type == "float_array"
@@ -18273,7 +18273,7 @@ class Compiler
                     end
                   elsif mname == "each_with_index"
                     if bk == 0
-                      # Element
+ # Element
                       if recv_type == "str_array"
                         types.push("string")
                       elsif recv_type == "sym_array"
@@ -18286,7 +18286,7 @@ class Compiler
                         types.push("int")
                       end
                     else
-                      # Index
+ # Index
                       types.push("int")
                     end
                   elsif mname == "each_char" || mname == "each_line"
@@ -18294,11 +18294,11 @@ class Compiler
                   elsif mname == "each_byte"
                     types.push("int")
                   elsif mname == "tap" || mname == "then" || mname == "yield_self"
-                    # Block param gets receiver type
+ # Block param gets receiver type
                     types.push(recv_type)
                   elsif mname == "each_with_object"
                     if bk == 0
-                      # Element
+ # Element
                       if recv_type == "str_array"
                         types.push("string")
                       elsif recv_type == "float_array"
@@ -18307,7 +18307,7 @@ class Compiler
                         types.push("int")
                       end
                     else
-                      # Object accumulator — infer from first argument
+ # Object accumulator — infer from first argument
                       args_id = @nd_arguments[nid]
                       if args_id >= 0
                         aargs = get_args(args_id)
@@ -18320,7 +18320,7 @@ class Compiler
                       types.push("int")
                     end
                   elsif mname == "each_slice" || mname == "each_cons"
-                    # Block param is a sub-array of the same type
+ # Block param is a sub-array of the same type
                     if recv_type == "str_array" || recv_type == "float_array" || recv_type == "int_array"
                       types.push(recv_type)
                     else
@@ -18328,7 +18328,7 @@ class Compiler
                     end
                   elsif mname == "reduce" || mname == "inject"
                     if bk == 0
-                      # Accumulator: infer from initial value argument
+ # Accumulator: infer from initial value argument
                       args_id = @nd_arguments[nid]
                       if args_id >= 0
                         aargs = get_args(args_id)
@@ -18340,7 +18340,7 @@ class Compiler
                       end
                       types.push("int")
                     else
-                      # Element
+ # Element
                       if recv_type == "str_array"
                         types.push("string")
                       elsif recv_type == "float_array"
@@ -18360,7 +18360,7 @@ class Compiler
         end
       end
     end
-    # Recurse
+ # Recurse
     scan_locals_children(nid, names, types, params)
   end
 
@@ -18441,33 +18441,33 @@ class Compiler
     1
   end
 
-  # Scan locals introduced by constant-initializer RHS expressions —
-  # those run inside main() before the user stmts, so any block
-  # params they introduce (`FRAME = [...].map { |n| ... }` and the
-  # multi-write form `A, B = [...].map { |n| ... }`) need their
-  # `lv_<bp>` decls in main's scope. Covers both `@const_expr_ids`
-  # (single-const inits) and `@multi_const_inits` (the multi-write
-  # form, where the RHS lives on a MultiWriteNode).
+ # Scan locals introduced by constant-initializer RHS expressions —
+ # those run inside main() before the user stmts, so any block
+ # params they introduce (`FRAME = [...].map { |n| ... }` and the
+ # multi-write form `A, B = [...].map { |n| ... }`) need their
+ # `lv_<bp>` decls in main's scope. Covers both `@const_expr_ids`
+ # (single-const inits) and `@multi_const_inits` (the multi-write
+ # form, where the RHS lives on a MultiWriteNode).
 
 
-  # ---- Main emission ----
-  # Emit the cls_id-aware obj hash/eql dispatch shims that
-  # sp_PolyPolyHash uses for OBJ-tag keys. The default runtime
-  # behavior is pointer identity; this dispatch overrides it for
-  # classes whose `eql?` semantics are content-based:
-  #
-  # - sp_Method (when the class is in scope): equal iff bound
-  #   receiver + fn_ptr match — covers `obj.method(:foo)` dedup.
-  # - sp_IntArray (SP_BUILTIN_INT_ARRAY = -1): element-wise content
-  #   compare — covers `entries[[a, b]] ||= ...` array-keyed Hash
-  #   patterns.
+ # ---- Main emission ----
+ # Emit the cls_id-aware obj hash/eql dispatch shims that
+ # sp_PolyPolyHash uses for OBJ-tag keys. The default runtime
+ # behavior is pointer identity; this dispatch overrides it for
+ # classes whose `eql?` semantics are content-based:
+ #
+ # - sp_Method (when the class is in scope): equal iff bound
+ # receiver + fn_ptr match — covers `obj.method(:foo)` dedup.
+ # - sp_IntArray (SP_BUILTIN_INT_ARRAY = -1): element-wise content
+ # compare — covers `entries[[a, b]] ||= ...` array-keyed Hash
+ # patterns.
 
 
-  # Compile a node for use as a C scalar condition. Value-type objects
-  # are passed by value (a struct), and C rejects them as scalars in
-  # `if (...)` etc. In Ruby every non-nil/non-false object is truthy,
-  # so wrap the expression in a comma operator that evaluates it for
-  # side effects then yields 1.
+ # Compile a node for use as a C scalar condition. Value-type objects
+ # are passed by value (a struct), and C rejects them as scalars in
+ # `if (...)` etc. In Ruby every non-nil/non-false object is truthy,
+ # so wrap the expression in a comma operator that evaluates it for
+ # side effects then yields 1.
 
 
   def or_result_type(nid)
@@ -18488,17 +18488,17 @@ class Compiler
     "poly"
   end
 
-  # ---- Expression compiler ----
+ # ---- Expression compiler ----
 
   def c_string_literal(s)
-    # Input `s` is the runtime Ruby string content (already-cooked: any
-    # backslash in `s` is a literal backslash, NOT an escape introducer).
-    # We C-escape the small set that needs it: backslash, double-quote,
-    # newline, carriage return, tab. Everything else copies through.
-    # The previous version treated `s` as if it still carried Ruby
-    # escapes, so a 2-char input "\\n" (backslash + n) wrongly collapsed
-    # to a C newline; that bug is what made `"hello\\nworld\\n".lines`
-    # emit invalid C with a literal newline inside a string literal.
+ # Input `s` is the runtime Ruby string content (already-cooked: any
+ # backslash in `s` is a literal backslash, NOT an escape introducer).
+ # We C-escape the small set that needs it: backslash, double-quote,
+ # newline, carriage return, tab. Everything else copies through.
+ # The previous version treated `s` as if it still carried Ruby
+ # escapes, so a 2-char input "\\n" (backslash + n) wrongly collapsed
+ # to a C newline; that bug is what made `"hello\\nworld\\n".lines`
+ # emit invalid C with a literal newline inside a string literal.
     result = "\""
     i = 0
     while i < s.length
@@ -18526,83 +18526,83 @@ class Compiler
       end
       i = i + 1
     end
-    # Prepend 0xff marker byte so GC can identify static literals.
-    # Return form: (&("\xff" "content")[1]) — same pointer value as the
-    # legacy ("\xff" "content" + 1) idiom, but uses array indexing so
-    # clang doesn't flag it under -Wstring-plus-int.
+ # Prepend 0xff marker byte so GC can identify static literals.
+ # Return form: (&("\xff" "content")[1]) — same pointer value as the
+ # legacy ("\xff" "content" + 1) idiom, but uses array indexing so
+ # clang doesn't flag it under -Wstring-plus-int.
     "(&(\"\\xff\" " + result + "\")[1])"
   end
 
 
 
-  # True if `t` is a GC-allocated pointer that could be swept by
-  # sp_gc_collect if held only as a C-stack temp when the collector
-  # runs mid-expression.
+ # True if `t` is a GC-allocated pointer that could be swept by
+ # sp_gc_collect if held only as a C-stack temp when the collector
+ # runs mid-expression.
 
-  # Compile `nid`, and if it's a call expression whose result is a
-  # GC-allocated pointer, bind that result to a rooted temp variable
-  # so a subsequent mid-expression sp_gc_collect cannot sweep it.
-  # For non-call expressions (locals, ivars, literals) rooting is
-  # either already in place or unnecessary.
-
-
-  # Like compile_arg0, but unboxes the result to mrb_int when the
-  # argument's static type is poly. Use at call sites that pass the
-  # arg directly to a C function expecting `mrb_int` (sp_IntArray_get,
-  # sp_IntArray_push integer-element variants, runtime helpers that
-  # take an int index, etc.). Without unboxing, gcc rejects passing
-  # `sp_RbVal` to a `mrb_int` parameter.
-
-  # Like compile_arg0, but converts symbol-typed arg to const char *
-  # (sp_sym_to_s wrap). Use for callsites that need a string key.
+ # Compile `nid`, and if it's a call expression whose result is a
+ # GC-allocated pointer, bind that result to a rooted temp variable
+ # so a subsequent mid-expression sp_gc_collect cannot sweep it.
+ # For non-call expressions (locals, ivars, literals) rooting is
+ # either already in place or unnecessary.
 
 
-  # --- Fiber capture helpers ---
+ # Like compile_arg0, but unboxes the result to mrb_int when the
+ # argument's static type is poly. Use at call sites that pass the
+ # arg directly to a C function expecting `mrb_int` (sp_IntArray_get,
+ # sp_IntArray_push integer-element variants, runtime helpers that
+ # take an int index, etc.). Without unboxing, gcc rejects passing
+ # `sp_RbVal` to a `mrb_int` parameter.
+
+ # Like compile_arg0, but converts symbol-typed arg to const char *
+ # (sp_sym_to_s wrap). Use for callsites that need a string key.
 
 
-
-
-
-
-  # Detect whether a Fiber.new block body references `self` — directly
-  # (`SelfNode`), via `@ivar` reads/writes, or via a no-receiver method
-  # call inside a class body. Used by `compile_fiber_new` to decide
-  # whether to thread an explicit `self` capture through the fiber's
-  # `_cap` struct so the body's emitted C can resolve `self->iv_X` and
-  # `sp_<Class>_<method>(self)` call sites without the surrounding
-  # method's `self` parameter.
-
-
-
-  # Returns the C expression for a CallNode. Symmetric with
-  # `infer_call_type` (which returns the call's C type) — see the
-  # docstring there for the maintenance rule on adding new shapes.
-  # Branch order in this function mirrors infer_call_type's order so
-  # the two stay diff-able.
+ # --- Fiber capture helpers ---
 
 
 
 
 
 
-  # Collect flattened parts of a string concat chain: a + b + c → [a, b, c]
-  # Returns compiled expression strings. Only flattens up to 4 parts.
+ # Detect whether a Fiber.new block body references `self` — directly
+ # (`SelfNode`), via `@ivar` reads/writes, or via a no-receiver method
+ # call inside a class body. Used by `compile_fiber_new` to decide
+ # whether to thread an explicit `self` capture through the fiber's
+ # `_cap` struct so the body's emitted C can resolve `self->iv_X` and
+ # `sp_<Class>_<method>(self)` call sites without the surrounding
+ # method's `self` parameter.
 
 
 
-  # Resolve an implicit `new` (recv-less) inside a `def self.<m>`
-  # body to <CurrentClass>.new, so a factory like `def
-  # self.from_raw(p); instance = new; instance.x = ...; end`
-  # works. Mirrors the way implicit `self` inside instance methods
-  # routes recv-less calls to the enclosing class.
+ # Returns the C expression for a CallNode. Symmetric with
+ # `infer_call_type` (which returns the call's C type) — see the
+ # docstring there for the maintenance rule on adding new shapes.
+ # Branch order in this function mirrors infer_call_type's order so
+ # the two stay diff-able.
+
+
+
+
+
+
+ # Collect flattened parts of a string concat chain: a + b + c → [a, b, c]
+ # Returns compiled expression strings. Only flattens up to 4 parts.
+
+
+
+ # Resolve an implicit `new` (recv-less) inside a `def self.<m>`
+ # body to <CurrentClass>.new, so a factory like `def
+ # self.from_raw(p); instance = new; instance.x = ...; end`
+ # works. Mirrors the way implicit `self` inside instance methods
+ # routes recv-less calls to the enclosing class.
 
   def current_class_method_owning_class
     if @current_method_name == ""
       return ""
     end
-    # Two formats land here: scan_writer_calls pins
-    # "<Class>_cls_<m>" so we can split on the marker; emit-side
-    # sets just "<m>" and relies on @current_class_idx for context.
+ # Two formats land here: scan_writer_calls pins
+ # "<Class>_cls_<m>" so we can split on the marker; emit-side
+ # sets just "<m>" and relies on @current_class_idx for context.
     cls_idx = @current_method_name.index("_cls_")
     if cls_idx != nil && cls_idx >= 0
       return @current_method_name[0, cls_idx]
@@ -18623,35 +18623,32 @@ class Compiler
 
 
 
-  # Resolve the literal RangeNode behind a method receiver, peeking
-  # through a single ParenthesesNode wrap. Returns -1 when the receiver
-  # isn't a literal range — in which case the runtime sp_Range struct is
-  # used and exclude_end isn't tracked.
+ # Resolve the literal RangeNode behind a method receiver, peeking
+ # through a single ParenthesesNode wrap. Returns -1 when the receiver
+ # isn't a literal range — in which case the runtime sp_Range struct is
+ # used and exclude_end isn't tracked.
 
 
-  # Symbol methods. rc is a sp_sym expression.
-
-
-
-
-
-  # Multi-key Hash#dig walks across poly slots: each step dispatches
-  # on acc.cls_id to pick a concrete-hash variant (cls_ids stamped in
-  # box_value_to_poly via cls_id_for_hash_type). A cls_id that matches
-  # no known variant collapses the walk to nil, covering both "key
-  # missing mid-walk" and "value at this depth isn't a hash".
-
-  # Caller must pass `key_expr` typed for recv_type's key family —
-  # compile_hash_dig validates this with hash_key_matches_recv first.
-
-  # Non-poly inner hashes need a has_key guard: their typed `_get`
-  # returns 0/"" on miss, which sp_box_int/sp_box_str would otherwise
-  # round-trip as a genuine 0/"" leaf indistinguishable from a real
-  # value. Poly inner hashes don't need the guard — their `_get`
-  # already returns sp_box_nil() on miss.
+ # Symbol methods. rc is a sp_sym expression.
 
 
 
+
+
+ # Multi-key Hash#dig walks across poly slots: each step dispatches
+ # on acc.cls_id to pick a concrete-hash variant (cls_ids stamped in
+ # box_value_to_poly via cls_id_for_hash_type). A cls_id that matches
+ # no known variant collapses the walk to nil, covering both "key
+ # missing mid-walk" and "value at this depth isn't a hash".
+
+ # Caller must pass `key_expr` typed for recv_type's key family —
+ # compile_hash_dig validates this with hash_key_matches_recv first.
+
+ # Non-poly inner hashes need a has_key guard: their typed `_get`
+ # returns 0/"" on miss, which sp_box_int/sp_box_str would otherwise
+ # round-trip as a genuine 0/"" leaf indistinguishable from a real
+ # value. Poly inner hashes don't need the guard — their `_get`
+ # already returns sp_box_nil() on miss.
 
 
 
@@ -18660,13 +18657,16 @@ class Compiler
 
 
 
-  # Inferred return type for `recv.mname(...)` when `recv` is poly.
-  # If every user class that defines mname agrees on the return type,
-  # that concrete type is used. If any two disagree, the call is
-  # genuinely polymorphic and the caller must treat the result as
-  # an sp_RbVal.
-  # Returns 1 if class `ci` declares `mname` as an attr_reader (in
-  # which case `obj.<mname>` reads `obj->iv_<mname>`).
+
+
+
+ # Inferred return type for `recv.mname(...)` when `recv` is poly.
+ # If every user class that defines mname agrees on the return type,
+ # that concrete type is used. If any two disagree, the call is
+ # genuinely polymorphic and the caller must treat the result as
+ # an sp_RbVal.
+ # Returns 1 if class `ci` declares `mname` as an attr_reader (in
+ # which case `obj.<mname>` reads `obj->iv_<mname>`).
   def cls_has_attr_reader(ci, mname)
     readers = @cls_attr_readers[ci].split(";")
     j = 0
@@ -18679,21 +18679,21 @@ class Compiler
     0
   end
 
-  # Decide whether a `<poly>[k]` call site (the outer `[]` in
-  # `arr[i][k]` chains) can return int instead of poly. The poly
-  # value came from `arr[i]` where `arr` is a poly_array; if every
-  # element kind observed for `arr`'s slot has an int-returning
-  # `[]` (IntArray + Method, the optcarrot `__fetch__` shape), the
-  # outer dispatch is guaranteed to land on a poly carrying an int
-  # tag, and we can read it as `mrb_int` directly. Returns 0
-  # whenever the chain doesn't fit the pattern, so the default
-  # poly-typed temp is preserved for everything else.
+ # Decide whether a `<poly>[k]` call site (the outer `[]` in
+ # `arr[i][k]` chains) can return int instead of poly. The poly
+ # value came from `arr[i]` where `arr` is a poly_array; if every
+ # element kind observed for `arr`'s slot has an int-returning
+ # `[]` (IntArray + Method, the optcarrot `__fetch__` shape), the
+ # outer dispatch is guaranteed to land on a poly carrying an int
+ # tag, and we can read it as `mrb_int` directly. Returns 0
+ # whenever the chain doesn't fit the pattern, so the default
+ # poly-typed temp is preserved for everything else.
   def poly_index_narrow_int(nid)
     recv_id = @nd_receiver[nid]
     if recv_id < 0
       return 0
     end
-    # The receiver must itself be a `[]` call (`arr[i]`).
+ # The receiver must itself be a `[]` call (`arr[i]`).
     if @nd_type[recv_id] != "CallNode" || @nd_name[recv_id] != "[]"
       return 0
     end
@@ -18701,22 +18701,22 @@ class Compiler
     if inner_recv < 0
       return 0
     end
-    # Resolve the inner receiver to an ivar (directly, or via a
-    # one-step LV alias from `lv = @ivar`).
+ # Resolve the inner receiver to an ivar (directly, or via a
+ # one-step LV alias from `lv = @ivar`).
     iname = ""
     if @nd_type[inner_recv] == "InstanceVariableReadNode"
       iname = @nd_name[inner_recv]
     elsif @nd_type[inner_recv] == "LocalVariableReadNode"
       lv_name = @nd_name[inner_recv]
-      # Codegen-time scope alias takes priority (set by the LV-write
-      # handler when `lv = @ivar` is emitted in this scope).
+ # Codegen-time scope alias takes priority (set by the LV-write
+ # handler when `lv = @ivar` is emitted in this scope).
       iname = find_var_ivar_alias(lv_name)
-      # Fallback for inference-time (`infer_type` before codegen,
-      # when the scope stack hasn't been populated yet): walk the
-      # enclosing method bodies for a single, unambiguous
-      # `lv_name = @ivar` write. If the LV is reassigned from a
-      # non-ivar elsewhere, leave iname empty and let the caller
-      # bail out — the alias is no longer load-bearing.
+ # Fallback for inference-time (`infer_type` before codegen,
+ # when the scope stack hasn't been populated yet): walk the
+ # enclosing method bodies for a single, unambiguous
+ # `lv_name = @ivar` write. If the LV is reassigned from a
+ # non-ivar elsewhere, leave iname empty and let the caller
+ # bail out — the alias is no longer load-bearing.
       if iname == ""
         iname = find_lv_ivar_alias_in_ast(lv_name)
       end
@@ -18724,19 +18724,19 @@ class Compiler
     if iname == "" || @current_class_idx < 0
       return 0
     end
-    # The slot must currently be a poly_array — the only shape that
-    # produces a poly via `[i]`.
+ # The slot must currently be a poly_array — the only shape that
+ # produces a poly via `[i]`.
     slot_t = cls_ivar_type(@current_class_idx, iname)
     if slot_t != "poly_array"
       return 0
     end
-    # Derive the heterogeneous element kinds from
-    # `cls_ivar_observed_types`. Each entry there is a slot type
-    # the ivar held at some scan iteration: `int_array` means int
-    # elements were stored, `obj_Method_ptr_array` means Method
-    # elements, etc. The final `poly_array` entry just records the
-    # widened state and adds no info. A bare `poly` observation
-    # (whole-ivar `@x = something_poly`) is unknown — bail out.
+ # Derive the heterogeneous element kinds from
+ # `cls_ivar_observed_types`. Each entry there is a slot type
+ # the ivar held at some scan iteration: `int_array` means int
+ # elements were stored, `obj_Method_ptr_array` means Method
+ # elements, etc. The final `poly_array` entry just records the
+ # widened state and adds no info. A bare `poly` observation
+ # (whole-ivar `@x = something_poly`) is unknown — bail out.
     obs = cls_ivar_observed_types_for(@current_class_idx, iname)
     if obs == ""
       return 0
@@ -18747,14 +18747,14 @@ class Compiler
     while di < distinct.length
       t = distinct[di]
       if t == "" || t == "poly_array"
-        # ignore — uninformative
+ # ignore — uninformative
       elsif t == "int_array" || t == "obj_Method_ptr_array"
-        # int-returning element kind
+ # int-returning element kind
         saw_any = 1
       else
-        # any other observed slot type (str_array, float_array,
-        # other ptr_array variants, "poly" whole-ivar writes…) is
-        # not safely narrowable.
+ # any other observed slot type (str_array, float_array,
+ # other ptr_array variants, "poly" whole-ivar writes…) is
+ # not safely narrowable.
         return 0
       end
       di = di + 1
@@ -18762,14 +18762,14 @@ class Compiler
     saw_any
   end
 
-  # Inference-time fallback for resolving `lv_name -> @ivar` when the
-  # codegen scope alias isn't available yet. Walks every method body
-  # in the current class for `lv_name = @ivar` writes. Returns the
-  # ivar name only if the LV is unambiguously aliased (one ivar
-  # source, no non-ivar reassignment); empty string otherwise. Cached
-  # in `@lv_alias_cache_<class>:<lv>` to keep the per-narrow cost
-  # down — this is called during type inference, which runs many
-  # iterations.
+ # Inference-time fallback for resolving `lv_name -> @ivar` when the
+ # codegen scope alias isn't available yet. Walks every method body
+ # in the current class for `lv_name = @ivar` writes. Returns the
+ # ivar name only if the LV is unambiguously aliased (one ivar
+ # source, no non-ivar reassignment); empty string otherwise. Cached
+ # in `@lv_alias_cache_<class>:<lv>` to keep the per-narrow cost
+ # down — this is called during type inference, which runs many
+ # iterations.
   def find_lv_ivar_alias_in_ast(lv_name)
     if @current_class_idx < 0
       return ""
@@ -18786,8 +18786,8 @@ class Compiler
       if bid >= 0
         r = scan_lv_alias_for(bid, lv_name)
         if r == "?"
-          # Ambiguous: at least one non-ivar write to this LV. The
-          # alias is unstable and unsafe to use for narrowing.
+ # Ambiguous: at least one non-ivar write to this LV. The
+ # alias is unstable and unsafe to use for narrowing.
           found = ""
           break
         end
@@ -18805,10 +18805,10 @@ class Compiler
     found
   end
 
-  # Recursive AST walk under `nid`. Returns:
-  #   ""  — no `lv_name = ...` write seen
-  #   "?" — `lv_name = <non-ivar>` write seen (alias is unstable)
-  #   "@x" — exactly one ivar source `lv_name = @x` seen
+ # Recursive AST walk under `nid`. Returns:
+ # "" — no `lv_name = ...` write seen
+ # "?" — `lv_name = <non-ivar>` write seen (alias is unstable)
+ # "@x" — exactly one ivar source `lv_name = @x` seen
   def scan_lv_alias_for(nid, lv_name)
     if nid < 0
       return ""
@@ -18841,8 +18841,8 @@ class Compiler
     found
   end
 
-  # Read the comma-separated whole-ivar observation list for a given
-  # ivar by name. Used by `poly_index_narrow_int`.
+ # Read the comma-separated whole-ivar observation list for a given
+ # ivar by name. Used by `poly_index_narrow_int`.
   def cls_ivar_observed_types_for(ci, iname)
     if ci < 0 || ci >= @cls_ivar_observed_types.length
       return ""
@@ -18864,11 +18864,11 @@ class Compiler
       @needs_rb_value = 1
       return "poly"
     end
-    # Setters: mname ends with "=" and at least one class has an
-    # attr_writer for the bare name. Return type is the ivar type
-    # (Ruby returns the rhs from `x = v`); without this, the result
-    # tmp's C type defaults to `mrb_int` and `tmp = rhs` mismatches
-    # for non-int slots.
+ # Setters: mname ends with "=" and at least one class has an
+ # attr_writer for the bare name. Return type is the ivar type
+ # (Ruby returns the rhs from `x = v`); without this, the result
+ # tmp's C type defaults to `mrb_int` and `tmp = rhs` mismatches
+ # for non-int slots.
     setter_bname = ""
     if mname.length > 1 && mname[mname.length - 1] == "="
       setter_bname = mname[0, mname.length - 1]
@@ -18880,10 +18880,10 @@ class Compiler
       if cls_find_method_direct(ci, mname) >= 0
         rt = cls_method_return(ci, mname)
       elsif cls_has_attr_reader(ci, mname) == 1
-        # An attr_reader returns the ivar type. Issue #119.
+ # An attr_reader returns the ivar type. .
         rt = cls_ivar_type(ci, "@" + mname)
       elsif setter_bname != "" && cls_has_attr_writer(ci, setter_bname) == 1
-        # An attr_writer setter returns the ivar's type.
+ # An attr_writer setter returns the ivar's type.
         rt = cls_ivar_type(ci, "@" + setter_bname)
       end
       if rt != ""
@@ -18898,58 +18898,58 @@ class Compiler
     common == "" ? "int" : common
   end
 
-  # Runtime tag-check for `<poly>.is_a?(<klass>)` / `kind_of?` /
-  # `instance_of?`. Returns a C boolean expression for the named
-  # built-in class (Integer, String, Float, etc.), including
-  # mixin-style names that match every value (Object, Kernel,
-  # BasicObject, Comparable). Returns "" when the name has no
-  # SP_TAG_* mapping (caller falls back to user-class dispatch).
+ # Runtime tag-check for `<poly>.is_a?(<klass>)` / `kind_of?` /
+ # `instance_of?`. Returns a C boolean expression for the named
+ # built-in class (Integer, String, Float, etc.), including
+ # mixin-style names that match every value (Object, Kernel,
+ # BasicObject, Comparable). Returns "" when the name has no
+ # SP_TAG_* mapping (caller falls back to user-class dispatch).
 
 
-  # Emit branches for the built-in (negative cls_id) entries. Each
-  # entry maps a (SP_BUILTIN_*, method) pair to a C expression.
-  # Adding a new built-in type means one more `if` branch here.
+ # Emit branches for the built-in (negative cls_id) entries. Each
+ # entry maps a (SP_BUILTIN_*, method) pair to a C expression.
+ # Adding a new built-in type means one more `if` branch here.
 
-  # Try to compile str[i] <op> "c" as direct char comparison
-  # Returns "" if not applicable
-
-
-  # Box an already-compiled value of static type `at` into an sp_RbVal.
-  # Mirrors box_expr_to_poly but operates on a raw (type, value) pair so
-  # callers that already have temps don't have to re-emit the expr.
-  # Unbox an sp_RbVal expression `val` into the C representation
-  # of `at`. Used at sites where the destructure / cls_id-aware
-  # dispatch produced an sp_RbVal but the consumer slot is a
-  # concrete C type (mrb_int, sp_IntArray *, const char *, ...).
-  # No runtime cls_id check — caller has already narrowed via
-  # static type / wrapping cls_id dispatch.
+ # Try to compile str[i] <op> "c" as direct char comparison
+ # Returns "" if not applicable
 
 
+ # Box an already-compiled value of static type `at` into an sp_RbVal.
+ # Mirrors box_expr_to_poly but operates on a raw (type, value) pair so
+ # callers that already have temps don't have to re-emit the expr.
+ # Unbox an sp_RbVal expression `val` into the C representation
+ # of `at`. Used at sites where the destructure / cls_id-aware
+ # dispatch produced an sp_RbVal but the consumer slot is a
+ # concrete C type (mrb_int, sp_IntArray *, const char *, ...).
+ # No runtime cls_id check — caller has already narrowed via
+ # static type / wrapping cls_id dispatch.
 
 
 
-  # Emit a chained `@a = @b = ... = expr` write as one rhs evaluation
-  # plus N per-slot stores. Caller has verified that `nid` is an
-  # InstanceVariableWriteNode whose expression is itself an
-  # InstanceVariableWriteNode. Each slot is typed independently (some
-  # widened to poly by scan_writer_calls, others kept native), so the
-  # store boxes through sp_RbVal only for the poly slots.
 
-  # Emit a runtime loop that pushes every element of the array `src_expr`
-  # (a node id whose value is some typed array) onto the destination
-  # int_array variable `dst`. Used when expanding `*args` into a rest
-  # parameter that will be received as sp_IntArray *.
 
-  # Read an element of a typed array as an mrb_int (so it fits int param
-  # slots and the int_array rest bundle uniformly).
+ # Emit a chained `@a = @b = ... = expr` write as one rhs evaluation
+ # plus N per-slot stores. Caller has verified that `nid` is an
+ # InstanceVariableWriteNode whose expression is itself an
+ # InstanceVariableWriteNode. Each slot is typed independently (some
+ # widened to poly by scan_writer_calls, others kept native), so the
+ # store boxes through sp_RbVal only for the poly slots.
 
-  # Same as array_get_as_int_expr but returns the element in its native
-  # C type (used when the param slot is typed, e.g. const char *).
+ # Emit a runtime loop that pushes every element of the array `src_expr`
+ # (a node id whose value is some typed array) onto the destination
+ # int_array variable `dst`. Used when expanding `*args` into a rest
+ # parameter that will be received as sp_IntArray *.
 
-  # Splat-aware companion to compile_call_args_with_defaults. Handles a
-  # single SplatNode in positional args. The conceptual positional list
-  # is (prefix... ++ splat_array ++ suffix...); fixed params eat from the
-  # left; the rest param (if any) gets the remainder.
+ # Read an element of a typed array as an mrb_int (so it fits int param
+ # slots and the int_array rest bundle uniformly).
+
+ # Same as array_get_as_int_expr but returns the element in its native
+ # C type (used when the param slot is typed, e.g. const char *).
+
+ # Splat-aware companion to compile_call_args_with_defaults. Handles a
+ # single SplatNode in positional args. The conceptual positional list
+ # is (prefix... ++ splat_array ++ suffix...); fixed params eat from the
+ # left; the rest param (if any) gets the remainder.
 
 
 
@@ -18979,9 +18979,9 @@ class Compiler
     ""
   end
 
-  # if midx is out of range or the body id is invalid. Centralises
-  # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
-  # don't have to inline it.
+ # if midx is out of range or the body id is invalid. Centralises
+ # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
+ # don't have to inline it.
   def cls_method_body_id(ci, midx)
     bodies = @cls_meth_bodies[ci].split(";")
     if midx >= bodies.length
@@ -18994,10 +18994,10 @@ class Compiler
     bid
   end
 
-  # Walk `nid` for YieldNode, accumulating the per-position arg
-  # type into `types`. Stops at nested DefNode boundaries (those
-  # introduce a new method scope with its own yield arity).
-  # Mirrors body_max_yield_arity's traversal shape.
+ # Walk `nid` for YieldNode, accumulating the per-position arg
+ # type into `types`. Stops at nested DefNode boundaries (those
+ # introduce a new method scope with its own yield arity).
+ # Mirrors body_max_yield_arity's traversal shape.
   def body_yield_arg_types(nid, types)
     if nid < 0
       return
@@ -19042,9 +19042,9 @@ class Compiler
     0
   end
 
-  # Max number of args used in any `yield` inside the top-level method
-  # at @meth_body_ids[mi]. Floor of 1 — yield-using methods always have
-  # at least one mrb_int slot (the no-arg `yield` form is padded to 0).
+ # Max number of args used in any `yield` inside the top-level method
+ # at @meth_body_ids[mi]. Floor of 1 — yield-using methods always have
+ # at least one mrb_int slot (the no-arg `yield` form is padded to 0).
   def method_yield_arity(mi)
     if mi < 0 || mi >= @meth_body_ids.length
       return 1
@@ -19052,11 +19052,11 @@ class Compiler
     body_max_yield_arity(@meth_body_ids[mi], 1)
   end
 
-  # Same as method_yield_arity, but resolved through the class method
-  # body table @cls_meth_bodies (parallel to @cls_meth_has_yield).
-  # Mirrors body_has_yield's recursion shape. `current` carries the running
-  # max so callers can seed a floor (1, since every yield-using method needs
-  # at least one mrb_int slot in `_block`'s signature).
+ # Same as method_yield_arity, but resolved through the class method
+ # body table @cls_meth_bodies (parallel to @cls_meth_has_yield).
+ # Mirrors body_has_yield's recursion shape. `current` carries the running
+ # max so callers can seed a floor (1, since every yield-using method needs
+ # at least one mrb_int slot in `_block`'s signature).
   def body_max_yield_arity(nid, current)
     if nid < 0
       return current
@@ -19086,12 +19086,12 @@ class Compiler
     current
   end
 
-  # ---- Return type inference ----
+ # ---- Return type inference ----
 
-  # Narrow pre-pass for `rewrite_instance_eval_calls`: walk top-level
-  # CallNodes shaped `recv.method(args)` where recv resolves to an
-  # obj_<C> via top-level scope, and let scan_new_calls' receiver-method
-  # branch widen the class method's ptypes. Without this, a method-param
+ # Narrow pre-pass for `rewrite_instance_eval_calls`: walk top-level
+ # CallNodes shaped `recv.method(args)` where recv resolves to an
+ # obj_<C> via top-level scope, and let scan_new_calls' receiver-method
+ # branch widen the class method's ptypes. Without this, a method-param
 
   def cls_method_yield_arity(ci, midx)
     if ci < 0 || midx < 0
@@ -19106,53 +19106,53 @@ class Compiler
   end
 
 
-  # `recv OP rhs` lowering for an obj-typed receiver. When the
-  # receiver's class (or an ancestor) defines `op` as a user method,
-  # returns the C expression `sp_<owner>_<op>(<recv_c>, <rhs_c>)`.
-  # Returns "" when no dispatch applies (caller falls back to its
-  # inline path, or to `warn_unresolved_call`).
+ # `recv OP rhs` lowering for an obj-typed receiver. When the
+ # receiver's class (or an ancestor) defines `op` as a user method,
+ # returns the C expression `sp_<owner>_<op>(<recv_c>, <rhs_c>)`.
+ # Returns "" when no dispatch applies (caller falls back to its
+ # inline path, or to `warn_unresolved_call`).
 
 
 
-  # Compile an `ArrayNode` literal as `sp_PolyArray *`, regardless
-  # of the inferred elem type. Used by the nested-array path in
-  # the poly_array branch so 3D-and-deeper arrays preserve cls_id
-  # tags through every level (e.g. an inner `[1,2,3]` ends up
-  # boxed via `sp_box_int_array` so the dispatch can still
-  # `sp_IntArray_get` on it).
+ # Compile an `ArrayNode` literal as `sp_PolyArray *`, regardless
+ # of the inferred elem type. Used by the nested-array path in
+ # the poly_array branch so 3D-and-deeper arrays preserve cls_id
+ # tags through every level (e.g. an inner `[1,2,3]` ends up
+ # boxed via `sp_box_int_array` so the dispatch can still
+ # `sp_IntArray_get` on it).
 
 
-  # Body of compile_array_literal, parameterised on the list of value
-  # node ids and the resolved array element type. Lets a HashNode
-  # whose keys are 0..N-1 (lowered to Array) reuse the same emission
-  # paths by feeding in the AssocNode rhs ids without needing an
-  # ArrayNode wrapper.
+ # Body of compile_array_literal, parameterised on the list of value
+ # node ids and the resolved array element type. Lets a HashNode
+ # whose keys are 0..N-1 (lowered to Array) reuse the same emission
+ # paths by feeding in the AssocNode rhs ids without needing an
+ # ArrayNode wrapper.
 
-  # HashNode literal whose keys are 0..N-1 lowered to an Array
-  # literal. Reuses compile_array_literal_from_ids by mapping each
-  # AssocNode to its rhs value id.
+ # HashNode literal whose keys are 0..N-1 lowered to an Array
+ # literal. Reuses compile_array_literal_from_ids by mapping each
+ # AssocNode to its rhs value id.
 
 
-  # ---- Statement compiler ----
+ # ---- Statement compiler ----
 
-  # Emit assignment of `value_expr` to a single MultiWrite target node
-  # (LocalVariableTargetNode or InstanceVariableTargetNode). Centralized
-  # so the splat path doesn't have to duplicate the InstanceVariable
-  # special-cases (module-method-promoted ivar handling).
-  # Assign `value_expr` (whose static C type is `value_type`) into the
-  # multi-write target node. When the local target's slot is `poly` and
-  # the source value isn't already boxed, the value is boxed first so a
-  # heterogeneous RHS like `a, b, c = [1, "b", 2.0]` lands in the right
-  # tagged-union slots.
+ # Emit assignment of `value_expr` to a single MultiWrite target node
+ # (LocalVariableTargetNode or InstanceVariableTargetNode). Centralized
+ # so the splat path doesn't have to duplicate the InstanceVariable
+ # special-cases (module-method-promoted ivar handling).
+ # Assign `value_expr` (whose static C type is `value_type`) into the
+ # multi-write target node. When the local target's slot is `poly` and
+ # the source value isn't already boxed, the value is boxed first so a
+ # heterogeneous RHS like `a, b, c = [1, "b", 2.0]` lands in the right
+ # tagged-union slots.
 
-  # Handle `a, *b = rhs` / `*a, b = rhs` / `a, *b, c = rhs`.
-  # `lefts` are pre-splat targets, `rest_id` is the SplatNode (its
-  # expression is the splat target), `rights` are post-splat targets.
+ # Handle `a, *b = rhs` / `*a, b = rhs` / `a, *b, c = rhs`.
+ # `lefts` are pre-splat targets, `rest_id` is the SplatNode (its
+ # expression is the splat target), `rights` are post-splat targets.
 
-  # The element type of an array-typed MultiTarget slot. For
-  # `a, (b, c) = 1, [2, 3]` the slot value_type is "int_array" and
-  # this returns "int" so b/c are declared as mrb_int. Mirrors the
-  # array-prefix dispatch in compile_nested_multi_target.
+ # The element type of an array-typed MultiTarget slot. For
+ # `a, (b, c) = 1, [2, 3]` the slot value_type is "int_array" and
+ # this returns "int" so b/c are declared as mrb_int. Mirrors the
+ # array-prefix dispatch in compile_nested_multi_target.
   def nested_target_elem_type(slot_type)
     if slot_type == "int_array"
       return "int"
@@ -19169,29 +19169,29 @@ class Compiler
     "int"
   end
 
-  # Recursively unpack a `MultiTargetNode` slot in a multi-assign.
-  # `value_expr` holds the value of this slot (always an array-typed
-  # expression, since the source is `a, (b, c), d = ..., [2, 3], ...`).
-  # We dispatch on the array's element type and emit per-target
-  # index reads.
+ # Recursively unpack a `MultiTargetNode` slot in a multi-assign.
+ # `value_expr` holds the value of this slot (always an array-typed
+ # expression, since the source is `a, (b, c), d = ..., [2, 3], ...`).
+ # We dispatch on the array's element type and emit per-target
+ # index reads.
 
 
 
 
-  # C expression for computing length of a value of the given type.
-  # Returns "" if the type doesn't have a hoist-friendly length op.
+ # C expression for computing length of a value of the given type.
+ # Returns "" if the type doesn't have a hoist-friendly length op.
 
-  # Scan a while-body for any mutation of a local variable (by name).
-  # Returns 1 if any mutating method call is found on the receiver
-  # (push/pop/shift/unshift/<< / []= / delete / clear / insert /
-  # replace / concat).  Used to block unsafe hoisting.
+ # Scan a while-body for any mutation of a local variable (by name).
+ # Returns 1 if any mutating method call is found on the receiver
+ # (push/pop/shift/unshift/<< / []= / delete / clear / insert /
+ # replace / concat). Used to block unsafe hoisting.
 
-  # Return the local variable name on which .length/.size is called
-  # inside a comparison predicate (for mutation scanning).  Empty if
-  # the predicate doesn't match the hoist pattern.
+ # Return the local variable name on which .length/.size is called
+ # inside a comparison predicate (for mutation scanning). Empty if
+ # the predicate doesn't match the hoist pattern.
 
-  # Check if while condition uses .length/.size and hoist if safe.
-  # Supports string, arrays, and hashes.
+ # Check if while condition uses .length/.size and hoist if safe.
+ # Supports string, arrays, and hashes.
 
 
 
@@ -19231,120 +19231,120 @@ class Compiler
 
 
 
-  # Build the proc-fn body prelude that unpacks the args array passed
-  # to the uniform `(void *_cap, mrb_int *args)` signature into named
-  # `lv_<bp>` locals — one `mrb_int lv_<bp> = args[<idx>];` line per
-  # block param. Used at both proc-fn body emit sites (captures and
-  # no-captures branches; identical shape).
+ # Build the proc-fn body prelude that unpacks the args array passed
+ # to the uniform `(void *_cap, mrb_int *args)` signature into named
+ # `lv_<bp>` locals — one `mrb_int lv_<bp> = args[<idx>];` line per
+ # block param. Used at both proc-fn body emit sites (captures and
+ # no-captures branches; identical shape).
 
 
 
-  # `arr[start, len] = src` where arr is a poly-typed slot (sp_RbVal).
-  # Dispatches by runtime cls_id of arr and src and emits a per-index
-  # copy. Same-length only — `src.length` must equal `len`. Falls
-  # back silently when src isn't an array (no copy emitted).
+ # `arr[start, len] = src` where arr is a poly-typed slot (sp_RbVal).
+ # Dispatches by runtime cls_id of arr and src and emits a per-index
+ # copy. Same-length only — `src.length` must equal `len`. Falls
+ # back silently when src isn't an array (no copy emitted).
 
-  # Compile `arr[start, len] = src` slice assignment. Replaces
-  # `len` elements of `arr` starting at `start` with the elements
-  # of `src`. Same-length only — `src.length` must equal `len` at
-  # runtime; resize semantics not implemented. Each index `i in
-  # 0...len` is emitted as `arr[start + i] = src[i]`.
+ # Compile `arr[start, len] = src` slice assignment. Replaces
+ # `len` elements of `arr` starting at `start` with the elements
+ # of `src`. Same-length only — `src.length` must equal `len` at
+ # runtime; resize semantics not implemented. Each index `i in
+ # 0...len` is emitted as `arr[start + i] = src[i]`.
 
-  # Compile `recv[idx] OP= value` (IndexOperatorWriteNode).
-  #
-  # Emitted as a get-modify-set against the appropriate typed container,
-  # in a block scope so that the receiver and index are each evaluated
-  # exactly once. Falls through silently for receiver types we don't
-  # handle yet — currently float_array, int_array, and the four numeric
-  # hash variants. Compound-assign on string arrays / poly hashes / str
-  # hashes is rarely useful and would need per-type semantics.
+ # Compile `recv[idx] OP= value` (IndexOperatorWriteNode).
+ #
+ # Emitted as a get-modify-set against the appropriate typed container,
+ # in a block scope so that the receiver and index are each evaluated
+ # exactly once. Falls through silently for receiver types we don't
+ # handle yet — currently float_array, int_array, and the four numeric
+ # hash variants. Compound-assign on string arrays / poly hashes / str
+ # hashes is rarely useful and would need per-type semantics.
 
-  # `obj.attr <op>= val` family helper -- builds the
-  # temp-receiver-once C block for typed-instance receivers backed by
-  # an attr_accessor (or struct field). For non-attr receivers, we
-  # exit with a precise error rather than fall through to an
-  # incorrect emission. The caller passes a fragment that takes the
-  # temp variable name and returns the C body to execute.
-  #
-  # Spec note: even for the typed-attr-accessor case the receiver is
-  # evaluated exactly ONCE -- the source `obj.bar += val` is
-  # `tmp = obj; tmp.bar = tmp.bar + val`, NOT `obj.bar = obj.bar + val`.
-  # The temp pattern matters when the receiver expression has side
-  # effects (e.g. `next_holder().attr += 1`).
+ # `obj.attr <op>= val` family helper -- builds the
+ # temp-receiver-once C block for typed-instance receivers backed by
+ # an attr_accessor (or struct field). For non-attr receivers, we
+ # exit with a precise error rather than fall through to an
+ # incorrect emission. The caller passes a fragment that takes the
+ # temp variable name and returns the C body to execute.
+ #
+ # Spec note: even for the typed-attr-accessor case the receiver is
+ # evaluated exactly ONCE -- the source `obj.bar += val` is
+ # `tmp = obj; tmp.bar = tmp.bar + val`, NOT `obj.bar = obj.bar + val`.
+ # The temp pattern matters when the receiver expression has side
+ # effects (e.g. `next_holder().attr += 1`).
 
-  # `a[i] &&= val` -- read once, conditionally write once. Mirrors
-  # compile_index_op_assign's per-receiver-type dispatch but routes
-  # the new value through a C `if (cur)` guard instead of an
-  # arithmetic op. The temp pattern keeps `a` and `i` evaluated
-  # exactly once, matching CRuby's `a[i] = a[i] && val` evaluation
-  # order.
+ # `a[i] &&= val` -- read once, conditionally write once. Mirrors
+ # compile_index_op_assign's per-receiver-type dispatch but routes
+ # the new value through a C `if (cur)` guard instead of an
+ # arithmetic op. The temp pattern keeps `a` and `i` evaluated
+ # exactly once, matching CRuby's `a[i] = a[i] && val` evaluation
+ # order.
 
-  # `a[i] ||= val` -- read once, write only if current is falsy.
-  # Same C-truthy vs Ruby-truthy gap as the LocalVariable/Global/
-  # Class compound forms (numeric 0 is C-falsy; documented in
-  # test/global_var_or_write.rb). For string-valued slots (NULL
-  # falsy, anything else truthy) the C and Ruby semantics agree.
+ # `a[i] ||= val` -- read once, write only if current is falsy.
+ # Same C-truthy vs Ruby-truthy gap as the LocalVariable/Global/
+ # Class compound forms (numeric 0 is C-falsy; documented in
+ # test/global_var_or_write.rb). For string-valued slots (NULL
+ # falsy, anything else truthy) the C and Ruby semantics agree.
 
-  # Emit the get-then-set body for `recv[k] ||= v` against a
-  # poly_poly_hash receiver and return the C name of the sp_RbVal temp
-  # holding the resulting value (existing on hit, freshly-stored rhs on
-  # miss). Caller is responsible for using or discarding the temp.
+ # Emit the get-then-set body for `recv[k] ||= v` against a
+ # poly_poly_hash receiver and return the C name of the sp_RbVal temp
+ # holding the resulting value (existing on hit, freshly-stored rhs on
+ # miss). Caller is responsible for using or discarding the temp.
 
-  # Same shape as `compile_poly_poly_index_or_assign_to_temp` for
-  # sym_poly_hash / str_poly_hash receivers — the keys are bare
-  # `sp_sym` / `const char *` (not boxed sp_RbVal) but the value
-  # slot is poly so the get-then-set still pivots on the
-  # `tag == SP_TAG_NIL` miss probe.
+ # Same shape as `compile_poly_poly_index_or_assign_to_temp` for
+ # sym_poly_hash / str_poly_hash receivers — the keys are bare
+ # `sp_sym` / `const char *` (not boxed sp_RbVal) but the value
+ # slot is poly so the get-then-set still pivots on the
+ # `tag == SP_TAG_NIL` miss probe.
 
-  # Box the rhs of an `||=` whose lhs is a poly-element slot. For
-  # ArrayNode literals — `[]`, `[nil, nil]`, … — promote to
-  # poly_array (boxed) so the slot carries a uniformly poly shape;
-  # subsequent chain levels can then inspect the value's cls_id
-  # against `SP_BUILTIN_POLY_ARRAY` reliably. Without the promote,
-  # `[]` would lower to `sp_box_int_array(sp_IntArray_new())`, the
-  # next chain level's `cls_id == POLY_ARRAY` check would fail, and
-  # the back-set would skip silently. Non-ArrayNode rhs falls back
-  # to the existing `box_expr_to_poly` machinery.
+ # Box the rhs of an `||=` whose lhs is a poly-element slot. For
+ # ArrayNode literals — `[]`, `[nil, nil]`, … — promote to
+ # poly_array (boxed) so the slot carries a uniformly poly shape;
+ # subsequent chain levels can then inspect the value's cls_id
+ # against `SP_BUILTIN_POLY_ARRAY` reliably. Without the promote,
+ # `[]` would lower to `sp_box_int_array(sp_IntArray_new())`, the
+ # next chain level's `cls_id == POLY_ARRAY` check would fail, and
+ # the back-set would skip silently. Non-ArrayNode rhs falls back
+ # to the existing `box_expr_to_poly` machinery.
 
-  # `recv[i] ||= v` against a typed-array receiver whose element
-  # slot is a boxed sp_RbVal — i.e. poly_array. The miss probe is
-  # the same `tag == SP_TAG_NIL` pivot used by the *_poly_hash
-  # forms, but indexed access has two extra wrinkles:
-  #
-  #   - the key must be in-bounds before `_get` is safe to call
-  #     (sp_PolyArray_get reads `data[i]` without a length check),
-  #   - on miss the slot may be beyond `len`, so before `_set` we
-  #     pad the array with nil entries up to `i` inclusive.
-  #
-  # Mirrors CRuby's `arr[i] = v` auto-grow semantics for the gap.
-  # Scalar-element typed arrays (int_array, float_array, …) need a
-  # different probe (out-of-bounds check, no SP_TAG_NIL) and are
-  # not handled here; the caller falls back to the existing stmt
-  # path for those.
+ # `recv[i] ||= v` against a typed-array receiver whose element
+ # slot is a boxed sp_RbVal — i.e. poly_array. The miss probe is
+ # the same `tag == SP_TAG_NIL` pivot used by the *_poly_hash
+ # forms, but indexed access has two extra wrinkles:
+ #
+ # - the key must be in-bounds before `_get` is safe to call
+ # (sp_PolyArray_get reads `data[i]` without a length check),
+ # - on miss the slot may be beyond `len`, so before `_set` we
+ # pad the array with nil entries up to `i` inclusive.
+ #
+ # Mirrors CRuby's `arr[i] = v` auto-grow semantics for the gap.
+ # Scalar-element typed arrays (int_array, float_array, …) need a
+ # different probe (out-of-bounds check, no SP_TAG_NIL) and are
+ # not handled here; the caller falls back to the existing stmt
+ # path for those.
 
-  # `<poly>[i] ||= v` where the recv is an sp_RbVal carrying — at
-  # runtime — a poly_array. Common in chains like
-  # `(@h[k] ||= [])[i] ||= ...`: spinel types `(@h[k] ||= [])` as
-  # poly because the hash leaf type is poly, and the inner `||=`
-  # sees a poly recv even though the value is concretely a
-  # poly_array.
-  #
-  # The miss probe needs an extra `tag == SP_TAG_OBJ &&
-  # cls_id == SP_BUILTIN_POLY_ARRAY` guard so the runtime falls
-  # through cleanly when the poly carries a non-array shape. The
-  # body otherwise mirrors `compile_typed_array_index_or_assign_to_temp`.
+ # `<poly>[i] ||= v` where the recv is an sp_RbVal carrying — at
+ # runtime — a poly_array. Common in chains like
+ # `(@h[k] ||= [])[i] ||= ...`: spinel types `(@h[k] ||= [])` as
+ # poly because the hash leaf type is poly, and the inner `||=`
+ # sees a poly recv even though the value is concretely a
+ # poly_array.
+ #
+ # The miss probe needs an extra `tag == SP_TAG_OBJ &&
+ # cls_id == SP_BUILTIN_POLY_ARRAY` guard so the runtime falls
+ # through cleanly when the poly carries a non-array shape. The
+ # body otherwise mirrors `compile_typed_array_index_or_assign_to_temp`.
 
-  # Return a C expression that evaluates to the inspected form of `val`
-  # (a value of inferred Ruby type `at`), following Ruby's Object#inspect
-  # contract. Returns "" when `at` has no inspect implementation yet, so
-  # callers can fall back to their previous behaviour.
+ # Return a C expression that evaluates to the inspected form of `val`
+ # (a value of inferred Ruby type `at`), following Ruby's Object#inspect
+ # contract. Returns "" when `at` has no inspect implementation yet, so
+ # callers can fall back to their previous behaviour.
 
-  # Kernel#p: for each argument, prints `arg.inspect` followed by a
-  # newline. Uses `compile_inspect_for` for types that implement inspect;
-  # falls back to puts-style output for types that don't yet (e.g.
-  # user-defined classes, ranges, hashes).
+ # Kernel#p: for each argument, prints `arg.inspect` followed by a
+ # newline. Uses `compile_inspect_for` for types that implement inspect;
+ # falls back to puts-style output for types that don't yet (e.g.
+ # user-defined classes, ranges, hashes).
 
-  # Emit the puts-equivalent for a single arg (extracted for reuse from p).
+ # Emit the puts-equivalent for a single arg (extracted for reuse from p).
 
 
 
@@ -19358,8 +19358,8 @@ class Compiler
     if params < 0
       return ""
     end
-    # NumberedParametersNode ({ _1 + _2 }): params is the node itself,
-    # and @nd_value holds the maximum (1 for _1, 2 for _2, etc.).
+ # NumberedParametersNode ({ _1 + _2 }): params is the node itself,
+ # and @nd_value holds the maximum (1 for _1, 2 for _2, etc.).
     if @nd_type[params] == "NumberedParametersNode"
       if idx < @nd_value[params]
         return "_" + (idx + 1).to_s
@@ -19383,27 +19383,27 @@ class Compiler
 
 
 
-  # `redo` label-stack helpers. Each loop emitter wraps its body
-  # between push_redo_label / emit_redo_label / pop_redo_label so
-  # `redo` knows which label to jump to. Labels are unique per loop
-  # body via @redo_label_counter.
+ # `redo` label-stack helpers. Each loop emitter wraps its body
+ # between push_redo_label / emit_redo_label / pop_redo_label so
+ # `redo` knows which label to jump to. Labels are unique per loop
+ # body via @redo_label_counter.
 
 
-  # Emit the C label that `redo` jumps to. C requires labels to be
-  # followed by a statement; `;` lets a subsequent `}` stay valid
-  # even if the body is empty.
+ # Emit the C label that `redo` jumps to. C requires labels to be
+ # followed by a statement; `;` lets a subsequent `}` stay valid
+ # even if the body is empty.
 
 
 
 
 
-  # Emit the loop-open lines for iterating over a receiver expression.
-  # Supports range and all array-like types.  After calling this helper,
-  # the caller emits the block body and a closing '}'.  idx_var holds
-  # the loop counter (position or value for range); elem_var gets the
-  # current element.
+ # Emit the loop-open lines for iterating over a receiver expression.
+ # Supports range and all array-like types. After calling this helper,
+ # the caller emits the block body and a closing '}'. idx_var holds
+ # the loop counter (position or value for range); elem_var gets the
+ # current element.
 
-  # Element type of an iterable (for block param type inference).
+ # Element type of an iterable (for block param type inference).
   def iter_elem_type(recv_type)
     if recv_type == "range"
       return "int"
@@ -19420,12 +19420,12 @@ class Compiler
 
 
 
-  # An empty `map {}` block yields nil per iteration in CRuby —
-  # the result array's length still matches the receiver. Without
-  # an explicit push the typed accumulator stays short and
-  # downstream `.length` / `[i]` on the result is wrong. Push a
-  # type-appropriate default (0 / 0.0 / "" / sp_box_nil) so
-  # length is preserved across all map dispatches.
+ # An empty `map {}` block yields nil per iteration in CRuby —
+ # the result array's length still matches the receiver. Without
+ # an explicit push the typed accumulator stays short and
+ # downstream `.length` / `[i]` on the result is wrong. Push a
+ # type-appropriate default (0 / 0.0 / "" / sp_box_nil) so
+ # length is preserved across all map dispatches.
 
 
 
@@ -19438,52 +19438,21 @@ class Compiler
 
 
 
-  # Replay all in-scope ensure bodies inline (innermost-first) ahead
-  # of an early-exit `return`. Each ensure is popped from the stack
-  # *before* its body is emitted, so a nested `return` inside the
-  # ensure body sees only the *outer* ensures still active and
-  # doesn't replay the same ensure recursively. Stack is restored
-  # afterwards so the caller continues with the same view.
-  #
-  # @setjmp_depth is stashed to 0 during the replay because the
-  # caller is responsible for emitting `sp_exc_top -= N` *once*
-  # before the replays — a nested `return` inside an ensure body
-  # would otherwise re-emit that decrement and over-pop the stack.
+ # Replay all in-scope ensure bodies inline (innermost-first) ahead
+ # of an early-exit `return`. Each ensure is popped from the stack
+ # *before* its body is emitted, so a nested `return` inside the
+ # ensure body sees only the *outer* ensures still active and
+ # doesn't replay the same ensure recursively. Stack is restored
+ # afterwards so the caller continues with the same view.
+ #
+ # @setjmp_depth is stashed to 0 during the replay because the
+ # caller is responsible for emitting `sp_exc_top -= N` *once*
+ # before the replays — a nested `return` inside an ensure body
+ # would otherwise re-emit that decrement and over-pop the stack.
 
-  # Emit the `sp_exc_top -= N;` that an early `return` needs in
-  # order to leave sp_exc_top balanced. Called immediately before
-  # `emit_ensure_replays` at every `return` emission site.
-
-
-
-
-
-
-
-
-
-
-  # Tries the yield-method or instance_eval-trampoline dispatch
-  # against a single class index. Returns 1 if dispatch fired (caller
-  # should return immediately), 0 otherwise (caller falls through to
-  # the next gate, e.g. parent class). Shared by the direct-class and
-  # parent-class branches in compile_no_recv_call_expr.
-
-  # Splice the statements of a block body in place with `self`
-  # rebound to self_var (typed as cname). Saves and restores the
-  # rebound-self ivars (@instance_eval_self_var / _type) so nested
-  # splices compose. compile_no_recv_call_expr's instance_eval-self
-  # branch reads these to dispatch receiverless calls inside the
-  # splice against the rebound class. Reusable by future
-  # rebind-and-splice features (e.g. instance_exec, tap-shape
-  # trampolines).
-
-  # Inlines a `recv.m { body }` call when `m` is an arity-0
-  # instance_eval trampoline. The entire method body is the call
-  # `instance_eval(&block)`, so we splice the block body in place
-  # with self rebound to the receiver. Modeled on
-  # compile_yield_method_call_stmt but simpler — the trampoline body
-  # has no locals/params to remap.
+ # Emit the `sp_exc_top -= N;` that an early `return` needs in
+ # order to leave sp_exc_top balanced. Called immediately before
+ # `emit_ensure_replays` at every `return` emission site.
 
 
 
@@ -19494,30 +19463,61 @@ class Compiler
 
 
 
-  # ============================================================
-  # Analysis IR: serializer and loader
-  # ============================================================
-  #
-  # The IR captures everything `analyze_phase` populates so that a
-  # codegen-only step can pick up where analysis stopped without
-  # re-running the whole-program inference fixpoint. The format is
-  # line-oriented:
-  #
-  #   SPINEL-IR v1
-  #   <tag> <name> <encoded payload>
-  #
-  # Tags:
-  #   INT <ivar> <integer>            scalar int ivar
-  #   SA  <ivar> <pipe-joined>        Array<String> (each element percent-encoded)
-  #   IA  <ivar> <comma-joined>       Array<Int>
-  #   T   <node_id> <type>            per-AST-node inferred type cache
-  #
-  # All string payloads are percent-encoded for space/newline/tab/
-  # percent/pipe so the line-and-pipe split is unambiguous. The MVP
-  # dumps the analysis-bearing instance variables directly. A
-  # follow-up should replace this with entity records (M / C / CONST
-  # / FFI_FUNC / …) — those are the real interface — but for now this
-  # gets the bootstrap pipeline running end to end.
+ # Tries the yield-method or instance_eval-trampoline dispatch
+ # against a single class index. Returns 1 if dispatch fired (caller
+ # should return immediately), 0 otherwise (caller falls through to
+ # the next gate, e.g. parent class). Shared by the direct-class and
+ # parent-class branches in compile_no_recv_call_expr.
+
+ # Splice the statements of a block body in place with `self`
+ # rebound to self_var (typed as cname). Saves and restores the
+ # rebound-self ivars (@instance_eval_self_var / _type) so nested
+ # splices compose. compile_no_recv_call_expr's instance_eval-self
+ # branch reads these to dispatch receiverless calls inside the
+ # splice against the rebound class. Reusable by future
+ # rebind-and-splice features (e.g. instance_exec, tap-shape
+ # trampolines).
+
+ # Inlines a `recv.m { body }` call when `m` is an arity-0
+ # instance_eval trampoline. The entire method body is the call
+ # `instance_eval(&block)`, so we splice the block body in place
+ # with self rebound to the receiver. Modeled on
+ # compile_yield_method_call_stmt but simpler — the trampoline body
+ # has no locals/params to remap.
+
+
+
+
+
+
+
+
+
+
+ # ============================================================
+ # Analysis IR: serializer and loader
+ # ============================================================
+ #
+ # The IR captures everything `analyze_phase` populates so that a
+ # codegen-only step can pick up where analysis stopped without
+ # re-running the whole-program inference fixpoint. The format is
+ # line-oriented:
+ #
+ # SPINEL-IR v1
+ # <tag> <name> <encoded payload>
+ #
+ # Tags:
+ # INT <ivar> <integer> scalar int ivar
+ # SA <ivar> <pipe-joined> Array<String> (each element percent-encoded)
+ # IA <ivar> <comma-joined> Array<Int>
+ # T <node_id> <type> per-AST-node inferred type cache
+ #
+ # All string payloads are percent-encoded for space/newline/tab/
+ # percent/pipe so the line-and-pipe split is unambiguous. The MVP
+ # dumps the analysis-bearing instance variables directly. A
+ # follow-up should replace this with entity records (M / C / CONST
+ # / FFI_FUNC / …) — those are the real interface — but for now this
+ # gets the bootstrap pipeline running end to end.
 
   def ir_escape(s)
     result = ""
@@ -19576,13 +19576,13 @@ class Compiler
   end
 
 
-  # The ir_emit_* helpers return the appended-to buffer rather than
-  # mutating in place. spinel's type inference doesn't (yet) handle
-  # passing an sp_String* through a method-parameter slot the body
-  # then `<<`-mutates — the param ends up typed `const char*` at the
-  # callsite, which fails at the cc step. Returning a new string and
-  # rebinding `buf = ir_emit_*(buf, …)` keeps every value typed as
-  # `const char*` through the pipeline.
+ # The ir_emit_* helpers return the appended-to buffer rather than
+ # mutating in place. spinel's type inference doesn't (yet) handle
+ # passing an sp_String* through a method-parameter slot the body
+ # then `<<`-mutates — the param ends up typed `const char*` at the
+ # callsite, which fails at the cc step. Returning a new string and
+ # rebinding `buf = ir_emit_*(buf, …)` keeps every value typed as
+ # `const char*` through the pipeline.
   def ir_emit_sa(buf, name, arr)
     buf + "SA " + name + " " + arr.length.to_s + " " + ir_join_strs(arr) + "\n"
   end
@@ -19598,13 +19598,13 @@ class Compiler
   def dump_analysis_buf
     buf = "SPINEL-IR v1\n"
 
-    # Counters / scalars
+ # Counters / scalars
     buf = ir_emit_int(buf, "@nd_count", @nd_count)
     buf = ir_emit_int(buf, "@root_id", @root_id)
     buf = ir_emit_int(buf, "@analysis_frozen", @analysis_frozen)
     buf = ir_emit_int(buf, "@ieval_counter", @ieval_counter)
 
-    # Top-level method tables
+ # Top-level method tables
     buf = ir_emit_sa(buf, "@meth_names", @meth_names)
     buf = ir_emit_sa(buf, "@meth_param_names", @meth_param_names)
     buf = ir_emit_sa(buf, "@meth_param_types", @meth_param_types)
@@ -19615,7 +19615,7 @@ class Compiler
     buf = ir_emit_ia(buf, "@meth_rest_index", @meth_rest_index)
     buf = ir_emit_ia(buf, "@meth_has_yield", @meth_has_yield)
 
-    # Class tables
+ # Class tables
     buf = ir_emit_sa(buf, "@cls_names", @cls_names)
     buf = ir_emit_sa(buf, "@cls_parents", @cls_parents)
     buf = ir_emit_sa(buf, "@cls_includes", @cls_includes)
@@ -19643,7 +19643,7 @@ class Compiler
     buf = ir_emit_sa(buf, "@cls_meth_has_yield", @cls_meth_has_yield)
     buf = ir_emit_sa(buf, "@cls_method_adapters", @cls_method_adapters)
 
-    # Constants / cvars / gvars
+ # Constants / cvars / gvars
     buf = ir_emit_sa(buf, "@const_names", @const_names)
     buf = ir_emit_sa(buf, "@const_types", @const_types)
     buf = ir_emit_ia(buf, "@const_expr_ids", @const_expr_ids)
@@ -19654,13 +19654,13 @@ class Compiler
     buf = ir_emit_sa(buf, "@gvar_names", @gvar_names)
     buf = ir_emit_sa(buf, "@gvar_types", @gvar_types)
 
-    # Modules
+ # Modules
     buf = ir_emit_sa(buf, "@module_names", @module_names)
     buf = ir_emit_ia(buf, "@module_body_ids", @module_body_ids)
     buf = ir_emit_sa(buf, "@module_acc_keys", @module_acc_keys)
     buf = ir_emit_sa(buf, "@module_acc_consts", @module_acc_consts)
 
-    # FFI
+ # FFI
     buf = ir_emit_sa(buf, "@ffi_modules", @ffi_modules)
     buf = ir_emit_sa(buf, "@ffi_module_libs", @ffi_module_libs)
     buf = ir_emit_sa(buf, "@ffi_module_cflags", @ffi_module_cflags)
@@ -19678,7 +19678,7 @@ class Compiler
     buf = ir_emit_sa(buf, "@ffi_reader_kinds", @ffi_reader_kinds)
     buf = ir_emit_ia(buf, "@ffi_reader_offsets", @ffi_reader_offsets)
 
-    # Regexp / dyn-regex / local-regex
+ # Regexp / dyn-regex / local-regex
     buf = ir_emit_sa(buf, "@regexp_patterns", @regexp_patterns)
     buf = ir_emit_sa(buf, "@regexp_flags", @regexp_flags)
     buf = ir_emit_ia(buf, "@dyn_regex_node_ids", @dyn_regex_node_ids)
@@ -19686,7 +19686,7 @@ class Compiler
     buf = ir_emit_sa(buf, "@local_regex_names", @local_regex_names)
     buf = ir_emit_ia(buf, "@local_regex_idx", @local_regex_idx)
 
-    # Misc tables
+ # Misc tables
     buf = ir_emit_sa(buf, "@open_class_names", @open_class_names)
     buf = ir_emit_sa(buf, "@method_ref_vars", @method_ref_vars)
     buf = ir_emit_sa(buf, "@method_ref_names", @method_ref_names)
@@ -19708,7 +19708,7 @@ class Compiler
     buf = ir_emit_sa(buf, "@lambda_var_ret_types", @lambda_var_ret_types)
     buf = ir_emit_sa(buf, "@multi_const_inits", @multi_const_inits)
 
-    # Feature flags
+ # Feature flags
     buf = ir_emit_int(buf, "@needs_gc", @needs_gc)
     buf = ir_emit_int(buf, "@needs_system", @needs_system)
     buf = ir_emit_int(buf, "@needs_int_array", @needs_int_array)
@@ -19729,8 +19729,8 @@ class Compiler
     buf = ir_emit_int(buf, "@needs_lambda", @needs_lambda)
     buf = ir_emit_int(buf, "@needs_fiber", @needs_fiber)
     buf = ir_emit_int(buf, "@needs_bigint", @needs_bigint)
-    # @needs_* flags pre-initialized in `initialize` so spinel sees
-    # them as struct fields when self-compiling spinel_analyze.rb.
+ # @needs_* flags pre-initialized in `initialize` so spinel sees
+ # them as struct fields when self-compiling spinel_analyze.rb.
     buf = ir_emit_int(buf, "@needs_poly_array", @needs_poly_array)
     buf = ir_emit_int(buf, "@needs_poly_poly_hash", @needs_poly_poly_hash)
     buf = ir_emit_int(buf, "@needs_str_poly_hash", @needs_str_poly_hash)
@@ -19738,17 +19738,17 @@ class Compiler
     buf = ir_emit_int(buf, "@needs_ptr_array", @needs_ptr_array)
     buf = ir_emit_int(buf, "@needs_file_io", @needs_file_io)
 
-    # Non-array string ivars (computed in analyze, consumed by emit)
+ # Non-array string ivars (computed in analyze, consumed by emit)
     buf = buf + "STR @cls_cmeth_live " + ir_escape(@cls_cmeth_live) + "\n"
     buf = buf + "STR @cls_meth_live " + ir_escape(@cls_meth_live) + "\n"
 
-    # Per-AST-node records (T / NM / NB / SN / ST) get accumulated
-    # into a StrArray and joined once. Building them with `buf + ...`
-    # in the loop is O(N^2): each iteration allocates a fresh
-    # `len(buf) + delta` byte string. With dense T-record fills
-    # (one per reachable node, ~150K on spinel_codegen.rb) that
-    # quadratic blew up the spinel-compiled binary's heap to 60GB
-    # before crashing.
+ # Per-AST-node records (T / NM / NB / SN / ST) get accumulated
+ # into a StrArray and joined once. Building them with `buf + ...`
+ # in the loop is O(N^2): each iteration allocates a fresh
+ # `len(buf) + delta` byte string. With dense T-record fills
+ # (one per reachable node, ~150K on spinel_codegen.rb) that
+ # quadratic blew up the spinel-compiled binary's heap to 60GB
+ # before crashing.
     rec_buf = "".split(",")
     ni = 0
     while ni < @nd_count
@@ -19782,47 +19782,47 @@ class Compiler
     buf
   end
 
-  # Restore the analysis state from a buffer produced by
-  # dump_analysis_buf. Caller is responsible for having read the
-  # parsed AST first (read_text_ast) so the @nd_inferred_type cache
-  # has slots to populate.
+ # Restore the analysis state from a buffer produced by
+ # dump_analysis_buf. Caller is responsible for having read the
+ # parsed AST first (read_text_ast) so the @nd_inferred_type cache
+ # has slots to populate.
 
 
-  # Length-prefixed split: returns exactly `n` elements. Distinguishes
-  # `[]` (n==0) from `[""]` (n==1, body=="") so empty string elements
-  # round-trip correctly.
-
-
-
+ # Length-prefixed split: returns exactly `n` elements. Distinguishes
+ # `[]` (n==0) from `[""]` (n==1, body=="") so empty string elements
+ # round-trip correctly.
 
 
 
-  # Pre-fill @nd_inferred_type for every reachable AST node, using
-  # the same scope context emission would set up. Run after
-  # analyze_phase has converged, before serialize, so the IR carries
-  # a complete per-node type cache that codegen can read in O(1).
-  #
-  # Strategy: mirror infer_function_body_call_types / etc.'s scope
-  # setup pattern, but call walk_and_cache instead of scan_new_calls.
-  # walk_and_cache stores infer_type's result at every visited nid.
-  # Block param scoping is not yet handled — references to block params
-  # in cache may carry default "int" instead of the iterator-derived
-  # type; codegen still falls back to infer_type for cache misses.
+
+
+
+ # Pre-fill @nd_inferred_type for every reachable AST node, using
+ # the same scope context emission would set up. Run after
+ # analyze_phase has converged, before serialize, so the IR carries
+ # a complete per-node type cache that codegen can read in O(1).
+ #
+ # Strategy: mirror infer_function_body_call_types / etc.'s scope
+ # setup pattern, but call walk_and_cache instead of scan_new_calls.
+ # walk_and_cache stores infer_type's result at every visited nid.
+ # Block param scoping is not yet handled — references to block params
+ # in cache may carry default "int" instead of the iterator-derived
+ # type; codegen still falls back to infer_type for cache misses.
 
   def walk_and_cache(nid)
     if nid < 0
       return
     end
-    # IfNode with `var.is_a?(C)` predicate narrows `var` for the then-arm.
-    # Mirror scan_new_calls' narrow handling so cached types in the
-    # then-body reflect the narrow.
+ # IfNode with `var.is_a?(C)` predicate narrows `var` for the then-arm.
+ # Mirror scan_new_calls' narrow handling so cached types in the
+ # then-body reflect the narrow.
     if @nd_type[nid] == "IfNode"
-      # Note: scan_new_calls pushes type narrows here for fixpoint-side
-      # param widening. We DON'T push narrows during walk_and_cache —
-      # codegen never applies narrows at emit time (the C variable
-      # stays whatever type it was declared as), so cached
-      # LocalVariableReadNode values inside an `is_a?` then-arm need
-      # to reflect the unnarrowed declared type.
+ # Note: scan_new_calls pushes type narrows here for fixpoint-side
+ # param widening. We DON'T push narrows during walk_and_cache —
+ # codegen never applies narrows at emit time (the C variable
+ # stays whatever type it was declared as), so cached
+ # LocalVariableReadNode values inside an `is_a?` then-arm need
+ # to reflect the unnarrowed declared type.
       pred = @nd_predicate[nid]
       if pred >= 0
         walk_and_cache(pred)
@@ -19842,28 +19842,28 @@ class Compiler
       @nd_inferred_type[nid] = infer_type(nid)
       return
     end
-    # Class/Module nodes: skip — handled separately at top-level loop
-    # so we set @current_class_idx / lexical scope correctly.
+ # Class/Module nodes: skip — handled separately at top-level loop
+ # so we set @current_class_idx / lexical scope correctly.
     if @nd_type[nid] == "ClassNode" || @nd_type[nid] == "ModuleNode" || @nd_type[nid] == "SingletonClassNode"
       return
     end
-    # DefNode: skip — its body is walked separately via @meth_body_ids
-    # / @cls_meth_bodies / @cls_cmeth_bodies with proper param scope.
+ # DefNode: skip — its body is walked separately via @meth_body_ids
+ # / @cls_meth_bodies / @cls_cmeth_bodies with proper param scope.
     if @nd_type[nid] == "DefNode"
       return
     end
-    # RescueNode: register the bound exception var so infer_call_type
-    # recognises `.message` / `.class` / etc. as string-returning methods
-    # within the rescue body. compile_begin_with_rescue does the same
-    # at emit time; we mirror it here.
+ # RescueNode: register the bound exception var so infer_call_type
+ # recognises `.message` / `.class` / etc. as string-returning methods
+ # within the rescue body. compile_begin_with_rescue does the same
+ # at emit time; we mirror it here.
     if @nd_type[nid] == "RescueNode"
       ref_re = @nd_reference[nid]
       bound_re = ""
       if ref_re >= 0
         bound_re = @nd_name[ref_re]
         @exc_var_names.push(bound_re)
-        # Class is unknown at analyze time but find_exc_var_cls's
-        # callers only check for non-empty (presence). Use a sentinel.
+ # Class is unknown at analyze time but find_exc_var_cls's
+ # callers only check for non-empty (presence). Use a sentinel.
         @exc_var_cls_vars.push("?")
       end
       cs_re = []
@@ -19883,26 +19883,26 @@ class Compiler
       @nd_inferred_type[nid] = infer_type(nid)
       return
     end
-    # Post-order walk: visit children FIRST so their types are cached
-    # by the time the parent's infer_type runs. With cache-hit short
-    # circuit at the top of infer_type, the parent's compute is then
-    # O(1) per direct child instead of O(subtree). This is what makes
-    # the annotate pass tractable on large files.
+ # Post-order walk: visit children FIRST so their types are cached
+ # by the time the parent's infer_type runs. With cache-hit short
+ # circuit at the top of infer_type, the parent's compute is then
+ # O(1) per direct child instead of O(subtree). This is what makes
+ # the annotate pass tractable on large files.
     cs = []
     push_child_ids(nid, cs)
-    # When this nid is a CallNode with a block, push a fresh scope
-    # frame and declare the block params with iterator-derived types
-    # before descending into @nd_block. Without this, a block param
-    # that shadows an outer same-name local with a different type
-    # would get the outer type cached at every reference inside the
-    # block body — wrong.
-    #
-    # For proc / lambda / Fiber.new / Proc.new the block param's
-    # actual type is determined dynamically by the caller (the value
-    # passed to .call / .resume), and codegen's compile_lambda_def
-    # hardcodes the param as int regardless. Don't descend into
-    # those block bodies; codegen falls back to fresh infer_type
-    # against its own scope at emit time.
+ # When this nid is a CallNode with a block, push a fresh scope
+ # frame and declare the block params with iterator-derived types
+ # before descending into @nd_block. Without this, a block param
+ # that shadows an outer same-name local with a different type
+ # would get the outer type cached at every reference inside the
+ # block body — wrong.
+ #
+ # For proc / lambda / Fiber.new / Proc.new the block param's
+ # actual type is determined dynamically by the caller (the value
+ # passed to .call / .resume), and codegen's compile_lambda_def
+ # hardcodes the param as int regardless. Don't descend into
+ # those block bodies; codegen falls back to fresh infer_type
+ # against its own scope at emit time.
     blk = @nd_block[nid]
     pushed_blk_scope = 0
     descend_blk = 1
@@ -19914,9 +19914,9 @@ class Compiler
       end
       if mname_blk == "new" && recv_blk >= 0
         cnk = @nd_name[recv_blk]
-        # Proc.new / Lambda.new use compile_lambda_def's int-hardcoded
-        # param. Fiber.new uses compile_fiber_new which declares the
-        # param as poly — descending there is safe.
+ # Proc.new / Lambda.new use compile_lambda_def's int-hardcoded
+ # param. Fiber.new uses compile_fiber_new which declares the
+ # param as poly — descending there is safe.
         if cnk == "Proc" || cnk == "Lambda"
           descend_blk = 0
         end
@@ -19941,7 +19941,7 @@ class Compiler
     k = 0
     while k < cs.length
       if descend_blk == 0 && cs[k] == blk
-        # Skip block body for poly-block dispatchers.
+ # Skip block body for poly-block dispatchers.
       else
         walk_and_cache(cs[k])
       end
@@ -19950,32 +19950,32 @@ class Compiler
     if pushed_blk_scope == 1
       pop_scope
     end
-    # LocalVariable*Read/Target/*Write nodes resolve through scope at
-    # emit time. Codegen's compile_lambda_def hardcodes lambda params
-    # as int regardless of analyze's type, narrows from is_a? aren't
-    # applied in C, and auto-splat block params over poly receivers
-    # diverge from analyze's elem-type guess. Leaving these uncached
-    # lets codegen's infer_type fall back to find_var_type against
-    # its own emit-time scope — that's the source of truth.
+ # LocalVariable*Read/Target/*Write nodes resolve through scope at
+ # emit time. Codegen's compile_lambda_def hardcodes lambda params
+ # as int regardless of analyze's type, narrows from is_a? aren't
+ # applied in C, and auto-splat block params over poly receivers
+ # diverge from analyze's elem-type guess. Leaving these uncached
+ # lets codegen's infer_type fall back to find_var_type against
+ # its own emit-time scope — that's the source of truth.
     nt = @nd_type[nid]
     skip_cache = 0
     if nt == "LocalVariableReadNode" || nt == "LocalVariableTargetNode" || nt == "LocalVariableAndWriteNode" || nt == "LocalVariableOrWriteNode" || nt == "LocalVariableOperatorWriteNode"
       skip_cache = 1
     end
-    # Bare `new` inside an inherited class method body resolves to the
-    # *calling* subclass at emit time, not the class that lexically
-    # defined the method (issue #224). Cache here would freeze the
-    # type at the defining class's instance.
+ # Bare `new` inside an inherited class method body resolves to the
+ # *calling* subclass at emit time, not the class that lexically
+ # defined the method . Cache here would freeze the
+ # type at the defining class's instance.
     if nt == "CallNode" && @nd_receiver[nid] < 0 && @nd_name[nid] == "new"
       skip_cache = 1
     end
-    # `lambda.call(...)` — the return type comes from
-    # @lambda_var_ret_types which is built at codegen time (issue #400
-    # multi-arg lambda). Caching at analyze would freeze the type as
-    # "int" before scan_lambda_ret_types runs, and the outer `.to_s`
-    # would emit sp_int_to_s instead of the bool ternary. Limited to
-    # the literal `.call` shape (NOT `[]` — that's str_array indexing
-    # in too many other places to skip safely).
+ # `lambda.call(...)` — the return type comes from
+ # @lambda_var_ret_types which is built at codegen time
+ # multi-arg lambda). Caching at analyze would freeze the type as
+ # "int" before scan_lambda_ret_types runs, and the outer `.to_s`
+ # would emit sp_int_to_s instead of the bool ternary. Limited to
+ # the literal `.call` shape (NOT `[]` — that's str_array indexing
+ # in too many other places to skip safely).
     if nt == "CallNode" && @nd_name[nid] == "call"
       crv = @nd_receiver[nid]
       if crv >= 0 && @nd_type[crv] == "LocalVariableReadNode"
@@ -19987,23 +19987,23 @@ class Compiler
     end
   end
 
-  # Mirror emit_main / declare_method_locals' multi-pass scope
-  # refinement (without the actual emit). After this, every local in
-  # `stmts`' scope has its final emit-time type, so a subsequent
-  # walk_and_cache caches correct values for nodes whose inference
-  # touches scope.
-  #
-  # `do_lambda_upgrade` and `do_bigint_promote` mirror emit_main's
-  # final passes (lambda-promotion and bigint-promotion). They're
-  # off for method-body refinement (declare_method_locals does
-  # neither) and on for top-level refinement.
+ # Mirror emit_main / declare_method_locals' multi-pass scope
+ # refinement (without the actual emit). After this, every local in
+ # `stmts`' scope has its final emit-time type, so a subsequent
+ # walk_and_cache caches correct values for nodes whose inference
+ # touches scope.
+ #
+ # `do_lambda_upgrade` and `do_bigint_promote` mirror emit_main's
+ # final passes (lambda-promotion and bigint-promotion). They're
+ # off for method-body refinement (declare_method_locals does
+ # neither) and on for top-level refinement.
   def refine_locals_multi_pass_full(stmts, lnames, ltypes, params, do_lambda_upgrade, do_bigint_promote)
-    # Pre-pass: declare simple-literal locals into scope so the
-    # subsequent scan_locals' infer_type can resolve cross-statement
-    # references (e.g. `name = "ada"` then `{name:}` shorthand whose
-    # value type depends on name's resolved type) on the first pass.
+ # Pre-pass: declare simple-literal locals into scope so the
+ # subsequent scan_locals' infer_type can resolve cross-statement
+ # references (e.g. `name = "ada"` then `{name:}` shorthand whose
+ # value type depends on name's resolved type) on the first pass.
     pre_scan_simple_local_writes(stmts)
-    # Pass 1: initial scan
+ # Pass 1: initial scan
     si = 0
     while si < stmts.length
       sid = stmts[si]
@@ -20012,7 +20012,7 @@ class Compiler
       end
       si = si + 1
     end
-    # Constant initializer block params (only on top-level scope).
+ # Constant initializer block params (only on top-level scope).
     if do_bigint_promote == 1
       scan_const_init_locals(lnames, ltypes, params)
     end
@@ -20021,7 +20021,7 @@ class Compiler
       declare_var(lnames[j], ltypes[j])
       j = j + 1
     end
-    # Refinement passes — re-scan with declared scope; promote refined types.
+ # Refinement passes — re-scan with declared scope; promote refined types.
     pass = 0
     while pass < 2
       ln = "".split(",")
@@ -20061,7 +20061,7 @@ class Compiler
               ltypes[k] = lt[j]
               set_var_type(lnames[k], lt[j])
             end
-            # tuple:X → tuple:Y refinement (matches emit_main pass 3).
+ # tuple:X → tuple:Y refinement (matches emit_main pass 3).
             if is_tuple_type(ltypes[k]) == 1 && is_tuple_type(lt[j]) == 1 && ltypes[k] != lt[j]
               ltypes[k] = lt[j]
               set_var_type(lnames[k], lt[j])
@@ -20073,7 +20073,7 @@ class Compiler
       end
       pass = pass + 1
     end
-    # Lambda upgrade: ints passed to lambda-param functions widen to lambda.
+ # Lambda upgrade: ints passed to lambda-param functions widen to lambda.
     if do_lambda_upgrade == 1
       j = 0
       while j < lnames.length
@@ -20093,7 +20093,7 @@ class Compiler
         j = j + 1
       end
     end
-    # Bigint promotion: vars with `*=` / `x = x * y` in while loops.
+ # Bigint promotion: vars with `*=` / `x = x * y` in while loops.
     if do_bigint_promote == 1
       detect_bigint_vars(stmts, lnames, ltypes)
       j = 0
@@ -20106,17 +20106,17 @@ class Compiler
     end
   end
 
-  # Iterator-derived block param type at call_nid for param index
-  # `pi` (0-based). Mirrors the corresponding dispatch in scan_locals
-  # so walk_and_cache can declare block params in their own scope
-  # frame before descending into the block body. Returns "int" for
-  # methods we don't model — that's fine because codegen's
-  # compile_block_iteration_stmt does its own scope setup with the
-  # full type-aware logic at emit time, and any walk_and_cache cache
-  # value for a block-param read will be re-checked against
-  # find_var_type's emit-time scope on cache miss in infer_type;
-  # only block-body nodes outside the param-read path care about
-  # the cached value here.
+ # Iterator-derived block param type at call_nid for param index
+ # `pi` (0-based). Mirrors the corresponding dispatch in scan_locals
+ # so walk_and_cache can declare block params in their own scope
+ # frame before descending into the block body. Returns "int" for
+ # methods we don't model — that's fine because codegen's
+ # compile_block_iteration_stmt does its own scope setup with the
+ # full type-aware logic at emit time, and any walk_and_cache cache
+ # value for a block-param read will be re-checked against
+ # find_var_type's emit-time scope on cache miss in infer_type;
+ # only block-body nodes outside the param-read path care about
+ # the cached value here.
   def block_param_type_at(call_nid, pi)
     mname = @nd_name[call_nid]
     recv = @nd_receiver[call_nid]
@@ -20137,7 +20137,7 @@ class Compiler
       if pi == 0
         return elem_type_of_array(recv_t)
       end
-      # 2nd param is the seed/object — its type is the call's first arg.
+ # 2nd param is the seed/object — its type is the call's first arg.
       args = @nd_arguments[call_nid]
       if args >= 0
         aargs = get_args(args)
@@ -20173,7 +20173,7 @@ class Compiler
       return "string"
     end
     if mname == "each_pair"
-      # Hash#each_pair: key, value. Mirror scan_locals.
+ # Hash#each_pair: key, value. Mirror scan_locals.
       if recv_t == "str_int_hash"
         if pi == 0
           return "string"
@@ -20240,12 +20240,12 @@ class Compiler
       return elem_type_of_array(recv_t)
     end
     if mname == "scan"
-      # String#scan with block: param is each match — string for the
-      # /pattern without captures/ form, otherwise array of captures.
+ # String#scan with block: param is each match — string for the
+ # /pattern without captures/ form, otherwise array of captures.
       return "string"
     end
     if mname == "tap" || mname == "then" || mname == "yield_self" || mname == "itself"
-      # Block param type is the receiver's type.
+ # Block param type is the receiver's type.
       return recv_t
     end
     if mname == "cycle"
@@ -20255,19 +20255,19 @@ class Compiler
       return "int"
     end
     if mname == "each_slice" || mname == "each_cons"
-      # Block param is sub-array of recv's element type — keep recv's
-      # array type (slice of int_array is still int_array).
+ # Block param is sub-array of recv's element type — keep recv's
+ # array type (slice of int_array is still int_array).
       return recv_t
     end
     if mname == "chunk_while" || mname == "slice_when"
       return elem_type_of_array(recv_t)
     end
-    # Fiber.new / Proc.new / Lambda.new / proc / lambda / Thread.new
-    # — the block param is whatever the caller resumes/calls with, so
-    # it's poly (sp_RbVal) at the type system's perspective. Without
-    # this dispatch the param infers as "int" and a body like
-    # `{|x| x + 1}` would be cached as int-add even though x is
-    # actually an unboxed sp_RbVal at runtime.
+ # Fiber.new / Proc.new / Lambda.new / proc / lambda / Thread.new
+ # — the block param is whatever the caller resumes/calls with, so
+ # it's poly (sp_RbVal) at the type system's perspective. Without
+ # this dispatch the param infers as "int" and a body like
+ # `{|x| x + 1}` would be cached as int-add even though x is
+ # actually an unboxed sp_RbVal at runtime.
     if mname == "new"
       if recv >= 0 && @nd_type[recv] == "ConstantReadNode"
         cn = @nd_name[recv]
@@ -20276,7 +20276,7 @@ class Compiler
         end
       end
       if recv >= 0 && @nd_type[recv] == "ConstantPathNode"
-        # ::Fiber.new / ::Proc.new
+ # ::Fiber.new / ::Proc.new
         cn2 = @nd_name[recv]
         if cn2 == "Fiber" || cn2 == "Proc"
           return "poly"
@@ -20289,9 +20289,9 @@ class Compiler
     "int"
   end
 
-  # Mirror declare_method_locals' three-pass scan + lambda upgrade,
-  # without emitting C. Computes the final (lnames, ltypes) the
-  # codegen would otherwise compute itself.
+ # Mirror declare_method_locals' three-pass scan + lambda upgrade,
+ # without emitting C. Computes the final (lnames, ltypes) the
+ # codegen would otherwise compute itself.
   def refine_method_body_locals(bid, lnames, ltypes, params)
     scan_locals(bid, lnames, ltypes, params)
     j = 0
@@ -20299,7 +20299,7 @@ class Compiler
       declare_var(lnames[j], ltypes[j])
       j = j + 1
     end
-    # Pass 2: re-scan with vars declared
+ # Pass 2: re-scan with vars declared
     lnames2 = "".split(",")
     ltypes2 = "".split(",")
     scan_locals(bid, lnames2, ltypes2, params)
@@ -20323,13 +20323,13 @@ class Compiler
           elsif (ltypes2[j] == "str_poly_hash" || ltypes2[j] == "sym_poly_hash") && ltypes[k] != ltypes2[j]
             ltypes[k] = ltypes2[j]
             set_var_type(lnames[k], ltypes2[j])
-          # Issue #412: pass 1 typed `results` as int_array (from
-          # the empty `[]` literal). Pass 2's `<<` push observation,
-          # with the rhs local now in scope, refined the type to
-          # str_array / float_array / sym_array / *_ptr_array. Without
-          # this branch the refined type is dropped and codegen emits
-          # `sp_IntArray *` against a body that pushes typed pointers,
-          # tripping the cc step at the push site.
+ # pass 1 typed `results` as int_array (from
+ # the empty `[]` literal). Pass 2's `<<` push observation,
+ # with the rhs local now in scope, refined the type to
+ # str_array / float_array / sym_array / *_ptr_array. Without
+ # this branch the refined type is dropped and codegen emits
+ # `sp_IntArray *` against a body that pushes typed pointers,
+ # tripping the cc step at the push site.
           elsif ltypes[k] == "int_array" && ltypes2[j] != "int_array" &&
                 (ltypes2[j] == "str_array" || ltypes2[j] == "float_array" ||
                  ltypes2[j] == "sym_array" || is_ptr_array_type(ltypes2[j]) == 1 ||
@@ -20342,7 +20342,7 @@ class Compiler
       end
       j = j + 1
     end
-    # Pass 3: lambda upgrade
+ # Pass 3: lambda upgrade
     j = 0
     while j < lnames.length
       if ltypes[j] == "int"
@@ -20355,11 +20355,11 @@ class Compiler
     end
   end
 
-  # Constant-initializer locals — block params introduced inside
-  # const-init RHSes (e.g. `FRAME = [...].map { |n| ... }`) need
-  # their `lv_<n>` decls in main's frame because the const inits
-  # are compiled inline at main()'s top. Mirror codegen's old
-  # scan_const_init_locals.
+ # Constant-initializer locals — block params introduced inside
+ # const-init RHSes (e.g. `FRAME = [...].map { |n| ... }`) need
+ # their `lv_<n>` decls in main's frame because the const inits
+ # are compiled inline at main()'s top. Mirror codegen's old
+ # scan_const_init_locals.
   def scan_const_init_locals(lnames, ltypes, empty_params)
     i = 0
     while i < @const_expr_ids.length
@@ -20381,15 +20381,15 @@ class Compiler
     end
   end
 
-  # Walk every codegen-visible scope (top-level main, every method
-  # body, every class instance method body, every class method body)
-  # and persist the (lnames, ltypes) lists scan_locals + multi-pass
-  # refinement would compute. Codegen reads these from IR to declare
-  # locals without re-running scan_locals or any of its multi-pass
-  # refinement / bigint / lambda-upgrade dependencies.
-  # the caller's empty `{}` literal to match the widened param type.
+ # Walk every codegen-visible scope (top-level main, every method
+ # body, every class instance method body, every class method body)
+ # and persist the (lnames, ltypes) lists scan_locals + multi-pass
+ # refinement would compute. Codegen reads these from IR to declare
+ # locals without re-running scan_locals or any of its multi-pass
+ # refinement / bigint / lambda-upgrade dependencies.
+ # the caller's empty `{}` literal to match the widened param type.
   def narrow_param_hash_types_from_body_writes
-    # Top-level methods.
+ # Top-level methods.
     mi = 0
     while mi < @meth_names.length
       bid_h = @meth_body_ids[mi]
@@ -20414,7 +20414,7 @@ class Compiler
       end
       mi = mi + 1
     end
-    # Class instance methods.
+ # Class instance methods.
     ci = 0
     while ci < @cls_names.length
       all_params = @cls_meth_params[ci].split("|")
@@ -20459,21 +20459,21 @@ class Compiler
     end
   end
 
-  # Issue #424: hash-each block-arg widening for nested cmeth /
-  # method calls. The in-pipeline scan_new_calls runs without
-  # the iterator's k/v scope pushed, so a call site like
-  # `Json.escape(k)` inside `h.each |k, v| { ... }` sees k as
-  # untyped and the cmeth's param ends up at the int default.
-  # The block-scope push approach (matz comment, option 2/3)
-  # perturbed #207's symbolize_keys convergence; this pass
-  # stays surgical -- for every hash-typed param p of a method,
-  # find any `lv_p.each |k, v|` blocks in the body and walk the
-  # block body for `<recv>.<m>(args)` where args reference k or
-  # v. Widen the called method's param types from the hash's
-  # key/value variant only at those specific sites, leaving
-  # scan_new_calls and the wider iterative loop untouched.
+ # hash-each block-arg widening for nested cmeth /
+ # method calls. The in-pipeline scan_new_calls runs without
+ # the iterator's k/v scope pushed, so a call site like
+ # `Json.escape(k)` inside `h.each |k, v| { ... }` sees k as
+ # untyped and the cmeth's param ends up at the int default.
+ # The block-scope push approach (matz comment, option 2/3)
+ # perturbed's symbolize_keys convergence; this pass
+ # stays surgical -- for every hash-typed param p of a method,
+ # find any `lv_p.each |k, v|` blocks in the body and walk the
+ # block body for `<recv>.<m>(args)` where args reference k or
+ # v. Widen the called method's param types from the hash's
+ # key/value variant only at those specific sites, leaving
+ # scan_new_calls and the wider iterative loop untouched.
   def widen_cmeths_via_hash_each_blocks
-    # Top-level methods.
+ # Top-level methods.
     mi = 0
     while mi < @meth_names.length
       bid_h = @meth_body_ids[mi]
@@ -20484,7 +20484,7 @@ class Compiler
       end
       mi = mi + 1
     end
-    # Class instance methods.
+ # Class instance methods.
     ci = 0
     while ci < @cls_names.length
       all_params = @cls_meth_params[ci].split("|")
@@ -20508,7 +20508,7 @@ class Compiler
       end
       ci = ci + 1
     end
-    # Class methods (cmeths).
+ # Class methods (cmeths).
     ci = 0
     while ci < @cls_names.length
       all_params = @cls_cmeth_params[ci].split("|")
@@ -20534,11 +20534,11 @@ class Compiler
     end
   end
 
-  # Recurse through `nid` looking for `<local>.each |k, v| { body }`
-  # where `<local>` matches one of the enclosing method's hash-typed
-  # params. When found, walk the block body for nested call sites
-  # whose args reference k or v and widen the called method's
-  # param types accordingly.
+ # Recurse through `nid` looking for `<local>.each |k, v| { body }`
+ # where `<local>` matches one of the enclosing method's hash-typed
+ # params. When found, walk the block body for nested call sites
+ # whose args reference k or v and widen the called method's
+ # param types accordingly.
   def each_widen_walk(nid, pnames, ptypes)
     if nid < 0
       return
@@ -20548,7 +20548,7 @@ class Compiler
       recv = @nd_receiver[nid]
       if recv >= 0 && @nd_type[recv] == "LocalVariableReadNode"
         local_name = @nd_name[recv]
-        # Locate the param's type in the enclosing method.
+ # Locate the param's type in the enclosing method.
         local_t = ""
         pi = 0
         while pi < pnames.length
@@ -20562,14 +20562,14 @@ class Compiler
           end
         end
         if is_hash_type(local_t) == 1
-          k_name_424 = get_block_param(nid, 0)
-          v_name_424 = get_block_param(nid, 1)
-          if k_name_424 != "" && v_name_424 != ""
-            k_t_424 = hash_key_type_from_variant(local_t)
-            v_t_424 = hash_leaf_type(local_t)
+          k_name = get_block_param(nid, 0)
+          v_name = get_block_param(nid, 1)
+          if k_name != "" && v_name != ""
+            k_t = hash_key_type_from_variant(local_t)
+            v_t = hash_leaf_type(local_t)
             blk = @nd_block[nid]
             block_body = @nd_body[blk]
-            widen_callsites_referencing_kv(block_body, k_name_424, k_t_424, v_name_424, v_t_424)
+            widen_callsites_referencing_kv(block_body, k_name, k_t, v_name, v_t)
           end
         end
       end
@@ -20583,12 +20583,12 @@ class Compiler
     end
   end
 
-  # Walk the block body. For each CallNode whose args reference
-  # `k_name` / `v_name`, widen the called method's param types
-  # from the hash-derived k/v types. Covers <Class>.<cmeth>(...)
-  # constant-recv shape (the canonical #424 repro). Other shapes
-  # (bare method, instance recv) stay handled by the existing
-  # iterative loop.
+ # Walk the block body. For each CallNode whose args reference
+ # `k_name` / `v_name`, widen the called method's param types
+ # from the hash-derived k/v types. Covers <Class>.<cmeth>(...)
+ # constant-recv shape (the canonical repro). Other shapes
+ # (bare method, instance recv) stay handled by the existing
+ # iterative loop.
   def widen_callsites_referencing_kv(nid, k_name, k_t, v_name, v_t)
     if nid < 0
       return
@@ -20641,11 +20641,11 @@ class Compiler
     end
   end
 
-  # Returns the type to use for `arg` in the context of an each
-  # block where k/v have hash-derived types. Mirrors infer_type
-  # for the LocalVariableReadNode case but pins k/v to their
-  # hash-derived types instead of consulting the (empty) var-type
-  # table.
+ # Returns the type to use for `arg` in the context of an each
+ # block where k/v have hash-derived types. Mirrors infer_type
+ # for the LocalVariableReadNode case but pins k/v to their
+ # hash-derived types instead of consulting the (empty) var-type
+ # table.
   def arg_type_in_each_block(arg, k_name, k_t, v_name, v_t)
     if arg < 0
       return ""
@@ -20662,9 +20662,9 @@ class Compiler
     ""
   end
 
-  # Hash key type from a variant name. "str_int_hash" -> "string",
-  # "sym_int_hash" -> "symbol", etc. Mirrors hash_leaf_type's
-  # value-side counterpart.
+ # Hash key type from a variant name. "str_int_hash" -> "string",
+ # "sym_int_hash" -> "symbol", etc. Mirrors hash_leaf_type's
+ # value-side counterpart.
   def hash_key_type_from_variant(t)
     if is_nullable_type(t) == 1
       t = base_type(t)
@@ -20684,37 +20684,37 @@ class Compiler
     ""
   end
 
-  # Walk the method body looking for `lv_<pname>[k] = v` writes
-  # (CallNode `[]=` with recv = LocalVariableReadNode named pname).
-  # Returns a more-specific hash type than `cur` based on the
-  # observed key + value types, or "" if there's no widening needed
-  # (or if the observed types are inconsistent).
+ # Walk the method body looking for `lv_<pname>[k] = v` writes
+ # (CallNode `[]=` with recv = LocalVariableReadNode named pname).
+ # Returns a more-specific hash type than `cur` based on the
+ # observed key + value types, or "" if there's no widening needed
+ # (or if the observed types are inconsistent).
   def infer_param_hash_from_writes(nid, pname, cur)
     if nid < 0
       return ""
     end
-    # Track all observed value types via a single string accumulator.
+ # Track all observed value types via a single string accumulator.
     val_types = "".split(",")
     key_types = "".split(",")
     collect_param_hash_writes(nid, pname, val_types, key_types)
-    # Issue #408: also harvest signals from `pname.each do |k, v|`
-    # block bodies. Programs that read-only-iterate the hash never
-    # hit the `[]=` collector above, leaving the param widened to
-    # whatever poly-ish variant an earlier widening pinned it to.
+ # also harvest signals from `pname.each do |k, v|`
+ # block bodies. Programs that read-only-iterate the hash never
+ # hit the `[]=` collector above, leaving the param widened to
+ # whatever poly-ish variant an earlier widening pinned it to.
     collect_param_each_block_signals(nid, pname, val_types, key_types)
     if val_types.length == 0
-      # Issue #408 option B (Ori's "weaker fix"): when no concrete
-      # signals at all and the current type is poly-ish AND the
-      # body has an `each |k, v|` on the param, default to
-      # str_str_hash. This is unsound in general (a sym-keyed
-      # poly_poly_hash would mis-narrow), but covers the dominant
-      # Rails/Tep shape -- string-keyed hashes flowing through a
-      # cmeth body that just dispatches to a sibling-cmeth
-      # formatter. The narrowing only fires when no caller has
-      # established a non-string-keyed shape via the existing
-      # call-site widening, so the fallback applies exactly when
-      # the param's poly type is itself a fallback from missing
-      # call-site signal rather than a deliberate widening.
+ # option B (Ori's "weaker fix"): when no concrete
+ # signals at all and the current type is poly-ish AND the
+ # body has an `each |k, v|` on the param, default to
+ # str_str_hash. This is unsound in general (a sym-keyed
+ # poly_poly_hash would mis-narrow), but covers the dominant
+ # Rails/Tep shape -- string-keyed hashes flowing through a
+ # cmeth body that just dispatches to a sibling-cmeth
+ # formatter. The narrowing only fires when no caller has
+ # established a non-string-keyed shape via the existing
+ # call-site widening, so the fallback applies exactly when
+ # the param's poly type is itself a fallback from missing
+ # call-site signal rather than a deliberate widening.
       if (cur == "poly_poly_hash" || cur == "sym_poly_hash" || cur == "str_poly_hash") &&
          param_has_each_kv?(nid, pname) == 1
         @needs_str_str_hash = 1
@@ -20722,8 +20722,8 @@ class Compiler
       end
       return ""
     end
-    # Decide hash variant from the union of observed types. If any
-    # observed value type doesn't fit `cur`'s value slot, widen.
+ # Decide hash variant from the union of observed types. If any
+ # observed value type doesn't fit `cur`'s value slot, widen.
     cur_kt = hash_key_part(cur)
     cur_vt = hash_value_part(cur)
     new_vt = unify_hash_value_types(val_types)
@@ -20731,10 +20731,10 @@ class Compiler
     return compose_hash_type(new_kt, new_vt)
   end
 
-  # Issue #408: walks `nid` and returns 1 if there is at least
-  # one `pname.each do |k, v|` shape on the param (regardless of
-  # what the block body does with k / v). Used by the option B
-  # weak-default fallback in infer_param_hash_from_writes.
+ # walks `nid` and returns 1 if there is at least
+ # one `pname.each do |k, v|` shape on the param (regardless of
+ # what the block body does with k / v). Used by the option B
+ # weak-default fallback in infer_param_hash_from_writes.
   def param_has_each_kv?(nid, pname)
     if nid < 0
       return 0
@@ -20744,7 +20744,7 @@ class Compiler
       if r_each_kv >= 0 && @nd_type[r_each_kv] == "LocalVariableReadNode" && @nd_name[r_each_kv] == pname
         blk_each_kv = @nd_block[nid]
         if blk_each_kv >= 0
-          # 2-arity block?
+ # 2-arity block?
           if get_block_param(nid, 1) != ""
             return 1
           end
@@ -20763,36 +20763,36 @@ class Compiler
     0
   end
 
-  # Issue #408: walk `nid` for `pname.each do |k, v|` block
-  # expressions and harvest type signals from how `k` and `v`
-  # participate in `+`-chains in the body. A chain whose
-  # transitive leaves include both a string literal and a
-  # reference to k_pname / v_pname is treated as evidence the
-  # corresponding side is string-typed.
+ # walk `nid` for `pname.each do |k, v|` block
+ # expressions and harvest type signals from how `k` and `v`
+ # participate in `+`-chains in the body. A chain whose
+ # transitive leaves include both a string literal and a
+ # reference to k_pname / v_pname is treated as evidence the
+ # corresponding side is string-typed.
   def collect_param_each_block_signals(nid, pname, val_types, key_types)
     if nid < 0
       return
     end
     if @nd_type[nid] == "CallNode" && @nd_name[nid] == "each"
-      r_408 = @nd_receiver[nid]
-      if r_408 >= 0 && @nd_type[r_408] == "LocalVariableReadNode" && @nd_name[r_408] == pname
-        blk_408 = @nd_block[nid]
-        if blk_408 >= 0
-          k_pname_408 = get_block_param(nid, 0)
-          v_pname_408 = get_block_param(nid, 1)
-          body_408 = @nd_body[blk_408]
-          if body_408 >= 0
-            collect_each_block_concat_signals(body_408, k_pname_408, v_pname_408, val_types, key_types)
+      r = @nd_receiver[nid]
+      if r >= 0 && @nd_type[r] == "LocalVariableReadNode" && @nd_name[r] == pname
+        blk = @nd_block[nid]
+        if blk >= 0
+          k_pname = get_block_param(nid, 0)
+          v_pname = get_block_param(nid, 1)
+          body = @nd_body[blk]
+          if body >= 0
+            collect_each_block_concat_signals(body, k_pname, v_pname, val_types, key_types)
           end
         end
       end
     end
-    cs_408 = []
-    push_child_ids(nid, cs_408)
-    k_408 = 0
-    while k_408 < cs_408.length
-      collect_param_each_block_signals(cs_408[k_408], pname, val_types, key_types)
-      k_408 = k_408 + 1
+    cs = []
+    push_child_ids(nid, cs)
+    k = 0
+    while k < cs.length
+      collect_param_each_block_signals(cs[k], pname, val_types, key_types)
+      k = k + 1
     end
   end
 
@@ -20801,43 +20801,43 @@ class Compiler
       return
     end
     if @nd_type[nid] == "CallNode" && @nd_name[nid] == "+"
-      leaves_408 = []
-      collect_concat_chain_leaves(nid, leaves_408)
-      has_str_lit_408 = 0
-      has_k_408 = 0
-      has_v_408 = 0
-      li_408 = 0
-      while li_408 < leaves_408.length
-        lt_408 = @nd_type[leaves_408[li_408]]
-        if lt_408 == "StringNode" || lt_408 == "InterpolatedStringNode"
-          has_str_lit_408 = 1
+      leaves = []
+      collect_concat_chain_leaves(nid, leaves)
+      has_str_lit = 0
+      has_k = 0
+      has_v = 0
+      li = 0
+      while li < leaves.length
+        lt = @nd_type[leaves[li]]
+        if lt == "StringNode" || lt == "InterpolatedStringNode"
+          has_str_lit = 1
         end
-        if lt_408 == "LocalVariableReadNode"
-          ln_408 = @nd_name[leaves_408[li_408]]
-          if ln_408 == k_pname && k_pname != ""
-            has_k_408 = 1
+        if lt == "LocalVariableReadNode"
+          ln = @nd_name[leaves[li]]
+          if ln == k_pname && k_pname != ""
+            has_k = 1
           end
-          if ln_408 == v_pname && v_pname != ""
-            has_v_408 = 1
+          if ln == v_pname && v_pname != ""
+            has_v = 1
           end
         end
-        li_408 = li_408 + 1
+        li = li + 1
       end
-      if has_str_lit_408 == 1
-        if has_k_408 == 1 && not_in("string", key_types) == 1
+      if has_str_lit == 1
+        if has_k == 1 && not_in("string", key_types) == 1
           key_types.push("string")
         end
-        if has_v_408 == 1 && not_in("string", val_types) == 1
+        if has_v == 1 && not_in("string", val_types) == 1
           val_types.push("string")
         end
       end
     end
-    cs_408b = []
-    push_child_ids(nid, cs_408b)
-    k_408b = 0
-    while k_408b < cs_408b.length
-      collect_each_block_concat_signals(cs_408b[k_408b], k_pname, v_pname, val_types, key_types)
-      k_408b = k_408b + 1
+    cs_b = []
+    push_child_ids(nid, cs_b)
+    k_b = 0
+    while k_b < cs_b.length
+      collect_each_block_concat_signals(cs_b[k_b], k_pname, v_pname, val_types, key_types)
+      k_b = k_b + 1
     end
   end
 
@@ -20935,7 +20935,7 @@ class Compiler
       return "str" if v == "string"
       return "poly"
     end
-    # Multiple distinct types -> poly.
+ # Multiple distinct types -> poly.
     "poly"
   end
 
@@ -20952,7 +20952,7 @@ class Compiler
     "poly"
   end
 
-  # Issue #397 helper: when positional arg `nid` is an empty `{}` and
+ # helper: when positional arg `nid` is an empty `{}` and
 
   def compose_hash_type(kt, vt)
     if kt == "str" && vt == "int"
@@ -20988,7 +20988,7 @@ class Compiler
   end
 
   def precompute_all_scope_decls
-    # ---- Top-level main ----
+ # ---- Top-level main ----
     push_scope
     stmts = get_body_stmts(@root_id)
     ml = "".split(",")
@@ -20999,7 +20999,7 @@ class Compiler
     @nd_scope_types[@root_id] = mt.join("|")
     pop_scope
 
-    # ---- Top-level method bodies ----
+ # ---- Top-level method bodies ----
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -21027,7 +21027,7 @@ class Compiler
       mi = mi + 1
     end
 
-    # ---- Class instance method bodies + class method bodies ----
+ # ---- Class instance method bodies + class method bodies ----
     ci = 0
     while ci < @cls_names.length
       saved_ci = @current_class_idx
@@ -21094,13 +21094,13 @@ class Compiler
       ci = ci + 1
     end
 
-    # ---- Constant initializer RHSes ----
-    # Top-level main loop skipped ConstantWriteNode; ClassNode-body
-    # MultiWriteNode (`P, Q = expr_inside_class_body`) wasn't reached
-    # at all (the class loop only covers method bodies). compile_main
-    # eventually inlines all const inits into main(), so walk them
-    # under main's scope so any CallNodes / array literals on the
-    # RHS get cached.
+ # ---- Constant initializer RHSes ----
+ # Top-level main loop skipped ConstantWriteNode; ClassNode-body
+ # MultiWriteNode (`P, Q = expr_inside_class_body`) wasn't reached
+ # at all (the class loop only covers method bodies). compile_main
+ # eventually inlines all const inits into main(), so walk them
+ # under main's scope so any CallNodes / array literals on the
+ # RHS get cached.
     push_scope
     cei = 0
     while cei < @const_expr_ids.length
@@ -21118,9 +21118,9 @@ class Compiler
         mw_id = parts[1].to_i
         rhs = @nd_expression[mw_id]
         if rhs >= 0
-          # Set lexical scope so resolve_const_read_name finds
-          # constants under the enclosing class (e.g. `M1, M2 = ARR`
-          # inside class D needs to resolve ARR as D_ARR).
+ # Set lexical scope so resolve_const_read_name finds
+ # constants under the enclosing class (e.g. `M1, M2 = ARR`
+ # inside class D needs to resolve ARR as D_ARR).
           saved_lex = @current_lexical_scope
           @current_lexical_scope = scope_n
           walk_and_cache(rhs)
@@ -21131,7 +21131,7 @@ class Compiler
     end
     pop_scope
 
-    # ---- ieval (instance_eval-rewritten) bodies ----
+ # ---- ieval (instance_eval-rewritten) bodies ----
     iv = 0
     while iv < @ieval_body_ids.length
       bid_iv = @ieval_body_ids[iv]
@@ -21146,19 +21146,19 @@ class Compiler
       iv = iv + 1
     end
 
-    # ---- BlockNode / LambdaNode / ProcNode bodies ----
-    # compile_fiber_new and compile_lambda_def use scan_locals on a
-    # block body to find referenced names; codegen then splits those
-    # into captures (in outer scope) vs true locals at emit time. The
-    # scan output is purely syntactic, so we cache it here keyed by
-    # the body bid. Params are the block's syntactic required names.
+ # ---- BlockNode / LambdaNode / ProcNode bodies ----
+ # compile_fiber_new and compile_lambda_def use scan_locals on a
+ # block body to find referenced names; codegen then splits those
+ # into captures (in outer scope) vs true locals at emit time. The
+ # scan output is purely syntactic, so we cache it here keyed by
+ # the body bid. Params are the block's syntactic required names.
     bn = 0
     while bn < @nd_count
       tk = @nd_type[bn]
       if tk == "BlockNode" || tk == "LambdaNode" || tk == "ProcNode"
         body_bn = @nd_body[bn]
         if body_bn >= 0
-          # Collect syntactic block param names
+ # Collect syntactic block param names
           bp_list = "".split(",")
           params_n = @nd_parameters[bn]
           if params_n >= 0
@@ -21191,7 +21191,7 @@ class Compiler
   end
 
   def annotate_all_node_types
-    # ---- Top-level (main) ----
+ # ---- Top-level (main) ----
     stmts = get_body_stmts(@root_id)
     push_scope
     empty_p = "".split(",")
@@ -21205,7 +21205,7 @@ class Compiler
     end
     pop_scope
 
-    # ---- Top-level method bodies ----
+ # ---- Top-level method bodies ----
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
@@ -21232,7 +21232,7 @@ class Compiler
       mi = mi + 1
     end
 
-    # ---- Class instance method bodies + class method bodies ----
+ # ---- Class instance method bodies + class method bodies ----
     ci = 0
     while ci < @cls_names.length
       saved_ci = @current_class_idx

@@ -99,7 +99,7 @@ static const char*sp_int_chr(mrb_int n){char*s=sp_str_alloc_raw(2);s[0]=(char)n;
 typedef struct{mrb_int first;mrb_int last;}sp_Range;
 static sp_Range sp_range_new(mrb_int f,mrb_int l){sp_Range r;r.first=f;r.last=l;return r;}
 
-/* ---- Class object (issue #404 Phase 1) ----
+/* ---- Class object ----
    Value-type Class reference: a single class id that indexes into
    the per-program sp_class_names[] table emitted by codegen. Lets
    `c = Foo` produce a runtime value (`(sp_Class){<id>}`) instead of
@@ -124,7 +124,7 @@ static inline sp_Complex sp_complex_conjugate(sp_Complex a){sp_Complex c;c.re=a.
 /* sp_Time keeps Time.now / Time.at as value-typed structs. d78149b's
    sub-second precision is preserved by inlining tv_sec + tv_nsec/1e9
    at every Time#to_f / Time#- call site (see spinel_codegen.rb).
-   Issue #418: `is_utc` distinguishes UTC-coerced times (set by
+   `is_utc` distinguishes UTC-coerced times (set by
    `Time#utc`) from local-zone times — a presentation-only flag,
    the underlying epoch is the same instant either way. iso8601 /
    strftime check the flag at format time. C99 compound literals
@@ -169,7 +169,7 @@ static char *sp_str_alloc(size_t len) {
   h->next = sp_str_heap;
   h->size = total;
   sp_str_heap = h;
-  /* Don't fold string-heap pressure into sp_gc_bytes (issue #99): the
+  /* Don't fold string-heap pressure into sp_gc_bytes : the
      threshold heuristic in sp_gc_alloc is keyed on heap survivors, and
      the str-heap mark-sweep that runs alongside (sp_str_sweep,
      called from sp_gc_collect) doesn't add surviving strings back into
@@ -212,7 +212,7 @@ static inline int sp_utf8_decode(const char*p,uint32_t*out){unsigned char c=(uns
 static inline int sp_utf8_encode(uint32_t cp,char*out){if(cp<0x80){out[0]=(char)cp;return 1;}if(cp<0x800){out[0]=(char)(0xC0|(cp>>6));out[1]=(char)(0x80|(cp&0x3F));return 2;}if(cp<0x10000){out[0]=(char)(0xE0|(cp>>12));out[1]=(char)(0x80|((cp>>6)&0x3F));out[2]=(char)(0x80|(cp&0x3F));return 3;}out[0]=(char)(0xF0|(cp>>18));out[1]=(char)(0x80|((cp>>12)&0x3F));out[2]=(char)(0x80|((cp>>6)&0x3F));out[3]=(char)(0x80|(cp&0x3F));return 4;}
 static mrb_int sp_str_length(const char*s){mrb_int n=0;while(*s){s+=sp_utf8_advance(s);n++;}return n;}
 static mrb_int sp_str_ord(const char*s){if(!*s)return 0;uint32_t cp;sp_utf8_decode(s,&cp);return(mrb_int)cp;}
-/* NULL-safe string equality. Issue #129: ENV[] returns NULL for unset vars
+/* NULL-safe string equality. ENV[] returns NULL for unset vars
    (the dispatch is `sp_str_dup_external(getenv(...))`, which propagates
    NULL), so emitted strcmp(...) on the result of `ENV["X"] == "1"` would
    dereference NULL on either side. nil-vs-string equality is false in
@@ -247,8 +247,8 @@ static void sp_str_sweep(void) {
   }
 }
 
-/* Issue #414: Time#strftime — format the time per `fmt` using libc
-   strftime. The is_utc flag (#418) selects gmtime vs localtime so a
+/* Time#strftime — format the time per `fmt` using libc
+   strftime. The is_utc flag selects gmtime vs localtime so a
    `Time.now.utc.strftime("%H")` runs against the UTC broken-down
    value. Returns a freshly-allocated string (sp_str_dup_external'd
    into the str heap so GC tracks it). The 256-byte buffer is enough
@@ -265,7 +265,7 @@ static const char *sp_time_strftime(sp_Time t, const char *fmt) {
   return sp_str_dup_external(buf);
 }
 
-/* Issue #414: Time#iso8601 — RFC 3339 style. Format the date+time
+/* Time#iso8601 — RFC 3339 style. Format the date+time
    prefix with strftime, then compute the UTC offset manually via
    `mktime(gmtime(s)) - s` rather than relying on strftime's %z,
    because MSVCRT's %z emits the timezone *name* rather than ±HHMM,
@@ -276,7 +276,7 @@ static const char *sp_time_strftime(sp_Time t, const char *fmt) {
    Sub-second precision is intentionally omitted: CRuby's iso8601
    also drops it unless the caller passes a precision arg, which
    Phase 1 doesn't support.
-   Issue #418: when is_utc is set, format against gmtime and emit the
+   when is_utc is set, format against gmtime and emit the
    trailing "Z" suffix CRuby uses for UTC iso8601. */
 static const char *sp_time_iso8601(sp_Time t) {
   char buf[64];
@@ -315,7 +315,7 @@ static const char *sp_time_iso8601(sp_Time t) {
   return sp_str_dup_external(buf);
 }
 
-/* Issue #418: Time#utc — same instant, presentation flag flipped to
+/* Time#utc — same instant, presentation flag flipped to
    UTC. iso8601 / strftime check is_utc at format time. CRuby's Time
    internally tracks a similar "gmt" flag; the value-typed sp_Time
    stores it inline. */
@@ -723,7 +723,7 @@ static inline const char*sp_SymArray_inspect(sp_IntArray*a){sp_String*s=sp_Strin
 static const char*sp_PtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_String_new("[");for(mrb_int i=0;i<a->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,"#<Object>");}sp_String_append(s,"]");return s->data;}
 /* Nested-array inspect: when codegen knows the ptr_array's element
    type is one of the four built-in T_array shapes, recurse into the
-   matching primitive inspect (issue #169). */
+   matching primitive inspect . */
 static const char*sp_IntArrayPtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_String_new("[");for(mrb_int i=0;i<a->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_IntArray_inspect((sp_IntArray*)a->data[i]));}sp_String_append(s,"]");return s->data;}
 static const char*sp_FloatArrayPtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_String_new("[");for(mrb_int i=0;i<a->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_FloatArray_inspect((sp_FloatArray*)a->data[i]));}sp_String_append(s,"]");return s->data;}
 static const char*sp_StrArrayPtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_String_new("[");for(mrb_int i=0;i<a->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_StrArray_inspect((sp_StrArray*)a->data[i]));}sp_String_append(s,"]");return s->data;}
@@ -901,14 +901,14 @@ static sp_StrArray *sp_re_split(mrb_regexp_pattern *pat, const char *str) {
 
 /* NaN-boxed polymorphic value */
 typedef uint64_t sp_RbValue;
-#define SP_TAG_INT  0
-#define SP_TAG_STR  1
-#define SP_TAG_FLT  2
+#define SP_TAG_INT 0
+#define SP_TAG_STR 1
+#define SP_TAG_FLT 2
 #define SP_TAG_BOOL 3
-#define SP_TAG_NIL  4
-#define SP_TAG_OBJ  5
-#define SP_TAG_SYM  6
-/* Issue #404 Phase 3: Class values boxed into a poly slot (e.g.
+#define SP_TAG_NIL 4
+#define SP_TAG_OBJ 5
+#define SP_TAG_SYM 6
+/* Class values boxed into a poly slot (e.g.
    as ancestors-array elements). cls_id of the sp_RbVal carries
    the boxed sp_Class's cls_id directly so unboxing is just a
    field read. */
@@ -919,22 +919,22 @@ typedef uint64_t sp_RbValue;
    table as before. The element-type tag and the array cls_id are
    paired by `array_cls_id = -element_tag - 1`. */
 #define SP_BUILTIN_ARRAY_OF(tag) (-(tag) - 1)
-#define SP_BUILTIN_INT_ARRAY    SP_BUILTIN_ARRAY_OF(SP_TAG_INT)   /* -1 */
-#define SP_BUILTIN_STR_ARRAY    SP_BUILTIN_ARRAY_OF(SP_TAG_STR)   /* -2 */
-#define SP_BUILTIN_FLT_ARRAY    SP_BUILTIN_ARRAY_OF(SP_TAG_FLT)   /* -3 */
-#define SP_BUILTIN_PTR_ARRAY    SP_BUILTIN_ARRAY_OF(SP_TAG_OBJ)   /* -6 */
-#define SP_BUILTIN_SYM_ARRAY    SP_BUILTIN_ARRAY_OF(SP_TAG_SYM)   /* -7 */
-#define SP_BUILTIN_PROC         (-9)                              /* sp_Proc *, distinct from any tag-based id */
-#define SP_BUILTIN_RANGE        (-10)                             /* sp_Range *, heap copy of stack-typed sp_Range when crossing into poly */
-#define SP_BUILTIN_TIME         (-11)                             /* sp_Time *, heap copy of stack-typed sp_Time when crossing into poly */
-#define SP_BUILTIN_POLY_ARRAY   (-12)                             /* sp_PolyArray *, array of sp_RbVal */
+#define SP_BUILTIN_INT_ARRAY SP_BUILTIN_ARRAY_OF(SP_TAG_INT) /* -1 */
+#define SP_BUILTIN_STR_ARRAY SP_BUILTIN_ARRAY_OF(SP_TAG_STR) /* -2 */
+#define SP_BUILTIN_FLT_ARRAY SP_BUILTIN_ARRAY_OF(SP_TAG_FLT) /* -3 */
+#define SP_BUILTIN_PTR_ARRAY SP_BUILTIN_ARRAY_OF(SP_TAG_OBJ) /* -6 */
+#define SP_BUILTIN_SYM_ARRAY SP_BUILTIN_ARRAY_OF(SP_TAG_SYM) /* -7 */
+#define SP_BUILTIN_PROC (-9) /* sp_Proc *, distinct from any tag-based id */
+#define SP_BUILTIN_RANGE (-10) /* sp_Range *, heap copy of stack-typed sp_Range when crossing into poly */
+#define SP_BUILTIN_TIME (-11) /* sp_Time *, heap copy of stack-typed sp_Time when crossing into poly */
+#define SP_BUILTIN_POLY_ARRAY (-12) /* sp_PolyArray *, array of sp_RbVal */
 /* Hash variant cls_ids — boxed into the cls_id of a poly slot so
    Hash#dig can recover the concrete hash type at runtime. */
-#define SP_BUILTIN_STR_INT_HASH  (-13)
-#define SP_BUILTIN_STR_STR_HASH  (-14)
-#define SP_BUILTIN_INT_STR_HASH  (-15)
-#define SP_BUILTIN_SYM_INT_HASH  (-16)
-#define SP_BUILTIN_SYM_STR_HASH  (-17)
+#define SP_BUILTIN_STR_INT_HASH (-13)
+#define SP_BUILTIN_STR_STR_HASH (-14)
+#define SP_BUILTIN_INT_STR_HASH (-15)
+#define SP_BUILTIN_SYM_INT_HASH (-16)
+#define SP_BUILTIN_SYM_STR_HASH (-17)
 #define SP_BUILTIN_STR_POLY_HASH (-18)
 #define SP_BUILTIN_SYM_POLY_HASH (-19)
 #define SP_BUILTIN_POLY_POLY_HASH (-20)
@@ -946,11 +946,11 @@ static sp_RbVal sp_box_bool(mrb_bool v) { sp_RbVal r; r.tag = SP_TAG_BOOL; r.cls
 static sp_RbVal sp_box_nil(void) { sp_RbVal r; r.tag = SP_TAG_NIL; r.cls_id = 0; r.v.i = 0; return r; }
 static sp_RbVal sp_box_obj(void *p, int cls_id) { sp_RbVal r; r.tag = SP_TAG_OBJ; r.cls_id = cls_id; r.v.p = p; return r; }
 static sp_RbVal sp_box_sym(sp_sym v) { sp_RbVal r; r.tag = SP_TAG_SYM; r.cls_id = 0; r.v.i = (mrb_int)v; return r; }
-/* Issue #404 Phase 3: box a sp_Class into a poly slot. */
+/* box a sp_Class into a poly slot. */
 static sp_RbVal sp_box_class(sp_Class c) { sp_RbVal r; r.tag = SP_TAG_CLASS; r.cls_id = (int)c.cls_id; r.v.i = c.cls_id; return r; }
 
-/* Issue #404 Phase 3 Tier 4: every non-value-type sp_<C> starts
-   with `mrb_int cls_id` (#422). Read it back from a void* when
+/* every non-value-type sp_<C> starts
+   with `mrb_int cls_id`. Read it back from a void* when
    the static type at the call site has lost the cls_id (e.g.
    sp_PtrArray_get returning void*). NULL-safe via the guard
    on p; expects p to actually point at a user-class struct
@@ -1036,7 +1036,7 @@ static inline void sp_poly_puts(sp_RbVal v) {
 }
 static mrb_bool sp_poly_nil_p(sp_RbVal v) { return v.tag == SP_TAG_NIL; }
 static mrb_bool sp_poly_truthy(sp_RbVal v) { return !(v.tag == SP_TAG_NIL || (v.tag == SP_TAG_BOOL && !v.v.b)); }
-/* Issue #404 Phase 3: forward-declare the program-emitted class
+/* forward-declare the program-emitted class
    name lookup so sp_poly_to_s's SP_TAG_CLASS arm resolves.
    The codegen emits a 1-line stub when no class const is used,
    or the real body when @needs_class_table fires. The forward
@@ -1196,7 +1196,7 @@ static mrb_bool sp_StrPolyHash_has_key(sp_StrPolyHash*h,const char*k){mrb_int id
 static mrb_int sp_StrPolyHash_length(sp_StrPolyHash*h){return h->len;}
 static sp_StrArray*sp_StrPolyHash_keys(sp_StrPolyHash*h){sp_StrArray*a=sp_StrArray_new();for(mrb_int i=0;i<h->len;i++)sp_StrArray_push(a,h->order[i]);return a;}
 static sp_PolyArray*sp_StrPolyHash_values(sp_StrPolyHash*h){sp_PolyArray*a=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++)sp_PolyArray_push(a,sp_StrPolyHash_get(h,h->order[i]));return a;}
-/* Issue #426: Hash#merge for str_poly_hash. Same shape as the
+/* Hash#merge for str_poly_hash. Same shape as the
    StrIntHash / SymPolyHash siblings -- copy recv's entries into a
    fresh hash, then overlay other's. */
 static sp_StrPolyHash*sp_StrPolyHash_merge(sp_StrPolyHash*a,sp_StrPolyHash*b){sp_StrPolyHash*r=sp_StrPolyHash_new();for(mrb_int i=0;i<a->len;i++)sp_StrPolyHash_set(r,a->order[i],sp_StrPolyHash_get(a,a->order[i]));for(mrb_int i=0;i<b->len;i++)sp_StrPolyHash_set(r,b->order[i],sp_StrPolyHash_get(b,b->order[i]));return r;}
@@ -1452,7 +1452,7 @@ static sp_Val *sp_lam_int(mrb_int n) { sp_Val *v = (sp_Val *)sp_lam_alloc(sizeof
 static sp_Val *sp_lam_bool(mrb_bool b) { sp_Val *v = (sp_Val *)sp_lam_alloc(sizeof(sp_Val)); v->tag = SP_BOOL2; v->u.bval = b; return v; }
 static sp_Val sp_lam_nil_val = { .tag = SP_NIL2 };
 static sp_Val *sp_lam_call(sp_Val *f, sp_Val *arg) { return f->u.proc.fn(f, arg); }
-/* Multi-arg lambda dispatch (issue #400). The fn pointer is stored
+/* Multi-arg lambda dispatch . The fn pointer is stored
    typed as `sp_fn_t` (1-arg) so re-cast at the call site to the
    right arity. The generated lambda body is declared with the
    matching arity so the actual ABI matches. */
