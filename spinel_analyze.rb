@@ -13931,7 +13931,16 @@ class Compiler
       if gname != "$stderr" && gname != "$stdout" && gname != "$?"
         if not_in(gname, @gvar_names) == 1
           @gvar_names.push(gname)
-          @gvar_types.push("int")
+ # $PROGRAM_NAME and $0 are Ruby's standard aliases for the
+ # program name as a String, populated from argv[0] at emit_main
+ # init. Without the string typing, the canonical
+ # `__FILE__ == $PROGRAM_NAME` autorun guard would compare
+ # against an mrb_int and fail to compile.
+          if gname == "$PROGRAM_NAME" || gname == "$0"
+            @gvar_types.push("string")
+          else
+            @gvar_types.push("int")
+          end
         end
       end
     end

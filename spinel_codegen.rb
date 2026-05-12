@@ -9538,6 +9538,18 @@ class Compiler
     if @needs_argv == 1
       emit_raw("  sp_argv.len=argc-1;sp_argv.data=(const char**)malloc(sizeof(const char*)*(argc>1?argc-1:1));{int _i;for(_i=0;_i<sp_argv.len;_i++)sp_argv.data[_i]=sp_str_dup_external(argv[_i+1]);}")
     end
+ # Populate $PROGRAM_NAME / $0 from argv[0] at startup. Ruby's
+ # canonical autorun guard (`if __FILE__ == $PROGRAM_NAME`) reads
+ # the script's argv-passed path; without this init it stays the
+ # empty default and the guard never fires.
+    gi_pn = 0
+    while gi_pn < @gvar_names.length
+      pn_name = @gvar_names[gi_pn]
+      if (pn_name == "$PROGRAM_NAME" || pn_name == "$0") && @gvar_types[gi_pn] == "string"
+        emit_raw("  " + sanitize_gvar(pn_name) + " = (argc > 0) ? argv[0] : \"\";")
+      end
+      gi_pn = gi_pn + 1
+    end
     if @needs_rand == 1
       emit_raw("  srand((unsigned)time(NULL));")
     end
