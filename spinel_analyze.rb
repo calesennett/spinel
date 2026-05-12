@@ -3515,6 +3515,19 @@ class Compiler
     if mname == "chomp" || mname == "chop"
       return "string"
     end
+ # `force_encoding` / `encode` / `b` lower to a receiver
+ # passthrough at codegen (line 13953); mirror the type
+ # inference so methods like `def normalize(s); s.force_encoding("UTF-8"); end`
+ # pick up the receiver's string type for the function return
+ # signature. Gated on receiver type being string to avoid
+ # colliding with user-defined methods of the same name (`b` is
+ # the shortest collision target; struct field accessors etc.
+ # commonly take that single-letter shape).
+    if mname == "force_encoding" || mname == "encode" || mname == "b"
+      if recv >= 0 && infer_type(recv) == "string"
+        return "string"
+      end
+    end
     if mname == "include?"
       return "bool"
     end
