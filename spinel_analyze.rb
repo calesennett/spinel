@@ -16158,6 +16158,308 @@ class Compiler
     @analysis_frozen = 1
     precompute_all_scope_decls
     annotate_all_node_types
+    if ENV["SP_POLY_REPORT"] == "1"
+      emit_poly_report
+    end
+    if ENV["SP_POLY_REPORT"] == "2"
+      emit_poly_report
+      emit_poly_breakdown
+    end
+  end
+
+ # B1 discovery (STALIN.md §11): count slot types that landed on
+ # poly / nullable-poly / *_poly_hash / poly_array. Output to
+ # stderr after all analyze passes finish, gated by envvar to
+ # keep production builds noise-free. The breakdown drives the
+ # priority of STALIN.md Step 2 (param narrowing) / Step 3 (is_a?
+ # narrowing) — high poly counts mean polyvariance work has ROI,
+ # low counts mean the inference is already pinning concrete
+ # types and the effort is elsewhere.
+  def emit_poly_report
+    param_total = 0
+    param_poly = 0
+    param_poly_array = 0
+    param_poly_hash = 0
+    param_nullable_poly = 0
+    lv_total = 0
+    lv_poly = 0
+    lv_poly_array = 0
+    lv_poly_hash = 0
+    lv_nullable_poly = 0
+    ivar_total = 0
+    ivar_poly = 0
+    ivar_poly_array = 0
+    ivar_poly_hash = 0
+    ret_total = 0
+    ret_poly = 0
+
+ # Top-level method params + returns.
+    rmi = 0
+    while rmi < @meth_names.length
+      rpt = @meth_param_types[rmi].split(",")
+      rpi = 0
+      while rpi < rpt.length
+        if rpt[rpi] != ""
+          param_total = param_total + 1
+          rb = base_type(rpt[rpi])
+          if rb == "poly"
+            param_poly = param_poly + 1
+            if rpt[rpi].end_with?("?")
+              param_nullable_poly = param_nullable_poly + 1
+            end
+          elsif rb == "poly_array"
+            param_poly_array = param_poly_array + 1
+          elsif rpt[rpi].include?("poly_hash")
+            param_poly_hash = param_poly_hash + 1
+          end
+        end
+        rpi = rpi + 1
+      end
+      ret_total = ret_total + 1
+      if rmi < @meth_return_types.length
+        rb_ret = base_type(@meth_return_types[rmi])
+        if rb_ret == "poly"
+          ret_poly = ret_poly + 1
+        end
+      end
+      rmi = rmi + 1
+    end
+
+ # Class instance method + cmeth params + returns.
+    rci = 0
+    while rci < @cls_names.length
+      r_im_pall = @cls_meth_ptypes[rci].split("|")
+      r_im_ret = @cls_meth_returns[rci].split(";")
+      r_imj = 0
+      while r_imj < r_im_pall.length
+        r_im_pt = r_im_pall[r_imj].split(",")
+        r_imk = 0
+        while r_imk < r_im_pt.length
+          if r_im_pt[r_imk] != ""
+            param_total = param_total + 1
+            r_imb = base_type(r_im_pt[r_imk])
+            if r_imb == "poly"
+              param_poly = param_poly + 1
+              if r_im_pt[r_imk].end_with?("?")
+                param_nullable_poly = param_nullable_poly + 1
+              end
+            elsif r_imb == "poly_array"
+              param_poly_array = param_poly_array + 1
+            elsif r_im_pt[r_imk].include?("poly_hash")
+              param_poly_hash = param_poly_hash + 1
+            end
+          end
+          r_imk = r_imk + 1
+        end
+        r_imj = r_imj + 1
+      end
+      r_imrj = 0
+      while r_imrj < r_im_ret.length
+        if r_im_ret[r_imrj] != ""
+          ret_total = ret_total + 1
+          r_imrb = base_type(r_im_ret[r_imrj])
+          if r_imrb == "poly"
+            ret_poly = ret_poly + 1
+          end
+        end
+        r_imrj = r_imrj + 1
+      end
+      r_cmpall = @cls_cmeth_ptypes[rci].split("|")
+      r_cmret = @cls_cmeth_returns[rci].split(";")
+      r_cmj = 0
+      while r_cmj < r_cmpall.length
+        r_cmpt = r_cmpall[r_cmj].split(",")
+        r_cmk = 0
+        while r_cmk < r_cmpt.length
+          if r_cmpt[r_cmk] != ""
+            param_total = param_total + 1
+            r_cmb = base_type(r_cmpt[r_cmk])
+            if r_cmb == "poly"
+              param_poly = param_poly + 1
+              if r_cmpt[r_cmk].end_with?("?")
+                param_nullable_poly = param_nullable_poly + 1
+              end
+            elsif r_cmb == "poly_array"
+              param_poly_array = param_poly_array + 1
+            elsif r_cmpt[r_cmk].include?("poly_hash")
+              param_poly_hash = param_poly_hash + 1
+            end
+          end
+          r_cmk = r_cmk + 1
+        end
+        r_cmj = r_cmj + 1
+      end
+      r_cmrj = 0
+      while r_cmrj < r_cmret.length
+        if r_cmret[r_cmrj] != ""
+          ret_total = ret_total + 1
+          r_cmrb = base_type(r_cmret[r_cmrj])
+          if r_cmrb == "poly"
+            ret_poly = ret_poly + 1
+          end
+        end
+        r_cmrj = r_cmrj + 1
+      end
+ # ivars
+      r_ivt = @cls_ivar_types[rci].split(";")
+      r_ivj = 0
+      while r_ivj < r_ivt.length
+        if r_ivt[r_ivj] != ""
+          ivar_total = ivar_total + 1
+          r_ivb = base_type(r_ivt[r_ivj])
+          if r_ivb == "poly"
+            ivar_poly = ivar_poly + 1
+          elsif r_ivb == "poly_array"
+            ivar_poly_array = ivar_poly_array + 1
+          elsif r_ivt[r_ivj].include?("poly_hash")
+            ivar_poly_hash = ivar_poly_hash + 1
+          end
+        end
+        r_ivj = r_ivj + 1
+      end
+      rci = rci + 1
+    end
+
+ # LVs from @nd_scope_types — covers all bodies (top-level,
+ # instance methods, cmeths, main).
+    r_nd = 0
+    while r_nd < @nd_scope_types.length
+      r_st = @nd_scope_types[r_nd]
+      if r_st != ""
+        r_pieces = r_st.split("|")
+        r_pp = 0
+        while r_pp < r_pieces.length
+          if r_pieces[r_pp] != ""
+            lv_total = lv_total + 1
+            r_lb = base_type(r_pieces[r_pp])
+            if r_lb == "poly"
+              lv_poly = lv_poly + 1
+              if r_pieces[r_pp].end_with?("?")
+                lv_nullable_poly = lv_nullable_poly + 1
+              end
+            elsif r_lb == "poly_array"
+              lv_poly_array = lv_poly_array + 1
+            elsif r_pieces[r_pp].include?("poly_hash")
+              lv_poly_hash = lv_poly_hash + 1
+            end
+          end
+          r_pp = r_pp + 1
+        end
+      end
+      r_nd = r_nd + 1
+    end
+
+    $stderr.puts "=== SP_POLY_REPORT ==="
+    $stderr.puts "params:  total=" + param_total.to_s + " poly=" + param_poly.to_s + " (nullable=" + param_nullable_poly.to_s + ") poly_array=" + param_poly_array.to_s + " poly_hash=" + param_poly_hash.to_s
+    $stderr.puts "locals:  total=" + lv_total.to_s + " poly=" + lv_poly.to_s + " (nullable=" + lv_nullable_poly.to_s + ") poly_array=" + lv_poly_array.to_s + " poly_hash=" + lv_poly_hash.to_s
+    $stderr.puts "ivars:   total=" + ivar_total.to_s + " poly=" + ivar_poly.to_s + " poly_array=" + ivar_poly_array.to_s + " poly_hash=" + ivar_poly_hash.to_s
+    $stderr.puts "returns: total=" + ret_total.to_s + " poly=" + ret_poly.to_s
+    $stderr.puts "======================"
+  end
+
+ # Detailed breakdown (SP_POLY_REPORT=2). Dump location names
+ # of every poly slot so the operator can see which classes /
+ # methods cluster the poly. Used to scope STALIN.md Step 2
+ # (param narrowing) — high concentration in a few methods
+ # means a targeted narrowing pass yields the most.
+  def emit_poly_breakdown
+    $stderr.puts "--- BREAKDOWN ---"
+ # Top-level + module class methods params.
+    bmi = 0
+    while bmi < @meth_names.length
+      bpn = @meth_param_names[bmi].split(",")
+      bpt = @meth_param_types[bmi].split(",")
+      bj = 0
+      while bj < bpn.length
+        if bj < bpt.length
+          bb = base_type(bpt[bj])
+          if bb == "poly" || bb == "poly_array" || bpt[bj].include?("poly_hash")
+            $stderr.puts "param: " + @meth_names[bmi] + "(" + bpn[bj] + ") : " + bpt[bj]
+          end
+        end
+        bj = bj + 1
+      end
+      if bmi < @meth_return_types.length
+        b_rb = base_type(@meth_return_types[bmi])
+        if b_rb == "poly"
+          $stderr.puts "return: " + @meth_names[bmi] + " : " + @meth_return_types[bmi]
+        end
+      end
+      bmi = bmi + 1
+    end
+ # Class instance methods + cmeths params.
+    bci = 0
+    while bci < @cls_names.length
+      bcn = @cls_names[bci]
+      b_im_pn = @cls_meth_params[bci].split("|")
+      b_im_pt = @cls_meth_ptypes[bci].split("|")
+      b_im_mn = @cls_meth_names[bci].split(";")
+      b_im_rn = @cls_meth_returns[bci].split(";")
+      b_imj = 0
+      while b_imj < b_im_pn.length
+        b_im_n = b_im_pn[b_imj].split(",")
+        b_im_t = b_im_pt[b_imj].split(",")
+        b_im_mname = b_imj < b_im_mn.length ? b_im_mn[b_imj] : "?"
+        b_imk = 0
+        while b_imk < b_im_n.length
+          if b_imk < b_im_t.length
+            b_im_b = base_type(b_im_t[b_imk])
+            if b_im_b == "poly" || b_im_b == "poly_array" || b_im_t[b_imk].include?("poly_hash")
+              $stderr.puts "param: " + bcn + "#" + b_im_mname + "(" + b_im_n[b_imk] + ") : " + b_im_t[b_imk]
+            end
+          end
+          b_imk = b_imk + 1
+        end
+        if b_imj < b_im_rn.length && b_im_rn[b_imj] != ""
+          b_im_rb = base_type(b_im_rn[b_imj])
+          if b_im_rb == "poly"
+            $stderr.puts "return: " + bcn + "#" + b_im_mname + " : " + b_im_rn[b_imj]
+          end
+        end
+        b_imj = b_imj + 1
+      end
+      b_cm_pn = @cls_cmeth_params[bci].split("|")
+      b_cm_pt = @cls_cmeth_ptypes[bci].split("|")
+      b_cm_mn = @cls_cmeth_names[bci].split(";")
+      b_cm_rn = @cls_cmeth_returns[bci].split(";")
+      b_cmj = 0
+      while b_cmj < b_cm_pn.length
+        b_cm_n = b_cm_pn[b_cmj].split(",")
+        b_cm_t = b_cm_pt[b_cmj].split(",")
+        b_cm_mname = b_cmj < b_cm_mn.length ? b_cm_mn[b_cmj] : "?"
+        b_cmk = 0
+        while b_cmk < b_cm_n.length
+          if b_cmk < b_cm_t.length
+            b_cm_b = base_type(b_cm_t[b_cmk])
+            if b_cm_b == "poly" || b_cm_b == "poly_array" || b_cm_t[b_cmk].include?("poly_hash")
+              $stderr.puts "param: " + bcn + "." + b_cm_mname + "(" + b_cm_n[b_cmk] + ") : " + b_cm_t[b_cmk]
+            end
+          end
+          b_cmk = b_cmk + 1
+        end
+        if b_cmj < b_cm_rn.length && b_cm_rn[b_cmj] != ""
+          b_cm_rb = base_type(b_cm_rn[b_cmj])
+          if b_cm_rb == "poly"
+            $stderr.puts "return: " + bcn + "." + b_cm_mname + " : " + b_cm_rn[b_cmj]
+          end
+        end
+        b_cmj = b_cmj + 1
+      end
+      b_ivn = @cls_ivar_names[bci].split(";")
+      b_ivt = @cls_ivar_types[bci].split(";")
+      b_ivj = 0
+      while b_ivj < b_ivn.length
+        if b_ivj < b_ivt.length
+          b_iv_b = base_type(b_ivt[b_ivj])
+          if b_iv_b == "poly" || b_iv_b == "poly_array" || b_ivt[b_ivj].include?("poly_hash")
+            $stderr.puts "ivar: " + bcn + "." + b_ivn[b_ivj] + " : " + b_ivt[b_ivj]
+          end
+        end
+        b_ivj = b_ivj + 1
+      end
+      bci = bci + 1
+    end
+    $stderr.puts "-----------------"
   end
 
 
