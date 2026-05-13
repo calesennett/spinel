@@ -17147,9 +17147,29 @@ class Compiler
     ""
   end
 
+  def is_static_const_ref(aid)
+    if @nd_type[aid] == "ConstantReadNode" || @nd_type[aid] == "ConstantPathNode"
+      return 1
+    end
+    0
+  end
+
+ # Resolve an is_a?/kind_of?/instance_of? argument to its registered
+ # class name. ConstantPathNode (`Foo::Bar`) walks the path via
+ # resolve_const_ref_name; ConstantReadNode (`Foo`) carries the leaf
+ # in @nd_name. Other shapes fall back to @nd_name so static lookup
+ # still has a name to try.
+  def resolve_introspection_arg_name(aid)
+    if @nd_type[aid] == "ConstantPathNode"
+      return resolve_const_ref_name(aid)
+    end
+    @nd_name[aid]
+  end
+
   def compile_introspection_expr(nid, mname, rc, recv_type)
- # is_a? - check class hierarchy
-    if mname == "is_a?"
+ # is_a? / kind_of? — kind_of? is an exact alias of is_a? in MRI.
+ # Both walk the class hierarchy: cname is or inherits from arg0 → TRUE.
+    if mname == "is_a?" || mname == "kind_of?"
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
         arg0 = ""
@@ -17157,12 +17177,12 @@ class Compiler
         if args_id >= 0
           a = get_args(args_id)
           if a.length > 0
- # dynamic Class arg. The
- # statically-typed recv knows its own cls_id; the arg
- # carries the target cls_id at runtime. sp_class_le walks
- # the precomputed ancestors table to decide membership.
+ # Dynamic Class arg (a non-const expression evaluating to a class).
+ # The statically-typed recv knows its own cls_id; the arg carries
+ # the target cls_id at runtime. sp_class_le walks the precomputed
+ # ancestors table to decide membership.
             arg_t = infer_type(a[0])
-            if arg_t == "class" && @nd_type[a[0]] != "ConstantReadNode"
+            if arg_t == "class" && is_static_const_ref(a[0]) == 0
               ci = find_class_idx(cname)
               if ci >= 0
                 @needs_class_table = 1
@@ -17170,11 +17190,33 @@ class Compiler
                 return "sp_class_le((sp_Class){" + cls_id_for_user_internal(ci).to_s + "LL}, " + compile_expr(a[0]) + ")"
               end
             end
-            arg0 = @nd_name[a[0]]
+            arg0 = resolve_introspection_arg_name(a[0])
           end
         end
- # Check if cname is or inherits from arg0
         if is_class_or_ancestor(cname, arg0) == 1
+          return "TRUE"
+        else
+          return "FALSE"
+        end
+      end
+      return "FALSE"
+    end
+
+ # instance_of? — exact class identity, no ancestor walk. A parent
+ # instance is never an exact-subclass match, so descendant resolution
+ # is not relevant here; static comparison suffices.
+    if mname == "instance_of?"
+      if is_obj_type(recv_type) == 1
+        cname = recv_type[4, recv_type.length - 4]
+        arg0 = ""
+        args_id = @nd_arguments[nid]
+        if args_id >= 0
+          a = get_args(args_id)
+          if a.length > 0
+            arg0 = resolve_introspection_arg_name(a[0])
+          end
+        end
+        if cname == arg0
           return "TRUE"
         else
           return "FALSE"
