@@ -11028,6 +11028,42 @@ class Compiler
               changed_cs = 1
             end
           end
+ # Hash-typed param widening: a body that forwards `pname` to
+ # a callee whose matching slot is a poly variant of the same
+ # hash family (str_int_hash forwarded to str_poly_hash, etc.)
+ # should widen the caller's param so both sides agree on the
+ # C struct. Mirrors the ptr-back-prop above for the hash case.
+ # parse_form_into(into) -> assign_form_pair(into, ...) where
+ # assign_form_pair's `into` widened to str_poly_hash via body
+ # heterogeneous `into[k] = val` + `into[k] = {}` writes.
+          if pk < ptypes.length && is_hash_type(ptypes[pk]) == 1 && ptypes[pk].include?("poly") == false
+            obs_h = "".split(",")
+            collect_param_callee_slots(bid, pnames[pk], obs_h)
+            cur_kt_h = hash_key_part(ptypes[pk])
+            agreed_h = ""
+            disagree_h = 0
+            kh = 0
+            while kh < obs_h.length
+              tab_h = obs_h[kh].index("\t")
+              if tab_h >= 0
+                cn_h = obs_h[kh][0, tab_h]
+                pos_h = obs_h[kh][tab_h + 1, obs_h[kh].length - tab_h - 1].to_i
+                ct_h = callee_slot_type(cn_h, pos_h)
+                if is_hash_type(ct_h) == 1 && ct_h.include?("poly") && hash_key_part(ct_h) == cur_kt_h
+                  if agreed_h == ""
+                    agreed_h = ct_h
+                  elsif agreed_h != ct_h
+                    disagree_h = 1
+                  end
+                end
+              end
+              kh = kh + 1
+            end
+            if agreed_h != "" && disagree_h == 0
+              ptypes[pk] = agreed_h
+              changed_cs = 1
+            end
+          end
           pk = pk + 1
         end
         @current_lexical_scope = saved_scope_cs
@@ -11086,6 +11122,38 @@ class Compiler
               end
               if agreed_cs != "" && disagree_cs == 0
                 ptypes_cm_cs[pk_cs] = agreed_cs
+                m_changed_cs = 1
+              end
+            end
+ # Hash-typed param widening: mirror the @meth_* branch above
+ # — when the body forwards `pname` to a callee whose matching
+ # slot is a poly variant of the same hash family, widen the
+ # caller's param accordingly.
+            if pk_cs < ptypes_cm_cs.length && is_hash_type(ptypes_cm_cs[pk_cs]) == 1 && ptypes_cm_cs[pk_cs].include?("poly") == false
+              obs_ch = "".split(",")
+              collect_param_callee_slots(bid_cm_cs, pnames_cm_cs[pk_cs], obs_ch)
+              cur_kt_ch = hash_key_part(ptypes_cm_cs[pk_cs])
+              agreed_ch = ""
+              disagree_ch = 0
+              kch = 0
+              while kch < obs_ch.length
+                tab_ch = obs_ch[kch].index("\t")
+                if tab_ch >= 0
+                  cn_ch = obs_ch[kch][0, tab_ch]
+                  pos_ch = obs_ch[kch][tab_ch + 1, obs_ch[kch].length - tab_ch - 1].to_i
+                  ct_ch = callee_slot_type(cn_ch, pos_ch)
+                  if is_hash_type(ct_ch) == 1 && ct_ch.include?("poly") && hash_key_part(ct_ch) == cur_kt_ch
+                    if agreed_ch == ""
+                      agreed_ch = ct_ch
+                    elsif agreed_ch != ct_ch
+                      disagree_ch = 1
+                    end
+                  end
+                end
+                kch = kch + 1
+              end
+              if agreed_ch != "" && disagree_ch == 0
+                ptypes_cm_cs[pk_cs] = agreed_ch
                 m_changed_cs = 1
               end
             end
