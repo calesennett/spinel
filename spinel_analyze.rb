@@ -9907,7 +9907,26 @@ class Compiler
       enter_module_scope_from_node(nid)
       body = @nd_body[nid]
       if body >= 0
+ # Module-body top-level statements form a load-time scope just
+ # like main. Seed calls like `Foo::Wrapper.new(_seed)` where
+ # `_seed = "hello"` lives at module body need their argument
+ # types pinned, but the cascade-1 guard in scan_locals stops
+ # `infer_main_call_types` from descending here. Mirror main's
+ # locals-then-calls shape on a fresh scope so the seed call's
+ # arg infers off the local's literal type. The same guard keeps
+ # nested def/class/module bodies from leaking back out.
+        push_scope
+        lnames = "".split(",")
+        ltypes = "".split(",")
+        empty_p = "".split(",")
+        scan_locals(body, lnames, ltypes, empty_p)
+        k = 0
+        while k < lnames.length
+          declare_var(lnames[k], ltypes[k])
+          k = k + 1
+        end
         scan_new_calls(body)
+        pop_scope
       end
       @current_lexical_scope = saved_scope2
       return
