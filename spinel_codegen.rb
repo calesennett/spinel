@@ -18301,6 +18301,25 @@ class Compiler
  # not an array) and emitting them produces Wint-conversion
  # warnings — or hard errors under -Werror.
     a0_is_int = arg_compiled.length >= 1 && (arg_types.length == 0 || arg_types[0] == "int" || arg_types[0] == "poly")
+ # Hash dispatch arms for `[]` on a poly recv whose runtime
+ # storage is a *-Hash variant. The chained `outer[k1][k2]`
+ # shape where outer is StrPolyHash lands here — the inner []
+ # recv carries an arbitrary str-keyed hash storage. Emit
+ # arms keyed by the string-typed index. Sym-keyed variants
+ # are skipped here because the sp_SymIntHash / sp_SymStrHash
+ # typedefs are emit-gated by @needs flags set during pre-scan,
+ # which doesn't see this dispatch path yet; the existing
+ # sp_StrIntHash family ships unconditionally in sp_runtime.h.
+    if mname == "[]" && arg_compiled.length >= 1
+      key_t = arg_types.length > 0 ? arg_types[0] : ""
+      if key_t == "string" || key_t == "mutable_str"
+        if is_poly_ret == 1
+          emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_INT_HASH) " + result_tmp + " = sp_box_int(sp_StrIntHash_get((sp_StrIntHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + "));")
+          emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_STR_HASH) " + result_tmp + " = sp_box_str(sp_StrStrHash_get((sp_StrStrHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + "));")
+          emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_POLY_HASH) " + result_tmp + " = sp_StrPolyHash_get((sp_StrPolyHash *)" + recv_tmp + ".v.p, " + arg_compiled[0] + ");")
+        end
+      end
+    end
     if mname == "[]" && arg_compiled.length >= 1 && a0_is_int
       ic = "sp_IntArray_get((sp_IntArray *)" + recv_tmp + ".v.p, " + a0 + ")"
       irhs = is_poly_ret == 1 ? "sp_box_int(" + ic + ")" : ic
@@ -25418,6 +25437,33 @@ class Compiler
       return
     end
     if rt == "poly"
+ # Statically string index: the array arms below (PolyArray /
+ # PtrArray / IntArray) all expect an mrb_int index and would
+ # fail C compile when called with a `const char *`. The chained
+ # `outer[k1][k2] = v` shape where outer is StrPolyHash lands
+ # here — `outer[k1]` returns sp_RbVal which may be any hash
+ # storage at runtime. Emit Hash setter arms instead, keyed by
+ # the same cls_id dispatch.
+      idx_t_poly = arg_ids.length >= 1 ? infer_type(arg_ids[0]) : ""
+      val_t_poly = arg_ids.length >= 2 ? infer_type(arg_ids[1]) : "int"
+      if idx_t_poly == "string" || idx_t_poly == "mutable_str"
+        @needs_rb_value = 1
+        @needs_str_int_hash = 1
+        @needs_str_str_hash = 1
+        @needs_str_poly_hash = 1
+        vbox = val
+        if val_t_poly != "poly"
+          vbox = box_value_to_poly(val_t_poly, val)
+        end
+        vbox_tmp = new_temp
+        emit("  sp_RbVal " + vbox_tmp + " = " + vbox + ";")
+        cur_h = new_temp
+        emit("  sp_RbVal " + cur_h + " = " + rc + ";")
+        emit("  if (" + cur_h + ".cls_id == SP_BUILTIN_STR_INT_HASH) sp_StrIntHash_set((sp_StrIntHash *)" + cur_h + ".v.p, " + idx + ", " + vbox_tmp + ".v.i);")
+        emit("  else if (" + cur_h + ".cls_id == SP_BUILTIN_STR_STR_HASH) sp_StrStrHash_set((sp_StrStrHash *)" + cur_h + ".v.p, " + idx + ", " + vbox_tmp + ".v.s);")
+        emit("  else if (" + cur_h + ".cls_id == SP_BUILTIN_STR_POLY_HASH) sp_StrPolyHash_set((sp_StrPolyHash *)" + cur_h + ".v.p, " + idx + ", " + vbox_tmp + ");")
+        return
+      end
  # Slot is sp_RbVal — runtime cls_id determines which storage
  # the underlying pointer points at. Optcarrot's `@fetch[a] =
  # method(:peek_X)` lands here when @fetch was widened to poly
