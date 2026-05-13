@@ -17864,6 +17864,12 @@ class Compiler
       end
       j = j + 1
     end
+    if @cls_parents[ci] != ""
+      pi = find_class_idx(@cls_parents[ci])
+      if pi >= 0
+        return cls_has_attr_reader(pi, mname)
+      end
+    end
     0
   end
 
@@ -18116,7 +18122,7 @@ class Compiler
       ci_s = 0
       diverges = 0
       while ci_s < @cls_names.length
-        if cls_find_method_direct(ci_s, mname) >= 0
+        if cls_find_method(ci_s, mname) >= 0
           urt = cls_method_return(ci_s, mname)
           if urt != "" && urt != "string"
             diverges = 1
@@ -18144,7 +18150,7 @@ class Compiler
     ci = 0
     while ci < @cls_names.length
       rt = ""
-      if cls_find_method_direct(ci, mname) >= 0
+      if cls_find_method(ci, mname) >= 0
         rt = cls_method_return(ci, mname)
       elsif cls_has_attr_reader(ci, mname) == 1
  # An attr_reader returns the ivar type. .
@@ -18417,6 +18423,16 @@ class Compiler
     while i < @cls_names.length
       cname = @cls_names[i]
       midx = cls_find_method_direct(i, mname)
+      owner_idx = i
+      if midx < 0
+        owner_name = find_method_owner(i, mname)
+        if owner_name != ""
+          owner_idx = find_class_idx(owner_name)
+          if owner_idx >= 0
+            midx = cls_find_method_direct(owner_idx, mname)
+          end
+        end
+      end
       if midx >= 0
  # Match each arm to the target method's *fixed* C arity:
  # pad missing trailing slots with default-typed zeros, and
@@ -18424,7 +18440,7 @@ class Compiler
  # this candidate accepts — happens when several classes share
  # the method name but disagree on parameter count).
         arm_arg_strs = ""
-        arm_ptypes = cls_meth_ptypes_get(i, midx)
+        arm_ptypes = cls_meth_ptypes_get(owner_idx, midx)
         pk = 0
         while pk < arm_ptypes.length
           if pk < arg_compiled.length
@@ -18476,10 +18492,10 @@ class Compiler
           end
           pk = pk + 1
         end
-        call_expr = "sp_" + cname + "_" + sanitize_name(mname) + "((sp_" + cname + " *)" + recv_tmp + ".v.p" + arm_arg_strs + ")"
+        call_expr = "sp_" + @cls_names[owner_idx] + "_" + sanitize_name(mname) + "((sp_" + @cls_names[owner_idx] + " *)" + recv_tmp + ".v.p" + arm_arg_strs + ")"
         rhs = call_expr
         if is_poly_ret == 1
-          this_rt = cls_method_return(i, mname)
+          this_rt = cls_method_return(owner_idx, mname)
           rhs = box_val_to_poly(call_expr, this_rt)
         end
  # Narrowed `[]` arms (Approach 2): suppress user-class arms
@@ -18487,7 +18503,7 @@ class Compiler
  # otherwise assign e.g. a string to the now-mrb_int result
  # temp and fail the C compile. The runtime can't reach these
  # arms anyway because the observation set narrowed past them.
-        if narrowed_int_idx == 1 && cls_method_return(i, mname) != "int"
+        if narrowed_int_idx == 1 && cls_method_return(owner_idx, mname) != "int"
  # skip
         else
           emit("    if (" + recv_tmp + ".cls_id == " + cls_id_for_user_internal(i).to_s + ") " + tmp + " = " + rhs + ";")
