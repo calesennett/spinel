@@ -14446,9 +14446,27 @@ class Compiler
       return
     end
     if @nd_type[nid] == "IfNode"
+ # Push the is_a?(C) narrow before walking the then-arm so a
+ # `return v` inside contributes the narrowed type (string when
+ # `v.is_a?(String)`, etc.) to the return unify instead of the
+ # underlying poly param type. Mirrors scan_new_calls and
+ # scan_cls_method_calls — without this push, infer_body_return
+ # widens functions like `def render_one(v); if v.is_a?(String);
+ # return v; end; ...; end` to poly even when every return arm
+ # contributes a single concrete type.
+      pred = @nd_predicate[nid]
+      parsed = parse_is_a_predicate(pred)
+      narrow_var = parsed[0]
+      narrow_t = parsed[1]
+      if narrow_var != ""
+        push_type_narrow(narrow_var, narrow_t)
+      end
       body = @nd_body[nid]
       if body >= 0
         collect_return_types_nid(body, types)
+      end
+      if narrow_var != ""
+        pop_type_narrow
       end
       sub = @nd_subsequent[nid]
       if sub >= 0

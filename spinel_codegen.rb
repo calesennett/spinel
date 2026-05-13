@@ -23149,11 +23149,26 @@ class Compiler
           emit("  return NULL;")
           return
         end
+ # When the function's declared return type is concrete but the
+ # value being returned is statically poly (a local declared as
+ # sp_RbVal because the param widened, but the surrounding
+ # is_a?(C) narrowed it back), route through
+ # compile_expr_for_expected_type so the matching .v.<field>
+ # unbox happens at the return site. Mirrors the
+ # narrow-respecting return-type unify added on the analyze
+ # side; without this, the function signature says `const char *`
+ # but the emit is `return lv_v;` where lv_v is sp_RbVal.
+        ret_val = compile_expr(arg_ids[0])
+        ret_ctype = c_type(rt)
+        if rt == "poly" && @current_method_return != "poly" && @current_method_return != "void" && @current_method_return != ""
+          ret_val = compile_expr_for_expected_type(arg_ids[0], @current_method_return)
+          ret_ctype = c_type(@current_method_return)
+        end
         if @in_gc_scope == 1
  # Save return value, run ensure replays (which may mutate
  # ivars/locals), restore GC, then return the saved value.
           tmp = new_temp
-          emit("  " + c_type(rt) + " " + tmp + " = " + compile_expr(arg_ids[0]) + ";")
+          emit("  " + ret_ctype + " " + tmp + " = " + ret_val + ";")
           emit_setjmp_depth_unwind
           emit_ensure_replays
           emit("  SP_GC_RESTORE();")
@@ -23161,12 +23176,12 @@ class Compiler
         else
           if pre_return_unwind == 1
             tmp = new_temp
-            emit("  " + c_type(rt) + " " + tmp + " = " + compile_expr(arg_ids[0]) + ";")
+            emit("  " + ret_ctype + " " + tmp + " = " + ret_val + ";")
             emit_setjmp_depth_unwind
             emit_ensure_replays
             emit("  return " + tmp + ";")
           else
-            emit("  return " + compile_expr(arg_ids[0]) + ";")
+            emit("  return " + ret_val + ";")
           end
         end
         return
