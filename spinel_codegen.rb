@@ -8,6 +8,8 @@
 # All data structures use parallel arrays (no arrays of objects).
 # Node fields stored as parallel arrays indexed by integer node ID.
 
+require_relative "node_table_loader"
+
 class Compiler
   attr_accessor :out
 
@@ -690,140 +692,20 @@ class Compiler
   end
 
   def read_text_ast(data)
-    lines = data.split(10.chr)
- # Pass 1: find max node ID
-    max_id = 0
-    i = 0
-    while i < lines.length
-      line = lines[i]
-      if line.length > 0
-        parts = line.split(" ")
-        if parts.length >= 2
-          if parts.first == "ROOT"
-            @root_id = parts[1].to_i
-          end
-          if parts.first == "N"
-            nid = parts[1].to_i
-            if nid > max_id
-              max_id = nid
-            end
-          end
-        end
-      end
-      i = i + 1
-    end
- # Allocate nodes
-    j = 0
-    while j <= max_id
-      alloc_node
-      j = j + 1
-    end
- # Pass 2: populate fields
-    i = 0
-    while i < lines.length
-      line = lines[i]
-      if line.length > 0
-        ast_parse_line(line)
-      end
-      i = i + 1
-    end
+    loader = NodeTableLoader.new(self)
+    loader.read_text_ast(data)
   end
 
-  def ast_parse_line(line)
-    parts = line.split(" ")
-    if parts.length < 3
-      return
-    end
-    tag = parts.first
-    nid = parts[1].to_i
-    if tag == "N"
-      @nd_type[nid] = parts[2]
-    end
-    if tag == "S"
-      field = parts[2]
-      val = ""
-      if parts.length >= 4
-        val = unescape_str(parts[3])
-      end
-      set_string_field(nid, field, val)
-    end
-    if tag == "I"
-      field = parts[2]
-      ival = 0
-      if parts.length >= 4
-        ival = parts[3].to_i
-      end
-      set_int_field(nid, field, ival)
-    end
-    if tag == "F"
-      if parts.length >= 4
-        @nd_content[nid] = parts[3]
-      end
-    end
-    if tag == "R"
-      field = parts[2]
-      ref_id = -1
-      if parts.length >= 4
-        ref_id = parts[3].to_i
-      end
-      set_ref_field(nid, field, ref_id)
-    end
-    if tag == "A"
-      field = parts[2]
-      ids_str = ""
-      if parts.length >= 4
-        ids_str = parts[3]
-      end
-      set_array_field(nid, field, ids_str)
-    end
-    0
+  def set_root_id(root_id)
+    @root_id = root_id
   end
 
-  def unescape_str(s)
-    result = ""
-    i = 0
-    while i < s.length
-      ch = s[i]
-      if ch == "%"
-        if i + 2 < s.length
-          hex = s[i + 1] + s[i + 2]
-          if hex == "0A"
-            result = result + 10.chr
-            i = i + 3
-          else
-            if hex == "0D"
-              result = result + 13.chr
-              i = i + 3
-            else
-              if hex == "09"
-                result = result + 9.chr
-                i = i + 3
-              else
-                if hex == "20"
-                  result = result + " "
-                  i = i + 3
-                else
-                  if hex == "25"
-                    result = result + "%"
-                    i = i + 3
-                  else
-                    result = result + "%" + hex
-                    i = i + 3
-                  end
-                end
-              end
-            end
-          end
-        else
-          result = result + ch
-          i = i + 1
-        end
-      else
-        result = result + ch
-        i = i + 1
-      end
-    end
-    result
+  def set_node_type(nid, node_type)
+    @nd_type[nid] = node_type
+  end
+
+  def set_node_content(nid, content)
+    @nd_content[nid] = content
   end
 
   def set_string_field(nid, field, val)

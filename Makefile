@@ -121,6 +121,7 @@ PRISM_LIB    = build/libprism.a
 
 CODEGEN_STAMP := build/stamps/spinel_codegen.rb.stamp
 ANALYZE_STAMP := build/stamps/spinel_analyze.rb.stamp
+NODE_TABLE_LOADER_STAMP := build/stamps/node_table_loader.rb.stamp
 PARSE_STAMP   := build/stamps/spinel_parse.c.stamp
 
 .PHONY: all parse bootstrap codegen test retest clean-test-results regen-expected bench optcarrot clean install uninstall deps
@@ -218,13 +219,13 @@ regexp: $(SP_RT_LIB)
 
 codegen: spinel_analyze$(EXE) spinel_codegen$(EXE)
 
-spinel_analyze$(EXE): $(ANALYZE_STAMP) spinel_parse$(EXE)
+spinel_analyze$(EXE): $(ANALYZE_STAMP) $(NODE_TABLE_LOADER_STAMP) spinel_parse$(EXE)
 	./spinel_parse$(EXE) spinel_analyze.rb build/analyze.ast
 	ruby spinel_analyze.rb build/analyze.ast build/analyze.ir
 	ruby spinel_codegen.rb build/analyze.ast build/analyze.ir build/analyze1.c
 	$(CC) $(BOOTSTRAP_CFLAGS) -Ilib build/analyze1.c $(LDFLAGS) -lm -o spinel_analyze$(EXE)
 
-spinel_codegen$(EXE): $(CODEGEN_STAMP) spinel_parse$(EXE)
+spinel_codegen$(EXE): $(CODEGEN_STAMP) $(NODE_TABLE_LOADER_STAMP) spinel_parse$(EXE)
 	./spinel_parse$(EXE) spinel_codegen.rb build/codegen.ast
 	ruby spinel_analyze.rb build/codegen.ast build/codegen.ir
 	ruby spinel_codegen.rb build/codegen.ast build/codegen.ir build/codegen1.c
@@ -314,7 +315,7 @@ retest: clean-test-results
 # The .ok target is the test's stamp; mtime tracking gives per-test
 # caching for free. Order-only spinel_parse$(EXE) / spinel_analyze$(EXE)
 # / spinel_codegen$(EXE) stop a bootstrap relink from invalidating every test.
-build/test-results/%.ok: test/%.rb $(SP_RT_LIB) $(CODEGEN_STAMP) $(ANALYZE_STAMP) $(PARSE_STAMP) | spinel_parse$(EXE) spinel_analyze$(EXE) spinel_codegen$(EXE)
+build/test-results/%.ok: test/%.rb $(SP_RT_LIB) $(CODEGEN_STAMP) $(ANALYZE_STAMP) $(NODE_TABLE_LOADER_STAMP) $(PARSE_STAMP) | spinel_parse$(EXE) spinel_analyze$(EXE) spinel_codegen$(EXE)
 	@mkdir -p build/test-results
 	@tmpdir=$$(mktemp -d /tmp/spinel-test.XXXXXX); \
 	ast=$$tmpdir/test.ast; \
@@ -467,6 +468,7 @@ install: all
 	install -m 755 spinel_parse$(EXE)    $(SPNLDIR)/
 	install -m 755 spinel_analyze$(EXE)  $(SPNLDIR)/
 	install -m 755 spinel_codegen$(EXE)  $(SPNLDIR)/
+	install -m 644 node_table_loader.rb  $(SPNLDIR)/
 	install -m 644 spinel_analyze.rb     $(SPNLDIR)/
 	install -m 644 spinel_codegen.rb     $(SPNLDIR)/
 	install -m 644 lib/libspinel_rt.a    $(SPNLDIR)/lib/

@@ -1,0 +1,131 @@
+# Loads Spinel's text AST format into a node table object.
+#
+# The table object supplies the parallel-array storage operations used by
+# Compiler: alloc_node, set_root_id, set_node_type, set_node_content, and
+# set_*_field.
+
+class NodeTableLoader
+  def initialize(table)
+    @table = table
+  end
+
+  def read_text_ast(data)
+    lines = data.split(10.chr)
+ # Pass 1: find max node ID
+    max_id = 0
+    i = 0
+    while i < lines.length
+      line = lines[i]
+      if line.length > 0
+        parts = line.split(" ")
+        if parts.length >= 2
+          if parts.first == "ROOT"
+            @table.set_root_id(parts[1].to_i)
+          end
+          if parts.first == "N"
+            nid = parts[1].to_i
+            if nid > max_id
+              max_id = nid
+            end
+          end
+        end
+      end
+      i = i + 1
+    end
+ # Allocate nodes
+    j = 0
+    while j <= max_id
+      @table.alloc_node
+      j = j + 1
+    end
+ # Pass 2: populate fields
+    i = 0
+    while i < lines.length
+      line = lines[i]
+      if line.length > 0
+        ast_parse_line(line)
+      end
+      i = i + 1
+    end
+  end
+
+  def ast_parse_line(line)
+    parts = line.split(" ")
+    if parts.length < 3
+      return
+    end
+    tag = parts.first
+    nid = parts[1].to_i
+    if tag == "N"
+      @table.set_node_type(nid, parts[2])
+    elsif tag == "S"
+      field = parts[2]
+      val = ""
+      if parts.length >= 4
+        val = unescape_str(parts[3])
+      end
+      @table.set_string_field(nid, field, val)
+    elsif tag == "I"
+      field = parts[2]
+      ival = 0
+      if parts.length >= 4
+        ival = parts[3].to_i
+      end
+      @table.set_int_field(nid, field, ival)
+    elsif tag == "F"
+      if parts.length >= 4
+        @table.set_node_content(nid, parts[3])
+      end
+    elsif tag == "R"
+      field = parts[2]
+      ref_id = -1
+      if parts.length >= 4
+        ref_id = parts[3].to_i
+      end
+      @table.set_ref_field(nid, field, ref_id)
+    elsif tag == "A"
+      field = parts[2]
+      ids_str = ""
+      if parts.length >= 4
+        ids_str = parts[3]
+      end
+      @table.set_array_field(nid, field, ids_str)
+    end
+    0
+  end
+
+  def unescape_str(s)
+    result = ""
+    i = 0
+    while i < s.length
+      ch = s[i]
+      if ch == "%"
+        if i + 2 < s.length
+          hex = s[i + 1] + s[i + 2]
+          case hex
+          when "0A"
+            result = result + 10.chr
+          when "0D"
+            result = result + 13.chr
+          when "09"
+            result = result + 9.chr
+          when "20"
+            result = result + " "
+          when "25"
+            result = result + "%"
+          else
+            result = result + "%" + hex
+          end
+          i = i + 3
+        else
+          result = result + ch
+          i = i + 1
+        end
+      else
+        result = result + ch
+        i = i + 1
+      end
+    end
+    result
+  end
+end
