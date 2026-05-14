@@ -11723,6 +11723,183 @@ class Compiler
     end
   end
 
+ # Spinel hash variants spell out (key, value) types in the name.
+ # Given a hash variant token, return the value-side spinel type.
+  def hash_value_type_from_variant(t)
+    bt = is_nullable_type(t) == 1 ? base_type(t) : t
+    if bt == "str_int_hash" || bt == "sym_int_hash"
+      return "int"
+    end
+    if bt == "str_str_hash" || bt == "sym_str_hash" || bt == "int_str_hash"
+      return "string"
+    end
+    if bt == "str_poly_hash" || bt == "sym_poly_hash" || bt == "poly_poly_hash"
+      return "poly"
+    end
+    ""
+  end
+
+ # Walk `nid` looking for `@<iname>[<key_id>] = <val_id>` writes
+ # against a typed hash ivar of class `ci`. For each match, push the
+ # observed (key_param_idx, key_t) and (val_param_idx, val_t) facts
+ # into the accumulators when the key / value AST node is a
+ # LocalVariableReadNode naming a method param. Helper for
+ # widen_params_from_ivar_hash_aset.
+  def collect_param_aset_through_ivar_hash(nid, ci, pnames, ptypes, key_widen, val_widen)
+    if nid < 0
+      return
+    end
+    if @nd_type[nid] == "DefNode"
+      return
+    end
+    if @nd_type[nid] == "ClassNode" || @nd_type[nid] == "ModuleNode"
+      return
+    end
+    if @nd_type[nid] == "CallNode" && @nd_name[nid] == "[]="
+      recv_aset = @nd_receiver[nid]
+      if recv_aset >= 0 && @nd_type[recv_aset] == "InstanceVariableReadNode"
+        ivt_aset = cls_ivar_type(ci, @nd_name[recv_aset])
+        kt_aset = hash_key_type_from_variant(ivt_aset)
+        vt_aset = hash_value_type_from_variant(ivt_aset)
+        if kt_aset != "" && vt_aset != ""
+          args_id_aset = @nd_arguments[nid]
+          if args_id_aset >= 0
+            a_ids_aset = get_args(args_id_aset)
+            if a_ids_aset.length >= 2
+              key_id_aset = a_ids_aset[0]
+              val_id_aset = a_ids_aset[a_ids_aset.length - 1]
+              if @nd_type[key_id_aset] == "LocalVariableReadNode"
+                pname_key = @nd_name[key_id_aset]
+                pi_key = 0
+                while pi_key < pnames.length
+                  if pnames[pi_key] == pname_key && pi_key < ptypes.length && ptypes[pi_key] == "int" && kt_aset != "int"
+                    key_widen[pi_key] = kt_aset
+                  end
+                  pi_key = pi_key + 1
+                end
+              end
+              if @nd_type[val_id_aset] == "LocalVariableReadNode"
+                pname_val = @nd_name[val_id_aset]
+                pi_val = 0
+                while pi_val < pnames.length
+                  if pnames[pi_val] == pname_val && pi_val < ptypes.length && ptypes[pi_val] == "int" && vt_aset != "int"
+                    val_widen[pi_val] = vt_aset
+                  end
+                  pi_val = pi_val + 1
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+ # Recurse via the same field set scan_locals walks.
+    if @nd_body[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_body[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    stmts_aset = parse_id_list(@nd_stmts[nid])
+    k = 0
+    while k < stmts_aset.length
+      collect_param_aset_through_ivar_hash(stmts_aset[k], ci, pnames, ptypes, key_widen, val_widen)
+      k = k + 1
+    end
+    if @nd_expression[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_expression[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_predicate[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_predicate[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_subsequent[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_subsequent[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_else_clause[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_else_clause[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_arguments[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_arguments[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_block[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_block[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_left[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_left[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+    if @nd_right[nid] >= 0
+      collect_param_aset_through_ivar_hash(@nd_right[nid], ci, pnames, ptypes, key_widen, val_widen)
+    end
+  end
+
+ # #488. A method whose body writes a param into a typed ivar hash
+ # (`@data[k] = v` where @data has been pinned to e.g. str_str_hash
+ # by another method) leaves the writer's `k` / `v` params at the
+ # `mrb_int` default. The C emit then passes mrb_int into the
+ # const char * key / value slots — Wint-conversion error.
+ # Sibling to #482's nil-default + Hash-receiver pass; this one
+ # covers the @hash-write side of the same back-propagation gap.
+  def widen_params_from_ivar_hash_aset
+    ci = 0
+    while ci < @cls_names.length
+      mnames = @cls_meth_names[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";")
+      cls_changed = 0
+      mj = 0
+      while mj < mnames.length
+        pnames_j = cls_meth_pnames_get(ci, mj)
+        ptypes_j = cls_meth_ptypes_get(ci, mj)
+        bid_j = -1
+        if mj < bodies.length
+          bid_j = bodies[mj].to_i
+        end
+        if bid_j >= 0 && bid_j != -2 && pnames_j.length > 0
+          key_widen = "".split(",")
+          val_widen = "".split(",")
+          while key_widen.length < pnames_j.length
+            key_widen.push("")
+            val_widen.push("")
+          end
+          saved_ci_aset = @current_class_idx
+          @current_class_idx = ci
+          collect_param_aset_through_ivar_hash(bid_j, ci, pnames_j, ptypes_j, key_widen, val_widen)
+          @current_class_idx = saved_ci_aset
+          m_changed = 0
+          pk = 0
+          while pk < pnames_j.length
+            new_pt = ""
+            if pk < key_widen.length && key_widen[pk] != ""
+              new_pt = key_widen[pk]
+            end
+            if pk < val_widen.length && val_widen[pk] != ""
+ # If both key and value widening apply to the same param
+ # (highly unusual — same param flowing into both slots),
+ # the value type wins; the key path was speculative.
+              new_pt = val_widen[pk]
+            end
+            if new_pt != "" && pk < ptypes_j.length && ptypes_j[pk] == "int"
+              ptypes_j[pk] = new_pt
+              if new_pt == "str_str_hash"
+                @needs_str_str_hash = 1
+              end
+              if new_pt == "sym_str_hash"
+                @needs_sym_str_hash = 1
+              end
+              m_changed = 1
+            end
+            pk = pk + 1
+          end
+          if m_changed == 1
+            cls_meth_ptypes_put(ci, mj, ptypes_j)
+            cls_changed = 1
+          end
+        end
+        mj = mj + 1
+      end
+      if cls_changed == 1
+        @cls_meth_ptypes_version = @cls_meth_ptypes_version + 1
+      end
+      ci = ci + 1
+    end
+  end
+
  # Widen each method's stored parameter types to encompass any
  # in-body reassignments to the parameter name. Without this,
  # a body shape like
@@ -16669,6 +16846,7 @@ class Compiler
       narrow_param_types_from_body_method_calls
       infer_string_param_from_body
       widen_nil_default_params_used_as_hash
+      widen_params_from_ivar_hash_aset
       infer_param_type_from_callee_slot
       narrow_param_hash_types_from_body_writes
  # propagate hash-each block-arg types into
