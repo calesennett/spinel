@@ -2447,6 +2447,12 @@ class Compiler
  # outer `.to_s` emit `sp_int_to_s(...)` instead of the bool
  # ternary `(... ? "true" : "false")`.
       cmp_mname = @nd_name[nid]
+      if cmp_mname == "block_given?"
+        cmp_recv = @nd_receiver[nid]
+        if cmp_recv < 0 || (cmp_recv >= 0 && @nd_type[cmp_recv] == "SelfNode")
+          return "bool"
+        end
+      end
       if cmp_mname == "<" || cmp_mname == ">" || cmp_mname == "<=" || cmp_mname == ">=" || cmp_mname == "==" || cmp_mname == "!=" || cmp_mname == "===" || cmp_mname == "eql?" || cmp_mname == "equal?" || cmp_mname == "is_a?" || cmp_mname == "kind_of?" || cmp_mname == "instance_of?" || cmp_mname == "respond_to?" || cmp_mname == "include?" || cmp_mname == "start_with?" || cmp_mname == "end_with?" || cmp_mname == "match?" || cmp_mname == "empty?" || cmp_mname == "nil?" || cmp_mname == "zero?" || cmp_mname == "even?" || cmp_mname == "odd?" || cmp_mname == "frozen?"
         return "bool"
       end
@@ -10066,6 +10072,24 @@ class Compiler
     0
   end
 
+  def unwrap_single_parentheses_node(nid)
+    if nid >= 0 && @nd_type[nid] == "ParenthesesNode"
+      body = @nd_body[nid]
+      if body >= 0
+        stmts = get_stmts(body)
+        if stmts.length == 1
+          return stmts[0]
+        end
+      end
+    end
+    nid
+  end
+
+  def regex_match_call_node?(nid)
+    call_nid = unwrap_single_parentheses_node(nid)
+    call_nid >= 0 && @nd_type[call_nid] == "CallNode" && @nd_name[call_nid] == "=~"
+  end
+
  # Compile a node for use as a C scalar condition. Value-type objects
  # are passed by value (a struct), and C rejects them as scalars in
  # `if (...)` etc. In Ruby every non-nil/non-false object is truthy,
@@ -10077,6 +10101,12 @@ class Compiler
     if t == "poly"
       return "sp_poly_truthy(" + expr + ")"
     end
+    if t == "bool"
+      return expr
+    end
+    if regex_match_call_node?(nid)
+      return "(" + expr + " != 0)"
+    end
     if t == "nil"
       return "FALSE"
     end
@@ -10086,7 +10116,14 @@ class Compiler
     if nid >= 0 && is_value_type_obj(t) == 1
       return "((" + expr + "), 1)"
     end
-    expr
+    truthy_c_expr(t, expr)
+  end
+
+  def truthy_node_expr(nid, t, expr)
+    if regex_match_call_node?(nid)
+      return "(" + expr + " != 0)"
+    end
+    truthy_c_expr(t, expr)
   end
 
   def truthy_c_expr(t, expr)
@@ -10535,8 +10572,8 @@ class Compiler
       rt = infer_type(right_nid)
       le = compile_expr(left_nid)
       re = compile_expr(right_nid)
-      le_t = lt == "poly" ? "sp_poly_truthy(" + le + ")" : le
-      re_t = rt == "poly" ? "sp_poly_truthy(" + re + ")" : re
+      le_t = truthy_node_expr(left_nid, lt, le)
+      re_t = truthy_node_expr(right_nid, rt, re)
       return "(" + le_t + " && " + re_t + ")"
     end
     if t == "OrNode"
@@ -10563,7 +10600,7 @@ class Compiler
             right_expr = c_default_val(ot)
           end
         end
-        return "(" + truthy_c_expr(lt, left_tmp) + " ? " + left_expr + " : " + right_expr + ")"
+        return "(" + truthy_node_expr(left_nid, lt, left_tmp) + " ? " + left_expr + " : " + right_expr + ")"
       end
       return "(" + compile_expr(left_nid) + " || " + compile_expr(right_nid) + ")"
     end
@@ -12045,6 +12082,10 @@ class Compiler
       end
     end
 
+    if mname == "block_given?" && recv >= 0 && @nd_type[recv] == "SelfNode"
+      return compile_block_given_expr
+    end
+
  # No receiver
     if recv < 0
       return compile_no_recv_call_expr(nid, mname)
@@ -12490,6 +12531,22 @@ class Compiler
     "0"
   end
 
+  def compile_block_given_expr
+ # &block parameter form takes priority: when the enclosing method
+ # declares `def m(&block)`, the block is bound to `lv_block`, not
+ # the implicit yield slot — so check the explicit param first.
+ # `body_has_yield` flags any method containing block_given? as a
+ # yield-method, which would otherwise route through the `_block`
+ # slot and miss the actually-bound `&block` param.
+    if @current_method_block_param != ""
+      return "(lv_" + @current_method_block_param + " != NULL)"
+    end
+    if @in_yield_method == 1
+      return "(_block != NULL)"
+    end
+    "0"
+  end
+
   def compile_no_recv_call_expr(nid, mname)
  # No-recv IO methods that exist in compile_io_call_stmt (puts/print/
  # printf) all return nil in MRI. When reached in expression context
@@ -12521,19 +12578,7 @@ class Compiler
       end
     end
     if mname == "block_given?"
- # &block parameter form takes priority: when the enclosing method
- # declares `def m(&block)`, the block is bound to `lv_block`, not
- # the implicit yield slot — so check the explicit param first.
- # `body_has_yield` flags any method containing block_given? as a
- # yield-method, which would otherwise route through the `_block`
- # slot and miss the actually-bound `&block` param.
-      if @current_method_block_param != ""
-        return "(lv_" + @current_method_block_param + " != NULL)"
-      end
-      if @in_yield_method == 1
-        return "(_block != NULL)"
-      end
-      return "0"
+      return compile_block_given_expr
     end
     if mname == "system"
       @needs_system = 1
@@ -30150,7 +30195,8 @@ class Compiler
     if t == "CallNode"
  # Check if block_given? with remap
       if @nd_name[nid] == "block_given?"
-        if @nd_receiver[nid] < 0
+        recv_bg = @nd_receiver[nid]
+        if recv_bg < 0 || (recv_bg >= 0 && @nd_type[recv_bg] == "SelfNode")
  # In inlined context, block IS given, do nothing
           return
         end
@@ -30246,7 +30292,8 @@ class Compiler
     end
     if t == "CallNode"
       if @nd_name[nid] == "block_given?"
-        if @nd_receiver[nid] < 0
+        recv_bg = @nd_receiver[nid]
+        if recv_bg < 0 || (recv_bg >= 0 && @nd_type[recv_bg] == "SelfNode")
           return "1"
         end
       end

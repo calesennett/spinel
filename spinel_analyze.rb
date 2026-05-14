@@ -2585,6 +2585,12 @@ class Compiler
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
 
+    if mname == "block_given?"
+      if recv < 0 || (recv >= 0 && @nd_type[recv] == "SelfNode")
+        return "bool"
+      end
+    end
+
  # Methods on a `rescue => e` bound exception variable. The variable
  # itself is string-typed but .class / .message / .to_s / .inspect /
  # .full_message return strings; .backtrace returns nil for now.
