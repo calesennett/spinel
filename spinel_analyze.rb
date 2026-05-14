@@ -4872,49 +4872,61 @@ class Compiler
     if mname == "`"
       return "string"
     end
-    if mname == "sqrt"
-      return "float"
-    end
-    if mname == "cos"
-      return "float"
-    end
-    if mname == "sin"
-      return "float"
-    end
-    if mname == "tan"
-      return "float"
-    end
-    if mname == "acos" || mname == "asin" || mname == "atan"
-      return "float"
-    end
+ # Math.<fn> family — recognised only when the receiver is the
+ # Math module (`Math.log(x)`) or absent (bare-call form, which
+ # spinel maps through Kernel for the same set of names). Without
+ # the recv check, a user-defined method named `log` / `cos` /
+ # `tan` / etc. on a non-Math receiver got typed as float
+ # regardless — e.g. a `def log; @log; end` accessor returning a
+ # str_array got misinferred as float and downstream
+ # `router.log[i]` read as a float-index. Gate the whole math
+ # block on recv shape and let infer_recv_method_type handle the
+ # non-Math case.
+    if recv < 0 || (@nd_type[recv] == "ConstantReadNode" && @nd_name[recv] == "Math")
+      if mname == "sqrt"
+        return "float"
+      end
+      if mname == "cos"
+        return "float"
+      end
+      if mname == "sin"
+        return "float"
+      end
+      if mname == "tan"
+        return "float"
+      end
+      if mname == "acos" || mname == "asin" || mname == "atan"
+        return "float"
+      end
  # Hyperbolic + inverse hyperbolic — same C99 libm wrappers as the
  # circular ones above. Issue: returning "float" here lets call sites
  # that lift `Math.tanh(x)` into a non-Float context (e.g. into an
  # IntArray slot via `arr[i] = Math.tanh(x)`) get caught at type-
  # check time instead of silently emitting `0`.
-    if mname == "sinh" || mname == "cosh" || mname == "tanh"
-      return "float"
-    end
-    if mname == "asinh" || mname == "acosh" || mname == "atanh"
-      return "float"
-    end
-    if mname == "log"
-      return "float"
-    end
-    if mname == "log2"
-      return "float"
-    end
-    if mname == "log10"
-      return "float"
-    end
-    if mname == "exp"
-      return "float"
-    end
-    if mname == "atan2"
-      return "float"
-    end
-    if mname == "hypot"
-      return "float"
+      if mname == "sinh" || mname == "cosh" || mname == "tanh"
+        return "float"
+      end
+      if mname == "asinh" || mname == "acosh" || mname == "atanh"
+        return "float"
+      end
+      if mname == "log"
+        return "float"
+      end
+      if mname == "log2"
+        return "float"
+      end
+      if mname == "log10"
+        return "float"
+      end
+      if mname == "exp"
+        return "float"
+      end
+      if mname == "atan2"
+        return "float"
+      end
+      if mname == "hypot"
+        return "float"
+      end
     end
     if mname == "freeze"
       if recv >= 0

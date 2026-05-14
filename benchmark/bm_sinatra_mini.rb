@@ -90,7 +90,7 @@ class Router
     handle_not_found(req)
   end
 
-  def entries
+  def log
     @log
   end
 end
@@ -118,7 +118,7 @@ while i < reqs.length
 end
 
 puts "---log---"
-entries = router.entries
+entries = router.log
 j = 0
 while j < entries.length
   puts entries[j]
