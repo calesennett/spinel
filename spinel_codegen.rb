@@ -7440,6 +7440,42 @@ class Compiler
     0
   end
 
+ # Emit `self->iv_<name> = NULL;` / `sp_box_nil();` for each
+ # GC-traced ivar on the class chain. Called right after
+ # SP_POOL_NEW + SP_GC_ROOT(self) to defuse the recycled-slot
+ # stale-pointer hazard: if a sub-allocation in the initialize
+ # body triggers GC before the body writes every pointer ivar,
+ # the gc_scan callback would otherwise mark the prior tenant's
+ # freed pointers and crash inside sp_gc_mark.
+  def emit_clear_ptr_ivars_for_new(ci)
+    emit_clear_ptr_ivars_chain(ci)
+  end
+
+  def emit_clear_ptr_ivars_chain(ci)
+    if @cls_parents[ci] != ""
+      pi = find_class_idx(@cls_parents[ci])
+      if pi >= 0
+        emit_clear_ptr_ivars_chain(pi)
+      end
+    end
+    names = @cls_ivar_names[ci].split(";")
+    types = @cls_ivar_types[ci].split(";")
+    j = 0
+    while j < names.length
+      if j < types.length
+        if ivar_is_gc_ptr(types[j]) == 1
+          field = "self->" + sanitize_ivar(names[j])
+          if types[j] == "poly"
+            emit_raw("  " + field + " = sp_box_nil();")
+          else
+            emit_raw("  " + field + " = NULL;")
+          end
+        end
+      end
+      j = j + 1
+    end
+  end
+
   def emit_gc_mark_ivar(field, t)
     if t == "poly"
       emit_raw("  sp_mark_rbval(" + field + ");")
@@ -8371,6 +8407,17 @@ class Compiler
  # BC + internal_ci so it sits past the built-in prefix.
       emit_raw("  self->cls_id = " + cls_id_for_user_internal(ci).to_s + "LL;")
       emit_raw("  SP_GC_ROOT(self);")
+ # Pool-recycled slots keep the previous tenant's pointer ivars.
+ # If the initialize body's RHS triggers GC (e.g. `@flat = []` ->
+ # sp_FloatArray_new -> sp_gc_alloc) before each pointer ivar is
+ # assigned, the gc_scan callback walks a stale pointer from the
+ # prior tenant and crashes. Clear every pointer ivar declared on
+ # this class (incl. inherited ones) up front so gc_scan's
+ # `if (self->iv_X)` guard short-circuits until the body fills the
+ # slot. The poly ivar case is symmetric: a stale sp_RbVal carries
+ # a stale .v.p, so reset it to a tagged nil that sp_mark_rbval
+ # treats as inert.
+      emit_clear_ptr_ivars_for_new(ci)
     end
 
  # Root pointer-type constructor parameters
