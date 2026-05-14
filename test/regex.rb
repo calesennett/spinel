@@ -27,6 +27,13 @@ puts(("₁" =~ /[α-ω]/) ? "fail8" : "ok8")
 puts(("a"  =~ /[α-ω]/) ? "fail9" : "ok9")
 m_s2 = "abc₁₂₃def" =~ /[₀-₉]+/
 puts(m_s2 ? "ok10" : "fail10")
+m_s2_index = "abc" =~ /b/
+puts m_s2_index + 10
+if ("abc" =~ /z/) && true
+  puts "fail11"
+else
+  puts "ok11"
+end
 
 # === Stage 3: regex via constant ===
 RX = /[₀₁₂₃₄₅₆₇₈₉ₐₑₒₓₔ]+/

@@ -14,9 +14,8 @@
 # existing `@in_yield_method` branch.
 #
 # This test exercises the no-block-passed observable through the
-# receiverless default-padding path. (Receivered + literal-block
-# paths route through the yield-inliner's own `block_given?`
-# shortcut, which doesn't transit the new lowering at all.)
+# receiverless default-padding path and the explicit `self.block_given?`
+# spelling.
 
 # 1. Top-level `&block` method, called without a block — block_given?
 #    must return false. Pre-fix this constant-returned 0 with no
@@ -42,5 +41,24 @@ def top2(label, &block)
 end
 
 top2("2")                 #=> 2-no
+
+def top3(&block)
+  if self.block_given?
+    puts "3-yes"
+  else
+    puts "3-no"
+  end
+end
+
+def top4(&block)
+  if self.block_given?
+    puts "4-yes"
+  else
+    puts "4-no"
+  end
+end
+
+top3                      #=> 3-no
+top4 {}                   #=> 4-yes
 
 puts "done"

@@ -2585,8 +2585,10 @@ class Compiler
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
 
-    if recv < 0 && mname == "block_given?"
-      return "bool"
+    if mname == "block_given?"
+      if recv < 0 || (recv >= 0 && @nd_type[recv] == "SelfNode")
+        return "bool"
+      end
     end
 
  # Methods on a `rescue => e` bound exception variable. The variable
@@ -3091,7 +3093,7 @@ class Compiler
       return "int"
     end
     if mname == "=~"
-      return "bool"
+      return "int"
     end
     if mname == "<<"
       if recv >= 0
