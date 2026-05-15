@@ -11205,6 +11205,30 @@ class Compiler
     "0"
   end
 
+  def compile_system_call(nid)
+    @needs_system = 1
+    args_id = @nd_arguments[nid]
+    arg_ids = []
+    if args_id >= 0
+      arg_ids = get_args(args_id)
+    end
+    if arg_ids.length <= 1
+      return "({ fflush(stdout); sp_last_status = system(" + compile_arg0(nid) + "); sp_last_status == 0; })"
+    end
+
+    argv = ""
+    i = 0
+    while i < arg_ids.length
+      if i > 0
+        argv = argv + ", "
+      end
+      argv = argv + compile_expr(arg_ids[i])
+      i += 1
+    end
+    argv = argv + ", NULL"
+    "sp_system_args(" + arg_ids.length.to_s + ", (const char*[]){" + argv + "})"
+  end
+
  # Like compile_arg0, but unboxes the result to mrb_int when the
  # argument's static type is poly. Use at call sites that pass the
  # arg directly to a C function expecting `mrb_int` (sp_IntArray_get,
@@ -12693,8 +12717,7 @@ class Compiler
       return compile_block_given_expr
     end
     if mname == "system"
-      @needs_system = 1
-      return "({ fflush(stdout); sp_last_status = system(" + compile_arg0(nid) + "); sp_last_status == 0; })"
+      return compile_system_call(nid)
     end
     if mname == "__method__"
       return "\"" + @current_method_name + "\""
@@ -25100,8 +25123,7 @@ class Compiler
  # system
     if mname == "system"
       if recv < 0
-        emit("  fflush(stdout);")
-        emit("  sp_last_status = system(" + compile_arg0(nid) + ");")
+        emit("  " + compile_system_call(nid) + ";")
         return 1
       end
     end

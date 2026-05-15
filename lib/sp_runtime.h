@@ -24,8 +24,10 @@
 #include <stdarg.h>
 #include <time.h>
 #include <setjmp.h>
+#include <errno.h>
 #ifdef _WIN32
 #include <windows.h>
+#include <process.h>
 /* POSIX compat shims for MinGW */
 #define mmap(a,l,p,f,fd,off) VirtualAlloc(NULL,(l),MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)
 #define munmap(a,l) (VirtualFree((a),0,MEM_RELEASE)?0:-1)
@@ -39,6 +41,7 @@
 #include <ucontext.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #endif
 #if !defined(__APPLE__) && !defined(_WIN32) && !defined(__FreeBSD__)
 #include <malloc.h>
@@ -1748,6 +1751,40 @@ void sp_bigint_free(sp_Bigint *b);
 
 /* System/backtick support */
 static int sp_last_status = 0;
+static mrb_bool sp_system_args(int argc, const char *const *argv) {
+  if (argc <= 0 || argv == NULL || argv[0] == NULL) {
+    sp_last_status = -1;
+    return FALSE;
+  }
+  fflush(stdout);
+#ifdef _WIN32
+  intptr_t rc = _spawnvp(_P_WAIT, argv[0], argv);
+  if (rc < 0) {
+    sp_last_status = -1;
+    return FALSE;
+  }
+  sp_last_status = (int)rc;
+  return rc == 0 ? TRUE : FALSE;
+#else
+  pid_t pid = fork();
+  if (pid < 0) {
+    sp_last_status = -1;
+    return FALSE;
+  }
+  if (pid == 0) {
+    execvp(argv[0], (char * const *)argv);
+    _exit(127);
+  }
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno == EINTR) continue;
+    sp_last_status = -1;
+    return FALSE;
+  }
+  sp_last_status = status;
+  return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? TRUE : FALSE;
+#endif
+}
 
 /* Bigint (linked from libspinel_rt.a) */
 typedef struct sp_Bigint sp_Bigint;
