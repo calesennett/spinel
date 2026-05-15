@@ -6340,6 +6340,26 @@ class Compiler
     if @needs_class_parents == 1 || @needs_class_ancestors == 1 || @needs_class_for_poly == 1
       @needs_class_table = 1
     end
+ # Tier 5 (`emit_class_new_dispatch`) emits a
+ # `sp_class_constructors[SP_CLASS_COUNT]` table whenever any
+ # user class supports a no-arg `new`. That table references
+ # `SP_CLASS_COUNT`, which only lands when @needs_class_table
+ # is set. Without this pre-scan, a program that only declares
+ # a class (no `.class` / `is_a?` / ancestors usage anywhere)
+ # left @needs_class_table at 0, skipped the `#define
+ # SP_CLASS_COUNT` emit, and the Tier 5 table tripped a C
+ # `undeclared identifier` error. Issue #524.
+    if @needs_class_table == 0 && @cls_names.length > 0
+      ci_scan = 0
+      while ci_scan < @cls_names.length
+        if cls_supports_noarg_new(ci_scan) == 1
+          @needs_class_table = 1
+          ci_scan = @cls_names.length
+        else
+          ci_scan = ci_scan + 1
+        end
+      end
+    end
     emit_sym_runtime
     emit_ffi_externs
  # Emit program-specific regexp patterns
