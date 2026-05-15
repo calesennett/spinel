@@ -4620,11 +4620,25 @@ class Compiler
       spec = arg_specs[k]
       ctype = ffi_c_type_of(spec)
  # `:str` forwards the raw `const char *` directly — casting would
- # discard `const` and trigger a warning.
+ # discard `const` and trigger a warning. When the arg's static
+ # type is poly (sp_RbVal), extract `.v.s` (issue #502). The
+ # ternary on infer_type is inlined rather than bound to a local
+ # because adding fresh locals here trips self-host scan_locals;
+ # see feedback_self_host_recursive_fn_arm.
       if spec == "str"
-        result = result + compile_expr(call_args[k])
+        if infer_type(call_args[k]) == "poly"
+          @needs_rb_value = 1
+          result = result + "(" + compile_expr(call_args[k]) + ").v.s"
+        else
+          result = result + compile_expr(call_args[k])
+        end
       elsif spec == "ptr"
-        result = result + "((void *)" + compile_expr(call_args[k]) + ")"
+        if infer_type(call_args[k]) == "poly"
+          @needs_rb_value = 1
+          result = result + "((void *)(" + compile_expr(call_args[k]) + ").v.p)"
+        else
+          result = result + "((void *)" + compile_expr(call_args[k]) + ")"
+        end
       elsif spec == "float_array" || spec == "int_array"
  # Zero-copy bulk transfer (#474). The Spinel Array's contiguous
  # storage lives at `.data`; we hand the raw pointer to C with
