@@ -2909,8 +2909,17 @@ class Compiler
  # class's method table. Only for `recv < 0` — without that guard,
  # a `Fiber.yield ...` (which has a receiver) inside a class body
  # would short-circuit here returning the int default and never
- # reach the Fiber.yield → poly branch further down.
+ # reach the Fiber.yield → poly branch further down. Also checks
+ # the inherited attr_reader chain so a bare `fmt` in a subclass
+ # method body returns the inherited ivar's type rather than the
+ # int default (issue #508).
     if recv < 0 && @current_class_idx >= 0
+      if cls_has_attr_reader(@current_class_idx, mname) == 1
+        ivt_attr = cls_ivar_type(@current_class_idx, "@" + mname)
+        if ivt_attr != "int"
+          return ivt_attr
+        end
+      end
       mr = cls_method_return(@current_class_idx, mname)
       return mr
     end
@@ -5182,17 +5191,12 @@ class Compiler
             end
             mi2 = mi2 + 1
           end
- # Check attr_readers
-          readers2 = @cls_attr_readers[ci].split(";")
-          j2 = 0
-          while j2 < readers2.length
-            if readers2[j2] == mname
-              ivt = cls_ivar_type(ci, "@" + mname)
-              if ivt != "int"
-                return ivt
-              end
+ # Check attr_readers (walks parent chain — issue #508).
+          if cls_has_attr_reader(ci, mname) == 1
+            ivt = cls_ivar_type(ci, "@" + mname)
+            if ivt != "int"
+              return ivt
             end
-            j2 = j2 + 1
           end
  # Check methods with args
           midx = cls_find_method_direct(ci, mname)
@@ -5210,14 +5214,12 @@ class Compiler
         cname = bt_rt[4, bt_rt.length - 4]
         ci = find_class_idx(cname)
         if ci >= 0
- # Check attr_reader
-          readers = @cls_attr_readers[ci].split(";")
-          j = 0
-          while j < readers.length
-            if readers[j] == mname
-              return cls_ivar_type(ci, "@" + mname)
-            end
-            j = j + 1
+ # Check attr_reader (walks parent chain via cls_has_attr_reader;
+ # cls_ivar_type also walks parents so an inherited
+ # attr_accessor's typed ivar resolves to the right token).
+ # Issue #508 (analyze side).
+          if cls_has_attr_reader(ci, mname) == 1
+            return cls_ivar_type(ci, "@" + mname)
           end
  # Check method
           mr = cls_method_return(ci, mname)
@@ -21314,7 +21316,9 @@ class Compiler
  # genuinely polymorphic and the caller must treat the result as
  # an sp_RbVal.
  # Returns 1 if class `ci` declares `mname` as an attr_reader (in
- # which case `obj.<mname>` reads `obj->iv_<mname>`).
+ # which case `obj.<mname>` reads `obj->iv_<mname>`). Walks the
+ # parent chain so a subclass call to an inherited
+ # attr_accessor reader is recognised (issue #508 analyze side).
   def cls_has_attr_reader(ci, mname)
     readers = @cls_attr_readers[ci].split(";")
     j = 0
@@ -21323,6 +21327,12 @@ class Compiler
         return 1
       end
       j = j + 1
+    end
+    if @cls_parents[ci] != ""
+      pi = find_class_idx(@cls_parents[ci])
+      if pi >= 0
+        return cls_has_attr_reader(pi, mname)
+      end
     end
     0
   end

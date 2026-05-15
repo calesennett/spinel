@@ -13055,14 +13055,14 @@ class Compiler
         end
         return "sp_" + owner + "_" + sanitize_name(mname) + "(" + recv_arg + build_call_tail(ca, bp, yargs) + ")"
       end
- # Check attr_readers (bare method call like `x` meaning self.x)
-      readers = @cls_attr_readers[@current_class_idx].split(";")
-      rk = 0
-      while rk < readers.length
-        if readers[rk] == mname
-          return self_arrow + sanitize_ivar(mname)
-        end
-        rk = rk + 1
+ # Check attr_readers (bare method call like `x` meaning self.x).
+ # Walks the parent chain via cls_has_attr_reader so the
+ # subclass instance method can call an inherited
+ # `attr_accessor` / `attr_reader` declaration — issue #508
+ # (ActionController.params / .request_format inherited across
+ # roundhouse subclasses).
+      if cls_has_attr_reader(@current_class_idx, mname) == 1
+        return self_arrow + sanitize_ivar(mname)
       end
     end
  # bare call inside a `def self.X` body resolves to a
@@ -18033,14 +18033,10 @@ class Compiler
         if @cls_is_value_type[ci] == 1
           arrow = "."
         end
- # attr_reader
-        readers = @cls_attr_readers[ci].split(";")
-        j = 0
-        while j < readers.length
-          if readers[j] == mname
-            return rc + arrow + sanitize_ivar(mname)
-          end
-          j = j + 1
+ # attr_reader -- walks the parent chain for inherited
+ # attr_accessor / attr_reader (issue #508).
+        if cls_has_attr_reader(ci, mname) == 1
+          return rc + arrow + sanitize_ivar(mname)
         end
  # attr_writer
         if mname.length > 1
