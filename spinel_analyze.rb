@@ -2923,6 +2923,19 @@ class Compiler
       mr = cls_method_return(@current_class_idx, mname)
       return mr
     end
+ # Bare call inside a `module M` body — implicit self is the
+ # module, so `h` resolves to `M.h`. The cmeth is registered as
+ # `<scope>_cls_<name>` in @meth_names by collect_module_with_prefix.
+ # Issue #512: without this, the bare call's return type fell to
+ # `int`, propagated onto the outer call's param, and downstream
+ # `opts.length` failed dispatch on the wrong (int) receiver type.
+    if recv < 0 && @current_lexical_scope != "" && @current_class_idx < 0
+      full_name = @current_lexical_scope + "_cls_" + mname
+      mi_module = find_method_idx(full_name)
+      if mi_module >= 0
+        return @meth_return_types[mi_module]
+      end
+    end
 
  # proc / Proc.new
     if mname == "proc"
