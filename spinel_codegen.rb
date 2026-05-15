@@ -14534,11 +14534,14 @@ class Compiler
         a = get_args(args_id)
         if a.length >= 1
           if @nd_type[a[0]] == "RangeNode"
- # s[1..3] inclusive, s[1...3] exclusive
+ # s[1..3] inclusive, s[1...3] exclusive. The `_r` runtime
+ # variants normalize negative endpoints against the string
+ # length first. Issue #496: the prior `right - left + 1`
+ # formula silently produced a negative length for `s[1..-2]`
+ # and returned "".
             left = compile_expr(@nd_left[a[0]])
             right = compile_expr(@nd_right[a[0]])
-            adj = range_excl_end(a[0]) == 1 ? "" : " + 1"
-            return fn + "(" + lprefix + ", " + left + ", " + right + " - " + left + adj + ")"
+            return (use_len ? "sp_str_sub_range_len_r" : "sp_str_sub_range_r") + "(" + lprefix + ", " + left + ", " + right + ", " + (range_excl_end(a[0]) == 1 ? "1" : "0") + ")"
           end
           if a.length >= 2
  # s[0, 2]
@@ -15610,10 +15613,13 @@ class Compiler
         if args_id >= 0
           a = get_args(args_id)
           if a.length >= 1 && @nd_type[a[0]] == "RangeNode"
+ # Issue #496: sp_IntArray_slice_range normalizes negative
+ # endpoints against the array length before computing slice
+ # length. The prior `right - left + 1` formula silently
+ # produced a negative count for `a[1..-2]`.
             left = compile_expr(@nd_left[a[0]])
             right = compile_expr(@nd_right[a[0]])
-            adj = range_excl_end(a[0]) == 1 ? "" : " + 1"
-            return "sp_IntArray_slice(" + rc + ", " + left + ", " + right + " - " + left + adj + ")"
+            return "sp_IntArray_slice_range(" + rc + ", " + left + ", " + right + ", " + (range_excl_end(a[0]) == 1 ? "1" : "0") + ")"
           end
           if a.length >= 2
             return "sp_IntArray_slice(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
@@ -15921,10 +15927,10 @@ class Compiler
         if args_id >= 0
           a = get_args(args_id)
           if a.length >= 1 && @nd_type[a[0]] == "RangeNode"
+ # Issue #496: see IntArray branch for rationale.
             left = compile_expr(@nd_left[a[0]])
             right = compile_expr(@nd_right[a[0]])
-            adj = range_excl_end(a[0]) == 1 ? "" : " + 1"
-            return "sp_FloatArray_slice(" + rc + ", " + left + ", " + right + " - " + left + adj + ")"
+            return "sp_FloatArray_slice_range(" + rc + ", " + left + ", " + right + ", " + (range_excl_end(a[0]) == 1 ? "1" : "0") + ")"
           end
           if a.length >= 2
             return "sp_FloatArray_slice(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
@@ -16062,10 +16068,10 @@ class Compiler
         if args_id >= 0
           a = get_args(args_id)
           if a.length >= 1 && @nd_type[a[0]] == "RangeNode"
+ # Issue #496: see IntArray branch for rationale.
             left = compile_expr(@nd_left[a[0]])
             right = compile_expr(@nd_right[a[0]])
-            adj = range_excl_end(a[0]) == 1 ? "" : " + 1"
-            return "sp_StrArray_slice(" + rc + ", " + left + ", " + right + " - " + left + adj + ")"
+            return "sp_StrArray_slice_range(" + rc + ", " + left + ", " + right + ", " + (range_excl_end(a[0]) == 1 ? "1" : "0") + ")"
           end
           if a.length >= 2
             return "sp_StrArray_slice(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
