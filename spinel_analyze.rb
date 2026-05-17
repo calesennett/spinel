@@ -15908,6 +15908,99 @@ class Compiler
     end
   end
 
+ # For each (class, imeth) where descendants override the
+ # imeth, unify the return types across the family and write
+ # back. Without this, a base whose only definition is
+ # `raise NotImplementedError` keeps the mrb_int default
+ # while subclass overrides return concrete types; the
+ # codegen-side override-dispatch (compile_call_expr's
+ # self-recv arm at compile_user_class_method_expr) gates
+ # on `c_type(base_rt) == c_type(cand_rt)` and skips the
+ # dispatch when they differ, falling back to the static
+ # call that runs the abstract stub. Issue #563.
+ # Tracks (ci, mi) pairs whose return type was promoted by
+ # unify_imeth_override_returns. propagate_unified_returns_to_callers
+ # uses this to skip re-deriving these methods' return types from
+ # their bodies during the post-unify infer_all_returns pass
+ # (raise-only bodies would otherwise re-derive as "int").
+  def unify_imeth_override_returns
+    if @unified_imeth_returns == nil
+      @unified_imeth_returns = "".split(",")
+    end
+    ci = 0
+    while ci < @cls_names.length
+      mnames = @cls_meth_names[ci].split(";")
+      returns = @cls_meth_returns[ci].split(";")
+      changed = 0
+      mi = 0
+      while mi < mnames.length
+        mname = mnames[mi]
+        if mname != ""
+          types = "".split(",")
+          base_ret = ""
+          if mi < returns.length
+            base_ret = returns[mi]
+            types.push(base_ret)
+          end
+          have_descendant_override = 0
+          dci = 0
+          while dci < @cls_names.length
+            if dci != ci && cls_is_descendant(dci, ci) == 1
+              dmidx = cls_find_method_direct(dci, mname)
+              if dmidx >= 0
+                d_returns = @cls_meth_returns[dci].split(";")
+                if dmidx < d_returns.length
+                  types.push(d_returns[dmidx])
+                  have_descendant_override = 1
+                end
+              end
+            end
+            dci = dci + 1
+          end
+          if have_descendant_override == 1
+            unified = unify_return_type(types)
+            if base_ret != unified && unified != ""
+              returns[mi] = unified
+              changed = 1
+ # Record the (ci, mi) so callers that re-derive return
+ # types skip this slot rather than reverting to the
+ # raise-only "int" default.
+              tag = ci.to_s + ":" + mi.to_s
+              if @unified_imeth_returns.index(tag) == nil
+                @unified_imeth_returns.push(tag)
+              end
+              dci2 = 0
+              while dci2 < @cls_names.length
+                if dci2 != ci && cls_is_descendant(dci2, ci) == 1
+                  dmidx2 = cls_find_method_direct(dci2, mname)
+                  if dmidx2 >= 0
+                    d_returns2 = @cls_meth_returns[dci2].split(";")
+                    if dmidx2 < d_returns2.length && d_returns2[dmidx2] != unified
+                      d_returns2[dmidx2] = unified
+                      @cls_meth_returns[dci2] = d_returns2.join(";")
+                      @cls_meth_return_cache = {}
+                      dtag = dci2.to_s + ":" + dmidx2.to_s
+                      if @unified_imeth_returns.index(dtag) == nil
+                        @unified_imeth_returns.push(dtag)
+                      end
+                    end
+                  end
+                end
+                dci2 = dci2 + 1
+              end
+            end
+          end
+        end
+        mi = mi + 1
+      end
+      if changed == 1
+        @cls_meth_returns[ci] = returns.join(";")
+        @cls_meth_return_cache = {}
+      end
+      ci = ci + 1
+    end
+  end
+
   def infer_all_returns
  # Pre-pass: infer class method param types from body usage
     infer_cls_meth_param_from_body
@@ -16133,6 +16226,15 @@ class Compiler
             rt = "string"
           else
             rt = infer_body_return(bid)
+          end
+        end
+ # Override-unified imeth: keep the unified return rather
+ # than the body-derived (often "int" for raise-only stubs).
+ # Issue #563.
+        if @unified_imeth_returns != nil && j < returns.length
+          tag_iru = i.to_s + ":" + j.to_s
+          if @unified_imeth_returns.index(tag_iru) != nil && returns[j] != "" && returns[j] != "int"
+            rt = returns[j]
           end
         end
         if j < returns.length
@@ -18321,8 +18423,15 @@ class Compiler
     end
     if @nd_type[nid] == "CallNode"
       mname = @nd_name[nid]
- # Handle implicit self calls (no receiver) to same-class methods
-      if @nd_receiver[nid] < 0
+ # Handle implicit self calls (no receiver) and explicit
+ # self.X / self[k] calls to same-class methods. The same
+ # cls_id-switch dispatch covers both shapes at codegen, so
+ # the analyze-side widening must too. Issue #563 (the
+ # operator-form `self[k]` / `self[k] = v` shape uncovered
+ # this gap, which the existing #516 fix only handled for
+ # bare-recv calls).
+      recv_scm = @nd_receiver[nid]
+      if recv_scm < 0 || @nd_type[recv_scm] == "SelfNode"
         midx = cls_find_method_direct(ci, mname)
         if midx >= 0
           args_id = @nd_arguments[nid]
@@ -18630,6 +18739,27 @@ class Compiler
     infer_function_body_call_types
     infer_class_body_call_types
     infer_all_returns
+ # Unify imeth return types across override families AFTER
+ # the fixpoint converges. Running inside the loop is
+ # ineffective because the next iteration's infer_all_returns
+ # re-derives raise-only methods to int and clobbers the
+ # unified value. Post-fixpoint this is the final pass that
+ # touches @cls_meth_returns so the codegen-side
+ # override-dispatch rt_ok gate accepts the family. Issue
+ # #563.
+ #
+ # Three-step settle:
+ #   1. unify       -- Base#[] gets "string" (from Article).
+ #   2. infer_returns -- callers of Base#[] (Base#fetch) pick
+ #      up the new return type. But this also re-derives
+ #      Base#[]'s own body return as "int" (raise default),
+ #      clobbering step 1's write.
+ #   3. unify again -- restore Base#[] to "string".
+    unify_imeth_override_returns
+    infer_all_returns
+    unify_imeth_override_returns
+    infer_all_returns
+    unify_imeth_override_returns
  # Fix lambda return types based on call-site usage
     fix_lambda_return_types
  # Pre-detect bigint variables before feature detection

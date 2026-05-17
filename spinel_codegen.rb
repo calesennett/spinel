@@ -19087,6 +19087,65 @@ class Compiler
  # reaching here means no literal block at the call site.
           yargs = cls_call_yargs(oci2, midx2)
           tail = build_call_tail(ca, bp, yargs)
+ # Self-receiver override dispatch: when the receiver is
+ # `self` inside a parent-class method body and descendants
+ # of @current_class_idx override `mname` (including the
+ # operator forms `[]` / `[]=` / `==` / `<=>` / etc.), emit
+ # a `switch (self->cls_id)` so the dispatch lands on the
+ # override at runtime. Mirrors the bare-imeth case at
+ # compile_call_expr's @current_class_idx path. Without
+ # this, `self[:foo]` inside `Base#fetch` resolved
+ # statically to Base#__aref even when Article < Base
+ # overrode `[]`. Issue #563.
+          recv_id_so = @nd_receiver[nid]
+          if recv_id_so >= 0 && @nd_type[recv_id_so] == "SelfNode" && @current_class_idx >= 0 && @cls_is_value_type[@current_class_idx] == 0 && has_proc == 0
+            ovr_pairs_so = cls_method_override_descendants(@current_class_idx, oci2, mname, "imeth")
+            if ovr_pairs_so != ""
+              base_rt_so = cls_method_return(oci2, mname)
+              base_rt_c_so = c_type(base_rt_so)
+              rt_ok_so = 1
+              ovr_list_so = ovr_pairs_so.split(";")
+              ol_so = 0
+              while ol_so < ovr_list_so.length
+                p_so = ovr_list_so[ol_so].split(",")
+                cand_owner_so = p_so[1].to_i
+                cand_rt_so = cls_method_return(cand_owner_so, mname)
+                if c_type(cand_rt_so) != base_rt_c_so
+                  rt_ok_so = 0
+                  ol_so = ovr_list_so.length
+                else
+                  ol_so = ol_so + 1
+                end
+              end
+              base_ptypes_so = midx2 >= 0 ? cls_meth_ptypes_get(oci2, midx2) : "".split(",")
+              pt_ok_so = cls_imeth_override_ptypes_match(ovr_pairs_so, mname, base_ptypes_so)
+              if rt_ok_so == 1 && pt_ok_so == 1
+                tmp_so = new_temp
+                default_call_so = ""
+                if owner == cname
+                  default_call_so = "sp_" + owner + "_" + sanitize_name(mname) + "(" + rc + tail + ")"
+                else
+                  default_call_so = "sp_" + owner + "_" + sanitize_name(mname) + "((sp_" + owner + " *)" + rc + tail + ")"
+                end
+                emit("  " + base_rt_c_so + " " + tmp_so + " = " + c_return_default(base_rt_so) + ";")
+                emit("  switch (" + rc + "->cls_id) {")
+                ol2_so = 0
+                while ol2_so < ovr_list_so.length
+                  p2_so = ovr_list_so[ol2_so].split(",")
+                  cand_internal_ci_so = p2_so[0].to_i
+                  cand_cid_so = cls_id_for_user_internal(cand_internal_ci_so)
+                  cand_owner2_so = p2_so[1].to_i
+                  cand_name_so = @cls_names[cand_owner2_so]
+                  cand_call_so = "sp_" + cand_name_so + "_" + sanitize_name(mname) + "((sp_" + cand_name_so + " *)" + rc + tail + ")"
+                  emit("    case " + cand_cid_so.to_s + "LL: " + tmp_so + " = " + cand_call_so + "; break;")
+                  ol2_so = ol2_so + 1
+                end
+                emit("    default: " + tmp_so + " = " + default_call_so + "; break;")
+                emit("  }")
+                return tmp_so
+              end
+            end
+          end
           if owner == cname
             return "sp_" + owner + "_" + sanitize_name(mname) + "(" + rc + tail + ")"
           else
@@ -28132,6 +28191,37 @@ class Compiler
             ca_aset = compile_typed_call_args(nid, owner_ci_aset, midx_aset, 0)
             recv_arg_aset = owner_aset == cname_aset ? rc : "(sp_" + owner_aset + " *)" + rc
             tail_aset = ca_aset != "" ? ", " + ca_aset : ""
+ # Self-receiver override dispatch for `self[k] = v`. When
+ # the recv is `self` inside a parent body and descendants
+ # of @current_class_idx override `[]=`, emit a
+ # switch (self->cls_id) so the dispatch lands on the
+ # override. Same shape as compile_user_class_method_expr's
+ # `self[]` arm. Issue #563.
+            recv_id_so_a = recv
+            if recv_id_so_a >= 0 && @nd_type[recv_id_so_a] == "SelfNode" && @current_class_idx >= 0 && @cls_is_value_type[@current_class_idx] == 0
+              ovr_pairs_a = cls_method_override_descendants(@current_class_idx, owner_ci_aset, "[]=", "imeth")
+              if ovr_pairs_a != ""
+                base_pt_a = cls_meth_ptypes_get(owner_ci_aset, midx_aset)
+                pt_ok_a = cls_imeth_override_ptypes_match(ovr_pairs_a, "[]=", base_pt_a)
+                if pt_ok_a == 1
+                  emit("  switch (" + rc + "->cls_id) {")
+                  ovr_list_a = ovr_pairs_a.split(";")
+                  ol_a = 0
+                  while ol_a < ovr_list_a.length
+                    p_a = ovr_list_a[ol_a].split(",")
+                    cand_internal_a = p_a[0].to_i
+                    cand_cid_a = cls_id_for_user_internal(cand_internal_a)
+                    cand_owner_a = p_a[1].to_i
+                    cand_name_a = @cls_names[cand_owner_a]
+                    emit("    case " + cand_cid_a.to_s + "LL: sp_" + cand_name_a + "__aset((sp_" + cand_name_a + " *)" + rc + tail_aset + "); break;")
+                    ol_a = ol_a + 1
+                  end
+                  emit("    default: sp_" + owner_aset + "__aset(" + recv_arg_aset + tail_aset + "); break;")
+                  emit("  }")
+                  return
+                end
+              end
+            end
             emit("  sp_" + owner_aset + "__aset(" + recv_arg_aset + tail_aset + ");")
             return
           end
