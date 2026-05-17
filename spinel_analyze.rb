@@ -12523,6 +12523,174 @@ class Compiler
  # infer_param_type_from_callee_slot to look up evidence from a
  # callee body without committing to receiver-resolution
  # (`Db.column_int` vs sibling-call `column_int` lookups).
+ # Like callee_slot_type but matches by kwarg name rather
+ # than positional index. Returns the inferred type of the
+ # kwarg-named slot or "" when callee isn't found / has no
+ # matching kwarg. Used by infer_param_kwarg_passthrough to
+ # back-propagate a typed callee kwarg into an untyped caller
+ # kwarg. Issue #561.
+  def callee_kwarg_slot_type(callee_name, kwarg_name)
+    cmi = find_method_idx(callee_name)
+    if cmi >= 0
+      cpnames = @meth_param_names[cmi].split(",")
+      cptypes = @meth_param_types[cmi].split(",")
+      pi = 0
+      while pi < cpnames.length
+        if cpnames[pi] == kwarg_name && pi < cptypes.length
+          return cptypes[pi]
+        end
+        pi = pi + 1
+      end
+    end
+    if @current_lexical_scope != ""
+      synth = @current_lexical_scope + "_cls_" + callee_name
+      smi = find_method_idx(synth)
+      if smi >= 0
+        spnames = @meth_param_names[smi].split(",")
+        sptypes = @meth_param_types[smi].split(",")
+        pi = 0
+        while pi < spnames.length
+          if spnames[pi] == kwarg_name && pi < sptypes.length
+            return sptypes[pi]
+          end
+          pi = pi + 1
+        end
+      end
+      sci = find_class_idx(@current_lexical_scope)
+      if sci >= 0
+        sc_cmnames = @cls_cmeth_names[sci].split(";")
+        smj = 0
+        while smj < sc_cmnames.length
+          if sc_cmnames[smj] == callee_name
+            sc_pnames = cls_cmeth_pnames_get(sci, smj)
+            sc_ptypes = cls_cmeth_ptypes_get(sci, smj)
+            pi = 0
+            while pi < sc_pnames.length
+              if sc_pnames[pi] == kwarg_name && pi < sc_ptypes.length
+                return sc_ptypes[pi]
+              end
+              pi = pi + 1
+            end
+          end
+          smj = smj + 1
+        end
+      end
+    end
+    ""
+  end
+
+ # Walk `nid` collecting `callee(name: <lvar pname>)` kwarg
+ # passthroughs. `acc` receives `<callee_name>\t<kwarg_name>`
+ # records for each match.
+  def collect_param_kwarg_passthroughs(nid, pname, acc)
+    if nid < 0
+      return
+    end
+    if @nd_type[nid] == "DefNode"
+      return
+    end
+    if @nd_type[nid] == "ClassNode" || @nd_type[nid] == "ModuleNode"
+      return
+    end
+    if @nd_type[nid] == "CallNode"
+      args_id = @nd_arguments[nid]
+      if args_id >= 0
+        aa = get_args(args_id)
+        ak = 0
+        while ak < aa.length
+          aid = aa[ak]
+          if @nd_type[aid] == "KeywordHashNode"
+            elems = parse_id_list(@nd_elements[aid])
+            ek = 0
+            while ek < elems.length
+              if @nd_type[elems[ek]] == "AssocNode"
+                kid = @nd_key[elems[ek]]
+                vid = @nd_expression[elems[ek]]
+                if kid >= 0 && vid >= 0 && @nd_type[kid] == "SymbolNode" && @nd_type[vid] == "LocalVariableReadNode" && @nd_name[vid] == pname
+                  kname = @nd_content[kid]
+                  if kname == ""
+                    kname = @nd_name[kid]
+                  end
+                  acc.push(@nd_name[nid] + "\t" + kname)
+                end
+              end
+              ek = ek + 1
+            end
+          end
+          ak = ak + 1
+        end
+      end
+    end
+    cs = []
+    push_child_ids(nid, cs)
+    k = 0
+    while k < cs.length
+      collect_param_kwarg_passthroughs(cs[k], pname, acc)
+      k = k + 1
+    end
+  end
+
+ # Back-propagate kwarg passthrough types from typed callees
+ # to untyped callers. When a method's int/nil-defaulted param
+ # is forwarded via `callee(name: pname)` and the callee's
+ # `name:` slot has a concrete type, pin the caller's param to
+ # that type. Same shape as infer_param_type_from_callee_slot
+ # but keyed on kwarg name instead of positional index, and
+ # accepts any concrete type (not just ptr / obj). Issue #561.
+  def infer_param_kwarg_passthrough
+    mi = 0
+    while mi < @meth_names.length
+      bid = @meth_body_ids[mi]
+      if bid >= 0
+        pnames = @meth_param_names[mi].split(",")
+        ptypes = @meth_param_types[mi].split(",")
+        changed = 0
+        saved_scope = @current_lexical_scope
+        mname_ks = @meth_names[mi]
+        cls_marker_ks = mname_ks.index("_cls_")
+        if cls_marker_ks != nil
+          @current_lexical_scope = mname_ks[0, cls_marker_ks]
+        end
+        pk = 0
+        while pk < pnames.length
+          if pk < ptypes.length && (ptypes[pk] == "int" || ptypes[pk] == "nil")
+            obs = "".split(",")
+            collect_param_kwarg_passthroughs(bid, pnames[pk], obs)
+            agreed = ""
+            disagree = 0
+            kk = 0
+            while kk < obs.length
+              tab = obs[kk].index("\t")
+              if tab >= 0
+                callee_name = obs[kk][0, tab]
+                kw_name = obs[kk][tab + 1, obs[kk].length - tab - 1]
+                callee_t = callee_kwarg_slot_type(callee_name, kw_name)
+                if callee_t != "" && callee_t != "int" && callee_t != "nil"
+                  if agreed == ""
+                    agreed = callee_t
+                  elsif agreed != callee_t
+                    disagree = 1
+                  end
+                end
+              end
+              kk = kk + 1
+            end
+            if agreed != "" && disagree == 0
+              ptypes[pk] = agreed
+              changed = 1
+            end
+          end
+          pk = pk + 1
+        end
+        if changed == 1
+          @meth_param_types[mi] = ptypes.join(",")
+        end
+        @current_lexical_scope = saved_scope
+      end
+      mi = mi + 1
+    end
+  end
+
   def callee_slot_type(callee_name, pos)
     cmi = find_method_idx(callee_name)
     if cmi >= 0
@@ -18372,6 +18540,10 @@ class Compiler
       widen_nil_default_params_used_as_hash
       widen_params_from_ivar_hash_aset
       infer_param_type_from_callee_slot
+ # Kwarg back-propagation: int/nil-defaulted kwarg params
+ # that pass through to a typed callee kwarg (same name)
+ # pick up the callee's slot type. Issue #561.
+      infer_param_kwarg_passthrough
       narrow_param_hash_types_from_body_writes
  # propagate hash-each block-arg types into
  # nested cmeth/method-call param widening. Runs inside
