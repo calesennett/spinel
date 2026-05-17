@@ -28192,6 +28192,25 @@ class Compiler
         emit("  else if (" + cur_h + ".cls_id == SP_BUILTIN_STR_POLY_HASH) sp_StrPolyHash_set((sp_StrPolyHash *)" + cur_h + ".v.p, " + idx + ", " + vbox_tmp + ");")
         return
       end
+ # Symbol index + poly recv: mirror of the string-idx arm above
+ # for Sym*Hash variants. Surfaces in `arr[i][:k] = v` where the
+ # outer container is a poly_array of boxed sym_int_hash /
+ # sym_poly_hash. Without this arm the assignment silently no-ops
+ # (falls through to Array arms that never match).
+      if idx_t_poly == "symbol"
+        @needs_rb_value = 1
+        vbox = val
+        if val_t_poly != "poly"
+          vbox = box_value_to_poly(val_t_poly, val)
+        end
+        vbox_tmp = new_temp
+        emit("  sp_RbVal " + vbox_tmp + " = " + vbox + ";")
+        cur_h = new_temp
+        emit("  sp_RbVal " + cur_h + " = " + rc + ";")
+        emit("  if (" + cur_h + ".cls_id == SP_BUILTIN_SYM_INT_HASH) sp_SymIntHash_set((sp_SymIntHash *)" + cur_h + ".v.p, (sp_sym)(" + idx + "), " + vbox_tmp + ".v.i);")
+        emit("  else if (" + cur_h + ".cls_id == SP_BUILTIN_SYM_POLY_HASH) sp_SymPolyHash_set((sp_SymPolyHash *)" + cur_h + ".v.p, (sp_sym)(" + idx + "), " + vbox_tmp + ");")
+        return
+      end
  # Poly index (sp_RbVal): the key's concrete type isn't known
  # statically, so the dispatch must read the key's tag at
  # runtime. Surfaces in `merged[k] = v` inside an `each`
@@ -28497,6 +28516,32 @@ class Compiler
            "; sp_SymIntHash_set(" + tt + ", " + ti +
            ", sp_SymIntHash_get(" + tt + ", " + ti + ") " + op + " (" + val + ")); }")
       return
+    end
+ # Poly recv + symbol idx: surfaces in `arr[i][:k] += v` (and the
+ # each-block analog `f[:k] += v` where f is destructured from a
+ # poly_array of boxed hashes — block param type is widened to
+ # poly). Mirrors the `[]=` arm in compile_bracket_assign. Only
+ # SymIntHash is dispatched here; SymPolyHash compound-assign needs
+ # poly-op semantics and is deferred.
+    if rt == "poly"
+      idx_t = infer_type(arg_ids[0])
+      if idx_t == "symbol"
+        @needs_rb_value = 1
+        cur_h = new_temp
+        k_t   = new_temp
+        v_t   = new_temp
+        h_t   = new_temp
+        emit("  {")
+        emit("    sp_RbVal " + cur_h + " = " + rc + ";")
+        emit("    sp_sym " + k_t + " = (sp_sym)(" + idx + ");")
+        emit("    mrb_int " + v_t + " = (" + val + ");")
+        emit("    if (" + cur_h + ".cls_id == SP_BUILTIN_SYM_INT_HASH) {")
+        emit("      sp_SymIntHash *" + h_t + " = (sp_SymIntHash *)" + cur_h + ".v.p;")
+        emit("      sp_SymIntHash_set(" + h_t + ", " + k_t + ", sp_SymIntHash_get(" + h_t + ", " + k_t + ") " + op + " " + v_t + ");")
+        emit("    }")
+        emit("  }")
+        return
+      end
     end
   end
 
