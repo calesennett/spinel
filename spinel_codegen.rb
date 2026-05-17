@@ -10318,6 +10318,28 @@ class Compiler
         end
       end
     end
+ # `recv.include?(arg)` on a poly-typed recv similarly emits
+ # arms across all matching Array / Hash variants in
+ # emit_poly_builtin_dispatch. Arm the sym-keyed hash typedefs
+ # when the arg is a symbol so the dispatch compiles even when
+ # the program never instantiated SymStrHash directly.
+ # Issue #558.
+    if @nd_type[nid] == "CallNode" && @nd_name[nid] == "include?"
+      args_id_si = @nd_arguments[nid]
+      if args_id_si >= 0
+        aa_si = get_args(args_id_si)
+        if aa_si.length >= 1
+          at_si = infer_type(aa_si[0])
+          if at_si == "symbol"
+            @needs_sym_int_hash = 1
+            @needs_sym_str_hash = 1
+            @needs_sym_poly_hash = 1
+          elsif at_si == "string" || at_si == "mutable_str"
+            @needs_str_poly_hash = 1
+          end
+        end
+      end
+    end
     cs_sd = []
     push_child_ids(nid, cs_sd)
     k_sd = 0
@@ -19975,6 +19997,20 @@ class Compiler
       semp_rhs = is_poly_ret == 1 ? "sp_box_bool(" + semp_c + ")" : semp_c
       emit("  if (" + recv_tmp + ".tag == SP_TAG_STR) " + tmp + " = " + semp_rhs + ";")
     end
+ # SP_TAG_STR arm for include? on a poly recv -- only fires
+ # when the arg is a string (CRuby's String#include? takes
+ # a substring; non-string args TypeError at runtime, so
+ # we leave the result temp at its default in that case).
+ # Issue #558.
+    if mname == "include?" && arg_compiled.length >= 1 && (arg_types.length == 0 || arg_types[0] == "string" || arg_types[0] == "mutable_str" || arg_types[0] == "poly")
+      sinc_arg = arg_compiled[0]
+      if arg_types.length > 0 && arg_types[0] == "poly"
+        sinc_arg = "(" + sinc_arg + ").v.s"
+      end
+      sinc_c = "sp_str_include(" + recv_tmp + ".v.s, " + sinc_arg + ")"
+      sinc_rhs = is_poly_ret == 1 ? "sp_box_bool(" + sinc_c + ")" : sinc_c
+      emit("  if (" + recv_tmp + ".tag == SP_TAG_STR) " + tmp + " = " + sinc_rhs + ";")
+    end
     emit("  if (" + recv_tmp + ".tag == SP_TAG_OBJ) {")
  # User-class dispatch
     i = 0
@@ -20339,6 +20375,69 @@ class Compiler
       pphec = "(sp_PolyPolyHash_length((sp_PolyPolyHash *)" + recv_tmp + ".v.p) == 0)"
       ppherhs = is_poly_ret == 1 ? "sp_box_bool(" + pphec + ")" : pphec
       emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_POLY_POLY_HASH) " + result_tmp + " = " + ppherhs + ";")
+    end
+ # include? arms -- arg-type-keyed dispatch over the Array
+ # and Hash variants matching the arg's key family. Issue #558.
+ # Arrays use the per-element-type `_include` helpers; Hashes
+ # alias include? -> has_key? per CRuby semantics.
+    if mname == "include?" && arg_compiled.length >= 1
+      inc_arg_t = arg_types.length > 0 ? arg_types[0] : ""
+      inc_arg = arg_compiled[0]
+ # symbol arg: SymArray (sp_IntArray storage) + Sym-keyed Hash variants.
+      if inc_arg_t == "symbol"
+        ic = "sp_IntArray_include((sp_IntArray *)" + recv_tmp + ".v.p, (mrb_int)(" + inc_arg + "))"
+        irhs = is_poly_ret == 1 ? "sp_box_bool(" + ic + ")" : ic
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_ARRAY) " + result_tmp + " = " + irhs + ";")
+        sihc = "sp_SymIntHash_has_key((sp_SymIntHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        sihrhs = is_poly_ret == 1 ? "sp_box_bool(" + sihc + ")" : sihc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_INT_HASH) " + result_tmp + " = " + sihrhs + ";")
+        sshc = "sp_SymStrHash_has_key((sp_SymStrHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        sshrhs = is_poly_ret == 1 ? "sp_box_bool(" + sshc + ")" : sshc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_STR_HASH) " + result_tmp + " = " + sshrhs + ";")
+        sphc = "sp_SymPolyHash_has_key((sp_SymPolyHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        sphrhs = is_poly_ret == 1 ? "sp_box_bool(" + sphc + ")" : sphc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_POLY_HASH) " + result_tmp + " = " + sphrhs + ";")
+      end
+ # string arg: StrArray + Str-keyed Hash variants.
+      if inc_arg_t == "string" || inc_arg_t == "mutable_str"
+        sc = "sp_StrArray_include((sp_StrArray *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        srhs = is_poly_ret == 1 ? "sp_box_bool(" + sc + ")" : sc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_ARRAY) " + result_tmp + " = " + srhs + ";")
+        stihc = "sp_StrIntHash_has_key((sp_StrIntHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        stihrhs = is_poly_ret == 1 ? "sp_box_bool(" + stihc + ")" : stihc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_INT_HASH) " + result_tmp + " = " + stihrhs + ";")
+        ststhc = "sp_StrStrHash_has_key((sp_StrStrHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        ststhrhs = is_poly_ret == 1 ? "sp_box_bool(" + ststhc + ")" : ststhc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_STR_HASH) " + result_tmp + " = " + ststhrhs + ";")
+        stphc = "sp_StrPolyHash_has_key((sp_StrPolyHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        stphrhs = is_poly_ret == 1 ? "sp_box_bool(" + stphc + ")" : stphc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_POLY_HASH) " + result_tmp + " = " + stphrhs + ";")
+      end
+ # int arg: IntArray + Int-keyed Hash.
+      if inc_arg_t == "int"
+        iac = "sp_IntArray_include((sp_IntArray *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        iarhs = is_poly_ret == 1 ? "sp_box_bool(" + iac + ")" : iac
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) " + result_tmp + " = " + iarhs + ";")
+        ishc = "sp_IntStrHash_has_key((sp_IntStrHash *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        ishrhs = is_poly_ret == 1 ? "sp_box_bool(" + ishc + ")" : ishc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_STR_HASH) " + result_tmp + " = " + ishrhs + ";")
+      end
+ # float arg: FloatArray.
+      if inc_arg_t == "float"
+        fac = "sp_FloatArray_include((sp_FloatArray *)" + recv_tmp + ".v.p, " + inc_arg + ")"
+        farhs = is_poly_ret == 1 ? "sp_box_bool(" + fac + ")" : fac
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_FLT_ARRAY) " + result_tmp + " = " + farhs + ";")
+      end
+ # poly arg: PolyArray + PolyPolyHash.
+      if inc_arg_t == "poly" || inc_arg_t == ""
+        boxed_inc_arg = inc_arg_t == "poly" ? inc_arg : "sp_box_int(" + inc_arg + ")"
+        pac = "sp_PolyArray_include((sp_PolyArray *)" + recv_tmp + ".v.p, " + boxed_inc_arg + ")"
+        parhs = is_poly_ret == 1 ? "sp_box_bool(" + pac + ")" : pac
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_POLY_ARRAY) " + result_tmp + " = " + parhs + ";")
+        pphc = "sp_PolyPolyHash_has_key((sp_PolyPolyHash *)" + recv_tmp + ".v.p, " + boxed_inc_arg + ")"
+        pphrhs = is_poly_ret == 1 ? "sp_box_bool(" + pphc + ")" : pphc
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_POLY_POLY_HASH) " + result_tmp + " = " + pphrhs + ";")
+      end
     end
  # `<poly>.call(...)` arm for the SP_BUILTIN_PROC tag. When a
  # poly_array of procs is iterated (`[proc, ...].each { |p| p.call }`),

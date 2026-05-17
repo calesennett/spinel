@@ -12105,6 +12105,12 @@ class Compiler
     if mname == "empty?"
       return 1
     end
+ # include? exists on String / Array / Hash / Range but not
+ # on Integer; sibling of length/size for the body-usage
+ # widening. Issue #558.
+    if mname == "include?"
+      return 1
+    end
     0
   end
 

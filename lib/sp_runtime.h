@@ -1452,6 +1452,13 @@ static mrb_bool sp_PolyArray_eq(sp_PolyArray *a, sp_PolyArray *b) {
   }
   return TRUE;
 }
+static mrb_bool sp_PolyArray_include(sp_PolyArray *a, sp_RbVal v) {
+  if (!a) return FALSE;
+  for (mrb_int i = 0; i < a->len; i++) {
+    if (sp_poly_eq(a->data[i], v)) return TRUE;
+  }
+  return FALSE;
+}
 
 /* Mark the embedded GC reference inside an sp_RbVal (string or obj).
    Used as the scan hook for containers that store polymorphic values. */
