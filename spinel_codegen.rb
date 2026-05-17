@@ -18621,16 +18621,26 @@ class Compiler
  # for value-type cname the runtime is always exactly cname and
  # the cname == arg0 check collapses back to static TRUE.
     if mname == "instance_of?"
+      arg0 = ""
+      args_id = @nd_arguments[nid]
+      if args_id >= 0
+        a = get_args(args_id)
+        if a.length > 0
+          arg0 = resolve_introspection_arg_name(a[0])
+        end
+      end
+ # Built-in container classes: every Array variant
+ # (int_array / str_array / etc.) is conceptually `Array`
+ # in CRuby; every Hash variant is `Hash`. Static recv-type
+ # knowledge folds the check at compile time. Issue #562.
+      if arg0 == "Array" && is_array_type(recv_type) == 1
+        return "TRUE"
+      end
+      if arg0 == "Hash" && is_hash_type(recv_type) == 1
+        return "TRUE"
+      end
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
-        arg0 = ""
-        args_id = @nd_arguments[nid]
-        if args_id >= 0
-          a = get_args(args_id)
-          if a.length > 0
-            arg0 = resolve_introspection_arg_name(a[0])
-          end
-        end
         target_ci = find_class_idx(arg0)
         if target_ci >= 0 && (cname == arg0 || is_descendant(arg0, cname) == 1)
           if is_value_type_class(cname) == 1
@@ -20357,6 +20367,171 @@ class Compiler
     "(" + str_c + "[(mrb_int)" + idx_c + "] " + c_op + " '" + ch + "')"
   end
 
+ # Helper for compile_eq's `<container_op> == nil` shape.
+ # Returns the C truthy expression for the nil-on-miss check
+ # (negated when op is "!="), or "" when the shape isn't
+ # recognized so compile_eq falls through to its existing
+ # type-strict short-circuits. Issue #562.
+  def compile_container_op_nil_check(recv_nid, op)
+    mname = @nd_name[recv_nid]
+    inner_recv = @nd_receiver[recv_nid]
+    if inner_recv < 0
+      return ""
+    end
+    inner_t = infer_type(inner_recv)
+    inner_c = compile_expr(inner_recv)
+    args_id_c = @nd_arguments[recv_nid]
+ # arr[i] == nil -> (i < 0 || i >= len).
+    if mname == "[]" && is_array_type(inner_t) == 1 && args_id_c >= 0
+      a_c = get_args(args_id_c)
+      if a_c.length >= 1
+        idx_c = compile_expr(a_c[0])
+        len_fn = array_length_fn(inner_t)
+        if len_fn != ""
+          chk = "(" + idx_c + " < 0 || " + idx_c + " >= " + len_fn + "(" + inner_c + "))"
+          return op == "==" ? chk : "(!" + chk + ")"
+        end
+      end
+    end
+ # hash[k] == nil -> !has_key?(k). For int-leaf hashes the
+ # stored value 0 IS distinguishable from missing key via
+ # has_key, so the check is sound (Hash#[] returns nil on
+ # miss in CRuby).
+    if mname == "[]" && is_hash_type(inner_t) == 1 && args_id_c >= 0
+      a_c = get_args(args_id_c)
+      if a_c.length >= 1
+        has_key_fn = hash_has_key_fn(inner_t)
+        if has_key_fn != ""
+          key_c = hash_key_arg_for(inner_t, a_c[0])
+          chk = "(!" + has_key_fn + "(" + inner_c + ", " + key_c + "))"
+          return op == "==" ? chk : "(!" + chk + ")"
+        end
+      end
+    end
+ # arr.first / arr.last / arr.pop == nil -> (len == 0).
+ # pop on an empty array is a no-op in CRuby (returns nil),
+ # so the equality check pre-mutation answer is correct.
+    if (mname == "first" || mname == "last" || mname == "pop") && is_array_type(inner_t) == 1
+      len_fn = array_length_fn(inner_t)
+      if len_fn != "" && (args_id_c < 0 || get_args(args_id_c).length == 0)
+        chk = "(" + len_fn + "(" + inner_c + ") == 0)"
+        return op == "==" ? chk : "(!" + chk + ")"
+      end
+    end
+ # arr.delete_at(n) == nil -> (n < 0 || n >= len). Checked
+ # BEFORE the mutation; CRuby's delete_at returns nil on
+ # out-of-range without mutating.
+    if mname == "delete_at" && is_array_type(inner_t) == 1 && args_id_c >= 0
+      a_c = get_args(args_id_c)
+      if a_c.length >= 1
+        idx_c = compile_expr(a_c[0])
+        len_fn = array_length_fn(inner_t)
+        if len_fn != ""
+          chk = "(" + idx_c + " < 0 || " + idx_c + " >= " + len_fn + "(" + inner_c + "))"
+          return op == "==" ? chk : "(!" + chk + ")"
+        end
+      end
+    end
+ # arr.find_index(x) == nil -> !arr.include?(x).
+    if mname == "find_index" && is_array_type(inner_t) == 1 && args_id_c >= 0
+      a_c = get_args(args_id_c)
+      if a_c.length >= 1
+        inc_fn = array_include_fn(inner_t)
+        if inc_fn != ""
+          val_c = compile_expr(a_c[0])
+          chk = "(!" + inc_fn + "(" + inner_c + ", " + val_c + "))"
+          return op == "==" ? chk : "(!" + chk + ")"
+        end
+      end
+    end
+ # regex.match(str) == nil -> !regex.match?(str).
+    if mname == "match" && args_id_c >= 0
+      rpat = regex_pat_c_expr(inner_recv)
+      if rpat != ""
+        a_c = get_args(args_id_c)
+        if a_c.length >= 1
+          chk = "(!sp_re_match_p(" + rpat + ", " + compile_expr(a_c[0]) + "))"
+          return op == "==" ? chk : "(!" + chk + ")"
+        end
+      end
+    end
+    ""
+  end
+
+ # Helper: array-type -> length helper fn name.
+  def array_length_fn(t)
+    if t == "int_array" || t == "sym_array"
+      return "sp_IntArray_length"
+    end
+    if t == "float_array"
+      return "sp_FloatArray_length"
+    end
+    if t == "str_array"
+      return "sp_StrArray_length"
+    end
+    if t == "poly_array"
+      return "sp_PolyArray_length"
+    end
+    if t.end_with?("_ptr_array")
+      return "sp_PtrArray_length"
+    end
+    ""
+  end
+
+  def array_include_fn(t)
+    if t == "int_array" || t == "sym_array"
+      return "sp_IntArray_include"
+    end
+    if t == "float_array"
+      return "sp_FloatArray_include"
+    end
+    if t == "str_array"
+      return "sp_StrArray_include"
+    end
+    if t == "poly_array"
+      return "sp_PolyArray_include"
+    end
+    ""
+  end
+
+  def hash_has_key_fn(t)
+    if t == "str_int_hash"
+      return "sp_StrIntHash_has_key"
+    end
+    if t == "str_str_hash"
+      return "sp_StrStrHash_has_key"
+    end
+    if t == "str_poly_hash"
+      return "sp_StrPolyHash_has_key"
+    end
+    if t == "sym_int_hash"
+      return "sp_SymIntHash_has_key"
+    end
+    if t == "sym_str_hash"
+      return "sp_SymStrHash_has_key"
+    end
+    if t == "sym_poly_hash"
+      return "sp_SymPolyHash_has_key"
+    end
+    if t == "int_str_hash"
+      return "sp_IntStrHash_has_key"
+    end
+    if t == "poly_poly_hash"
+      return "sp_PolyPolyHash_has_key"
+    end
+    ""
+  end
+
+  def hash_key_arg_for(t, arg_id)
+    if t == "poly_poly_hash"
+      return box_expr_to_poly(arg_id)
+    end
+    if t.start_with?("str_")
+      return compile_expr_as_string(arg_id)
+    end
+    compile_expr(arg_id)
+  end
+
   def compile_eq(nid, op)
     recv = @nd_receiver[nid]
     lt = infer_type(recv)
@@ -20371,6 +20546,17 @@ class Compiler
     at = "int"
     if arg_id >= 0
       at = infer_type(arg_id)
+    end
+ # Container-op `== nil` / `!= nil` shapes that the typed
+ # returns can't represent at the value level (sp_IntArray_get
+ # returns 0 on out-of-range, not nil). Recognize the call
+ # shape on the lhs and emit a length / has_key check
+ # equivalent to CRuby's nil-on-miss semantics. Issue #562.
+    if at == "nil" && recv >= 0 && @nd_type[recv] == "CallNode"
+      r2 = compile_container_op_nil_check(recv, op)
+      if r2 != ""
+        return r2
+      end
     end
  # sp_Class equality via field compare.
  # Class is a value-type struct so plain `==` on a struct
