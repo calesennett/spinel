@@ -30730,6 +30730,132 @@ class Compiler
       pop_scope
       return tmp_arrn
     end
+ # arr.each_cons(n).map { |pair| body } -- fuse into a single
+ # loop. Block param may be `|pair|` (typed sub-array) or
+ # `|(a, b, ...)|` (nested destructure into individual locals,
+ # avoids the per-iteration window allocation). The outer .map's
+ # accumulator type tracks `infer_type(body_last)`: scalar bodies
+ # collect into the matching typed-array; array bodies collect
+ # into sp_PtrArray. Mirrors the N.times.map fusion above.
+    if recv_n >= 0 && @nd_type[recv_n] == "CallNode" && @nd_name[recv_n] == "each_cons" && @nd_block[recv_n] < 0
+      @needs_gc = 1
+      ec_inner_n = @nd_receiver[recv_n]
+      ec_inner_t = infer_type(ec_inner_n)
+      if is_array_type(ec_inner_t) == 1
+        ec_inner_pfx = array_c_prefix(ec_inner_t)
+        ec_elem_t = elem_type_of_array(ec_inner_t)
+        ec_inner_rc = compile_expr_gc_rooted(ec_inner_n)
+        ec_n_expr = compile_arg0(recv_n)
+        ec_blk_n = @nd_block[nid]
+ # Detect `|(a, b, ...)|` destructure: MultiTargetNode at the
+ # first required slot. parse_id_list(@nd_targets[mt_id]) gives
+ # the inner RequiredParameterNode ids; their `name` field is
+ # the local to bind. Without this, the block sees the window
+ # as a sub-array.
+        ec_destruct_names = "".split(",")
+        ec_bp_node = -1
+        if ec_blk_n >= 0
+          ec_bp_node = @nd_parameters[ec_blk_n]
+        end
+        ec_inner_params = -1
+        if ec_bp_node >= 0
+          ec_inner_params = @nd_parameters[ec_bp_node]
+        end
+        ec_reqs = []
+        if ec_inner_params >= 0
+          ec_reqs = parse_id_list(@nd_requireds[ec_inner_params])
+        end
+        if ec_reqs.length >= 1 && @nd_type[ec_reqs[0]] == "MultiTargetNode"
+          ec_lefts = parse_id_list(@nd_targets[ec_reqs[0]])
+          ec_li = 0
+          while ec_li < ec_lefts.length
+            ec_destruct_names.push(@nd_name[ec_lefts[ec_li]])
+            ec_li = ec_li + 1
+          end
+        end
+ # Result accumulator type from body's last-expression type.
+        ec_res_type = "int"
+        if ec_blk_n >= 0
+          ec_body_n = @nd_body[ec_blk_n]
+          if ec_body_n >= 0
+            ec_stmts_n = get_stmts(ec_body_n)
+            if ec_stmts_n.length > 0
+              ec_res_type = infer_type(ec_stmts_n.last)
+            end
+          end
+        end
+        ec_tmp_arr = new_temp
+        ec_nested = 0
+        if ec_res_type == "string"
+          @needs_str_array = 1
+          emit("  sp_StrArray *" + ec_tmp_arr + " = sp_StrArray_new();")
+        elsif ec_res_type == "float"
+          emit("  sp_FloatArray *" + ec_tmp_arr + " = sp_FloatArray_new();")
+        elsif is_array_type(ec_res_type) == 1
+          ec_nested = 1
+          emit("  sp_PtrArray *" + ec_tmp_arr + " = sp_PtrArray_new();")
+        else
+          @needs_int_array = 1
+          emit("  sp_IntArray *" + ec_tmp_arr + " = sp_IntArray_new();")
+        end
+        emit("  SP_GC_ROOT(" + ec_tmp_arr + ");")
+        ec_i = new_temp
+        ec_j = new_temp
+        ec_len = new_temp
+        emit("  mrb_int " + ec_len + " = sp_" + ec_inner_pfx + "_length(" + ec_inner_rc + ");")
+        emit("  for (mrb_int " + ec_i + " = 0; " + ec_i + " + " + ec_n_expr + " <= " + ec_len + "; " + ec_i + "++) {")
+        push_scope
+        ec_pair_bp = ""
+        if ec_destruct_names.length > 0
+ # Destructure: bind each inner name directly to a window slot;
+ # no sub-array allocation.
+          ec_di = 0
+          while ec_di < ec_destruct_names.length
+            ec_slot = "lv_" + ec_destruct_names[ec_di]
+            emit("    " + c_type(ec_elem_t) + " " + ec_slot + " = sp_" + ec_inner_pfx + "_get(" + ec_inner_rc + ", " + ec_i + " + " + ec_di.to_s + ");")
+            declare_var(ec_destruct_names[ec_di], ec_elem_t)
+            ec_di = ec_di + 1
+          end
+        else
+ # Non-destructure: build the window sub-array as the block param.
+          ec_pair_bp = get_block_param(nid, 0)
+          if ec_pair_bp == ""
+            ec_pair_bp = "_pair"
+          end
+          emit("    " + c_type(ec_inner_t) + " lv_" + ec_pair_bp + " = sp_" + ec_inner_pfx + "_new();")
+          emit("    SP_GC_ROOT(lv_" + ec_pair_bp + ");")
+          emit("    for (mrb_int " + ec_j + " = 0; " + ec_j + " < " + ec_n_expr + "; " + ec_j + "++)")
+          emit("      sp_" + ec_inner_pfx + "_push(lv_" + ec_pair_bp + ", sp_" + ec_inner_pfx + "_get(" + ec_inner_rc + ", " + ec_i + " + " + ec_j + "));")
+          declare_var(ec_pair_bp, ec_inner_t)
+        end
+        @indent = @indent + 1
+        if ec_blk_n >= 0
+          ec_body_n2 = @nd_body[ec_blk_n]
+          ec_stmts_n2 = get_stmts(ec_body_n2)
+          if ec_stmts_n2.length > 0
+            ec_k = 0
+            while ec_k < ec_stmts_n2.length - 1
+              compile_stmt(ec_stmts_n2[ec_k])
+              ec_k = ec_k + 1
+            end
+            ec_lastv = compile_expr(ec_stmts_n2.last)
+            if ec_res_type == "string"
+              emit("  sp_StrArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
+            elsif ec_res_type == "float"
+              emit("  sp_FloatArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
+            elsif ec_nested == 1
+              emit("  sp_PtrArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
+            else
+              emit("  sp_IntArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
+            end
+          end
+        end
+        @indent = @indent - 1
+        pop_scope
+        emit("  }")
+        return ec_tmp_arr
+      end
+    end
     rt = infer_type(@nd_receiver[nid])
  # `precomputed_rc` comes from compile_call_expr's pre-compute
  # (issue #540). When non-empty it's already a typed-and-rooted

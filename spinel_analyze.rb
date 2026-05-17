@@ -4566,6 +4566,32 @@ class Compiler
       end
       return "int_array"
     end
+ # `each_cons(n)` / `each_slice(n)` blockless: returns an array of
+ # sub-arrays of the same kind as the receiver. The chain-fusion
+ # paths in codegen (compile_map_expr / compile_each_block for
+ # ptr_array) consume this so a downstream `.map`, `.drop`, `.take`
+ # sees the correct ptr_array element type and doesn't fall back
+ # to the `cannot resolve call` emit-0 default.
+    if mname == "each_cons" || mname == "each_slice"
+      if recv >= 0 && @nd_block[nid] < 0
+        rt_ec = infer_type(recv)
+        if rt_ec == "int_array"
+          return "int_array_ptr_array"
+        end
+        if rt_ec == "str_array"
+          return "str_array_ptr_array"
+        end
+        if rt_ec == "float_array"
+          return "float_array_ptr_array"
+        end
+        if rt_ec == "sym_array"
+          return "sym_array_ptr_array"
+        end
+        if rt_ec == "poly_array"
+          return "poly_array_ptr_array"
+        end
+      end
+    end
     if mname == "sort"
       if recv >= 0
         return infer_type(recv)
