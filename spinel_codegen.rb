@@ -10778,6 +10778,10 @@ class Compiler
     if t == "bool"
       return expr
     end
+ # Legacy =~ truthy specialization -- no longer needed in steady
+ # state since the operator returns poly (sp_RbVal nil/Integer)
+ # and the t == "poly" arm above absorbs it. Kept as a safety net
+ # for any pre-poly call site that still surfaces an int-typed =~.
     if regex_match_call_node?(nid)
       return "(" + expr + " >= 0)"
     end
@@ -10799,6 +10803,14 @@ class Compiler
   end
 
   def truthy_node_expr(nid, t, expr)
+ # Same poly-first ordering as compile_cond_expr: with =~ now
+ # typed poly, the type-based dispatch (sp_poly_truthy via
+ # truthy_c_expr) handles nil correctly. The legacy `>= 0` arm
+ # only fires if t isn't poly -- a pre-poly call site that
+ # somehow surfaces an int-typed =~.
+    if t == "poly"
+      return truthy_c_expr(t, expr)
+    end
     if regex_match_call_node?(nid)
       return "(" + expr + " >= 0)"
     end
@@ -11499,6 +11511,23 @@ class Compiler
       end
       if gname == "$?"
         return "sp_last_status"
+      end
+ # Regex match globals -- Prism delivers `$~`, `$&`, `$``, `$'`
+ # as GlobalVariableReadNode rather than BackReferenceReadNode.
+ # spinel populates sp_re_match_str / _pre / _post in
+ # sp_re_set_captures; $~ falls back to $& since there's no
+ # MatchData wrapper. Null-guards match the BackReferenceReadNode
+ # arm above so unused reads return "" (CRuby returns nil for
+ # post-no-match $~; that divergence is the same one this arm
+ # already had for the BackReferenceReadNode path).
+      if gname == "$&" || gname == "$~"
+        return "(sp_re_match_str ? sp_re_match_str : \"\")"
+      end
+      if gname == "$`"
+        return "(sp_re_match_pre ? sp_re_match_pre : \"\")"
+      end
+      if gname == "$'"
+        return "(sp_re_match_post ? sp_re_match_post : \"\")"
       end
  # General global variable
       return sanitize_gvar(gname)
@@ -12999,6 +13028,12 @@ class Compiler
             sc = compile_expr(arg_ids[0])
             if mname == "match?"
               return "sp_re_match_p(" + rpat + ", " + sc + ")"
+            end
+            if mname == "=~"
+ # CRuby-compatible nil/Integer return (sp_re_match_poly)
+ # so `.nil?` and direct value observation work.
+              @needs_rb_value = 1
+              return "sp_re_match_poly(" + rpat + ", " + sc + ")"
             end
             return "sp_re_match(" + rpat + ", " + sc + ")"
           end
@@ -14756,8 +14791,9 @@ class Compiler
       return "(" + compile_expr(recv) + " >= " + compile_arg0(nid) + ")"
     end
     if mname == "=~"
- # str =~ /pattern/ → sp_re_match(pat, str). Pattern source can be
- # a static literal, a regex-typed local/const (find_regexp_index),
+ # str =~ /pattern/ → sp_re_match_poly(pat, str) so the result is
+ # sp_RbVal nil/Integer matching CRuby. Pattern source can be a
+ # static literal, a regex-typed local/const (find_regexp_index),
  # or InterpolatedRegularExpressionNode (runtime-compiled).
       rc = compile_expr_gc_rooted(recv)
       re_args_id = @nd_arguments[nid]
@@ -14766,11 +14802,13 @@ class Compiler
         if argl.length > 0
           rpat = regex_pat_c_expr(argl[0])
           if rpat != ""
-            return "sp_re_match(" + rpat + ", " + rc + ")"
+            @needs_rb_value = 1
+            return "sp_re_match_poly(" + rpat + ", " + rc + ")"
           end
         end
       end
-      return "(-1)"
+      @needs_rb_value = 1
+      return "sp_box_nil()"
     end
     if mname == "=="
       return compile_eq(nid, "==")

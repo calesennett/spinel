@@ -1365,6 +1365,13 @@ static sp_RbVal sp_str_index_poly(const char *s, const char *sub) { mrb_int n = 
 static sp_RbVal sp_str_index_from_poly(const char *s, const char *sub, mrb_int start) { mrb_int n = sp_str_index_from(s, sub, start); return n < 0 ? sp_box_nil() : sp_box_int(n); }
 static sp_RbVal sp_str_rindex_poly(const char *s, const char *sub) { mrb_int n = sp_str_rindex(s, sub); return n < 0 ? sp_box_nil() : sp_box_int(n); }
 static sp_RbVal sp_re_rindex_poly(mrb_regexp_pattern *pat, const char *str) { mrb_int n = sp_re_rindex(pat, str); return n < 0 ? sp_box_nil() : sp_box_int(n); }
+/* CRuby-compatible =~ wrapper: SP_TAG_INT(pos) on match, SP_TAG_NIL
+   on miss. Codegen routes the `=~` operator here so
+   `("abc" =~ /xyz/).nil?` answers true and `puts("abc" =~ /xyz/)`
+   prints an empty line, matching CRuby. The raw `sp_re_match`
+   (returning -1) stays available for internal callers needing the
+   sentinel form. */
+static sp_RbVal sp_re_match_poly(mrb_regexp_pattern *pat, const char *str) { mrb_int n = sp_re_match(pat, str); return n < 0 ? sp_box_nil() : sp_box_int(n); }
 static sp_RbVal sp_box_nullable_obj(void *p, int cls_id) { return p ? sp_box_obj(p, cls_id) : sp_box_nil(); }
 /* Built-in pointer boxes — share SP_TAG_OBJ with a reserved negative
    cls_id so the dispatch path is uniform. */

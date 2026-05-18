@@ -1522,6 +1522,22 @@ class Compiler
  # Prism: IGNORE_CASE=4, EXTENDED=8, MULTI_LINE=16.
  # Engine: IGNORECASE=1, MULTILINE=2, DOTALL=4, EXTENDED=8.
  # Ruby's /m (dot-matches-newline) maps to MULTILINE|DOTALL = 6.
+ # Returns 1 if `name` is a Ruby global that spinel implements via
+ # something other than a per-program `gv_<name>` C global slot. These
+ # are skipped during @gvar_names registration so they don't show up
+ # as `static mrb_int gv_~ = 0;` declarations (which the C parser
+ # rejects -- `~` isn't an identifier character). Read sites handle
+ # the dispatch directly in compile_expr's GlobalVariableReadNode arm.
+  def is_special_gvar(name)
+    if name == "$stderr" || name == "$stdout" || name == "$?"
+      return 1
+    end
+    if name == "$~" || name == "$&" || name == "$`" || name == "$'"
+      return 1
+    end
+    0
+  end
+
   def regex_engine_flags(nid)
     if @nd_flags[nid] == 0
       return "0"
@@ -2207,6 +2223,13 @@ class Compiler
  # registered type so the C codegen sees the correct format
  # specifier when interpolating or printing.
       gname = resolve_gvar_alias(@nd_name[nid])
+ # Regex match globals -- Prism categorizes `$~`, `$&`, `$``, `$'`
+ # as GlobalVariableReadNode (not BackReferenceReadNode), so they
+ # arrive here. All map to the matched-string view spinel exposes
+ # via sp_re_match_* C globals (there's no MatchData wrapper).
+      if gname == "$~" || gname == "$&" || gname == "$`" || gname == "$'"
+        return "string"
+      end
       gi = 0
       while gi < @gvar_names.length
         if @gvar_names[gi] == gname
@@ -3475,7 +3498,11 @@ class Compiler
       return "int"
     end
     if mname == "=~"
-      return "int"
+ # CRuby returns Integer|nil; spinel routes to sp_re_match_poly so
+ # `.nil?` / `== nil` answer correctly and direct value observation
+ # (`puts(s =~ /xyz/)`) prints "" not "-1".
+      @needs_rb_value = 1
+      return "poly"
     end
     if mname == "<<"
       if recv >= 0
@@ -17911,7 +17938,7 @@ class Compiler
  # $orig and $copy as two slots that resolve to the same C
  # global and fire a spurious type-mismatch error.
       gname = resolve_gvar_alias(@nd_name[nid])
-      if gname != "$stderr" && gname != "$stdout" && gname != "$?"
+      if is_special_gvar(gname) == 0
         gt = infer_type(@nd_expression[nid])
         if not_in(gname, @gvar_names) == 1
           @gvar_names.push(gname)
@@ -17935,7 +17962,7 @@ class Compiler
  # Same alias resolution as the write side -- $copy reads must
  # land on $orig's slot.
       gname = resolve_gvar_alias(@nd_name[nid])
-      if gname != "$stderr" && gname != "$stdout" && gname != "$?"
+      if is_special_gvar(gname) == 0
         if not_in(gname, @gvar_names) == 1
           @gvar_names.push(gname)
  # $PROGRAM_NAME and $0 are Ruby's standard aliases for the
