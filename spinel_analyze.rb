@@ -1540,6 +1540,45 @@ class Compiler
     parts.join("|")
   end
 
+ # Returns the literal source string when `nid` is a `Regexp.new("...")`
+ # (or `Regexp.compile("...")`) call with a single StringNode argument,
+ # "" otherwise. Lets `pattern = Regexp.new("foo")` fold into the same
+ # static pattern table as `pattern = /foo/`, so `pattern.match?(s)`
+ # dispatches through `sp_re_pat_<i>` instead of falling through to
+ # unresolved-call. Dynamic-arg forms return "" and fall back.
+  def regexp_new_literal_pattern(nid)
+    if @nd_type[nid] != "CallNode"
+      return ""
+    end
+    mn = @nd_name[nid]
+    if mn != "new" && mn != "compile"
+      return ""
+    end
+    recv = @nd_receiver[nid]
+    if recv < 0
+      return ""
+    end
+    if @nd_type[recv] != "ConstantReadNode"
+      return ""
+    end
+    if @nd_name[recv] != "Regexp"
+      return ""
+    end
+    args_id = @nd_arguments[nid]
+    if args_id < 0
+      return ""
+    end
+    arg_ids = get_args(args_id)
+    if arg_ids.length == 0
+      return ""
+    end
+    a0 = arg_ids[0]
+    if @nd_type[a0] != "StringNode"
+      return ""
+    end
+    @nd_content[a0]
+  end
+
  # Index of an InterpolatedRegularExpressionNode in @dyn_regex_node_ids,
  # or -1 if scan_features hasn't registered it (defensive — should not
  # happen for any reachable node).
@@ -5288,6 +5327,19 @@ class Compiler
  # separate Issue; codegen rejects it as unresolved.
           if rn == "Time"
             return "time"
+          end
+ # `Regexp.new(literal)` / `Regexp.compile(literal)` registers the
+ # pattern with the static regex table (scan_features arm) and the
+ # local-name → pattern map (LocalVariableWriteNode arm). The LV
+ # itself carries no useful runtime payload — match?/=~/match all
+ # dispatch through `regex_pat_c_expr` at the call site, which
+ # resolves the LV via `@local_regex_names` and emits the global
+ # `sp_re_pat_<i>`. Type the call as "int" so the LV lowers to
+ # `mrb_int lv_x = 0;` (the same shape `pattern = /foo/` produces).
+          if rn == "Regexp"
+            if regexp_new_literal_pattern(nid) != ""
+              return "int"
+            end
           end
           return "obj_" + rn
         end
@@ -17654,6 +17706,29 @@ class Compiler
         @regexp_flags.push(flags)
       end
     end
+ # `Regexp.new("literal")` / `Regexp.compile("literal")` folds into
+ # the same static pattern table so `.match?`/`=~` dispatch through
+ # `sp_re_pat_<i>` like a `/literal/` literal. Dynamic-arg forms
+ # (`Regexp.new(s)` with a non-literal arg) return "" from the helper
+ # and are left to the existing fallback (currently unresolved).
+    if t == "CallNode"
+      rxlit = regexp_new_literal_pattern(nid)
+      if rxlit != ""
+        @needs_regexp = 1
+        already_rx = 0
+        rxi = 0
+        while rxi < @regexp_patterns.length
+          if @regexp_patterns[rxi] == rxlit
+            already_rx = 1
+          end
+          rxi = rxi + 1
+        end
+        if already_rx == 0
+          @regexp_patterns.push(rxlit)
+          @regexp_flags.push("0")
+        end
+      end
+    end
  # Track `var = /lit/` so a regex held in a local can be dispatched
  # by find_regexp_index. A name with multiple writes (any kind, any
  # regex literal) is marked ambiguous (-1) and falls through.
@@ -17673,6 +17748,22 @@ class Compiler
             this_idx = ri
           end
           ri = ri + 1
+        end
+      end
+ # `var = Regexp.new("lit")` resolves the same way as `var = /lit/`,
+ # so the local-name → pattern mapping records the static index and
+ # `var.match?(s)` reaches the engine.
+      if this_idx == -1 && vid >= 0
+        rxlit2 = regexp_new_literal_pattern(vid)
+        if rxlit2 != ""
+          scan_features(vid)
+          ri2 = 0
+          while ri2 < @regexp_patterns.length
+            if @regexp_patterns[ri2] == rxlit2
+              this_idx = ri2
+            end
+            ri2 = ri2 + 1
+          end
         end
       end
       i2 = 0

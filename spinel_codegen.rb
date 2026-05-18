@@ -1689,6 +1689,21 @@ class Compiler
       end
       return -1
     end
+ # `Regexp.new("lit")` / `Regexp.compile("lit")` resolves to the same
+ # pattern table, so `Regexp.new("foo").match?(s)` and the LV-bound
+ # form `pat = Regexp.new("foo"); pat.match?(s)` both dispatch through
+ # `sp_re_pat_<i>` instead of falling through to unresolved-call.
+    rxlit_cg = regexp_new_literal_pattern(nid)
+    if rxlit_cg != ""
+      ci = 0
+      while ci < @regexp_patterns.length
+        if @regexp_patterns[ci] == rxlit_cg
+          return ci
+        end
+        ci = ci + 1
+      end
+      return -1
+    end
  # A constant initialized to a regex literal forwards to the
  # underlying pattern, so `RX = /pat/; RX.match?(s)` and
  # `s =~ RX` dispatch to the engine instead of falling through
@@ -1709,6 +1724,11 @@ class Compiler
             end
           end
           if eid >= 0 && @nd_type[eid] == "RegularExpressionNode"
+            return find_regexp_index(eid)
+          end
+ # `RE = Regexp.new("lit")` — recurse so the CallNode arm below
+ # resolves it through the same static pattern table as `RE = /lit/`.
+          if eid >= 0 && regexp_new_literal_pattern(eid) != ""
             return find_regexp_index(eid)
           end
         end
@@ -1755,6 +1775,44 @@ class Compiler
  # Prism: IGNORE_CASE=4, EXTENDED=8, MULTI_LINE=16.
  # Engine: IGNORECASE=1, MULTILINE=2, DOTALL=4, EXTENDED=8.
  # Ruby's /m (dot-matches-newline) maps to MULTILINE|DOTALL = 6.
+
+ # Returns the literal source string when `nid` is a `Regexp.new("...")`
+ # (or `Regexp.compile("...")`) call with a single StringNode argument,
+ # "" otherwise. Mirrors the helper in spinel_analyze.rb so codegen
+ # `find_regexp_index` can resolve the call to the same static pattern
+ # registered by scan_features.
+  def regexp_new_literal_pattern(nid)
+    if @nd_type[nid] != "CallNode"
+      return ""
+    end
+    mn = @nd_name[nid]
+    if mn != "new" && mn != "compile"
+      return ""
+    end
+    recv = @nd_receiver[nid]
+    if recv < 0
+      return ""
+    end
+    if @nd_type[recv] != "ConstantReadNode"
+      return ""
+    end
+    if @nd_name[recv] != "Regexp"
+      return ""
+    end
+    args_id = @nd_arguments[nid]
+    if args_id < 0
+      return ""
+    end
+    arg_ids = get_args(args_id)
+    if arg_ids.length == 0
+      return ""
+    end
+    a0 = arg_ids[0]
+    if @nd_type[a0] != "StringNode"
+      return ""
+    end
+    @nd_content[a0]
+  end
 
  # Index of an InterpolatedRegularExpressionNode in @dyn_regex_node_ids,
  # or -1 if scan_features hasn't registered it (defensive — should not
@@ -13018,6 +13076,13 @@ class Compiler
         return r
       end
     end
+ # `Regexp.compile("literal")` — CRuby alias for Regexp.new. Same
+ # handling as the .new arm in compile_constructor_expr: the call
+ # value is unused at runtime, so emit "0" to satisfy the LV/const
+ # assignment without dropping a warning.
+    if mname == "compile" && regexp_new_literal_pattern(nid) != ""
+      return "0"
+    end
 
     recv_type = infer_type(recv)
  # Nullable receiver: dispatch identically to the base type. The
@@ -14825,6 +14890,19 @@ class Compiler
       if cname == "Proc"
         if @nd_block[nid] >= 0
           return compile_proc_literal(nid)
+        end
+      end
+ # `Regexp.new("literal")` — the pattern was registered by
+ # scan_features into the static regex table and the LV (if any)
+ # was bound to it via `@local_regex_names`. The value emitted for
+ # the call itself is unused at runtime: `pattern.match?(s)` /
+ # `=~ pattern` / etc. resolve via `regex_pat_c_expr` at the call
+ # site and dispatch to `sp_re_pat_<i>` directly. Emit `0` (the
+ # int placeholder the LV declares) instead of falling through to
+ # the unresolved-call warning.
+      if cname == "Regexp"
+        if regexp_new_literal_pattern(nid) != ""
+          return "0"
         end
       end
       if cname == "Array"
