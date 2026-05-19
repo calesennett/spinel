@@ -12962,6 +12962,21 @@ class Compiler
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
 
+ # `Regexp.new(<arg>)` / `Regexp.compile(<arg>)` evaluates to a
+ # `mrb_regexp_pattern *`. regex_pat_c_expr already maps it to
+ # `sp_re_pat_<i>` (literal source) or `sp_re_dyn_<i>(<arg>)`
+ # (dynamic source), so a regexp-typed local can store the
+ # pointer directly. Without this arm the call fell through to
+ # the unresolved-call fallback (silently `0`), which the
+ # @local_regex_idx side-channel papered over for single-writer
+ # locals but couldn't repair across an if/else union. Issue #609.
+    if regexp_new_call_arg_id(nid) >= 0
+      rp_new = regex_pat_c_expr(nid)
+      if rp_new != ""
+        return rp_new
+      end
+    end
+
  # Return CRuby's first-call default ("DEFAULT") since Spinel does
  # not track per-signal state. Covers both implicit-self and
  # explicit Signal / ::Signal receivers via trap_call_is_signal_stub.
@@ -13353,6 +13368,13 @@ class Compiler
  # for `/foo_#{x}/.match?(s)` (rare but valid).
     if recv >= 0 && (mname == "match?" || mname == "=~" || mname == "match")
       rpat = regex_pat_c_expr(recv)
+ # regexp-typed receiver (the local stored a real
+ # mrb_regexp_pattern * — typically from an if/else union where
+ # the side-channel lookup can't pick a single index). Use the
+ # local's value directly.
+      if rpat == "" && infer_type(recv) == "regexp"
+        rpat = compile_expr(recv)
+      end
       if rpat != ""
         args_id = @nd_arguments[nid]
         if args_id >= 0

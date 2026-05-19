@@ -3036,6 +3036,19 @@ class Compiler
       end
     end
 
+ # `Regexp.new(<arg>)` / `Regexp.compile(<arg>)` returns a compiled
+ # pattern. Static type is the new `regexp` (mrb_regexp_pattern *),
+ # so an if/else that builds patterns in both arms unifies cleanly
+ # instead of collapsing to int and losing the .match? dispatch
+ # downstream. Issue #609. The existing single-write side-channel
+ # in codegen still inlines literal/dyn references through
+ # regex_pat_c_expr; the regexp type is what survives across the
+ # multi-write boundary (the new LV write emit assigns the pointer
+ # to lv_<name>, the new .match? recv arm uses it).
+    if regexp_new_call_arg_id(nid) >= 0
+      return "regexp"
+    end
+
  # Methods on a `rescue => e` bound exception variable. The variable
  # itself is string-typed but .class / .message / .to_s / .inspect /
  # .full_message return strings; .backtrace returns nil for now.
