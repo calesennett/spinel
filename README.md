@@ -120,7 +120,7 @@ matching codegen / C variant) so the regression surfaces immediately.
 ## Benchmarks
 
 384 tests pass. 52 benchmarks pass.
-Geometric mean: **~6.8x faster** than Ruby 4.0.4 with `--yjit` across
+Geometric mean: **~7.8x faster** than Ruby 4.0.4 with `--yjit` across
 the 28 benchmarks below. Baseline is CRuby 4.0.4 (stable), run with
 `--disable-gems` and with `--yjit` for the JIT column. Each timing is
 the best of three wall-clock runs; sub-10 ms cells are dominated by
@@ -130,44 +130,44 @@ interpreter / runtime startup and should be read as "noise floor."
 
 | Benchmark | Spinel | Ruby 4.0.4 | + YJIT | Speedup vs YJIT |
 |---|---|---|---|---|
-| mandelbrot | 24 ms | 1_318 ms | 1_346 ms | 56.1x |
-| nqueens | 9 ms | 310 ms | 309 ms | 34.3x |
-| matmul | 9 ms | 300 ms | 301 ms | 33.4x |
-| life (Conway's GoL) | 23 ms | 865 ms | 495 ms | 21.5x |
-| partial_sums | 79 ms | 1_313 ms | 1_303 ms | 16.5x |
-| sieve | 25 ms | 407 ms | 408 ms | 16.3x |
-| sudoku | 5 ms | 102 ms | 53 ms | 10.6x |
+| mandelbrot | 24 ms | 1_339 ms | 1_340 ms | 55.8x |
+| nqueens | 9 ms | 312 ms | 311 ms | 34.6x |
+| matmul | 9 ms | 302 ms | 303 ms | 33.7x |
+| life (Conway's GoL) | 23 ms | 861 ms | 497 ms | 21.6x |
+| partial_sums | 80 ms | 1_324 ms | 1_310 ms | 16.4x |
+| sieve | 25 ms | 406 ms | 409 ms | 16.4x |
+| sudoku | 6 ms | 103 ms | 54 ms | 9.0x |
 | fannkuch | 2 ms | 15 ms | 15 ms | 7.5x |
-| ackermann | 9 ms | 344 ms | 59 ms | 6.6x |
-| fib (recursive) | 16 ms | 535 ms | 95 ms | 5.9x |
-| fasta (DNA seq gen) | 3 ms | 14 ms | 15 ms | 5.0x |
-| tarai | 27 ms | 399 ms | 69 ms | 2.6x |
-| tak | 35 ms | 497 ms | 82 ms | 2.3x |
+| fasta (DNA seq gen) | 2 ms | 14 ms | 14 ms | 7.0x |
+| ackermann | 9 ms | 343 ms | 60 ms | 6.7x |
+| fib (recursive) | 15 ms | 538 ms | 95 ms | 6.3x |
+| tarai | 28 ms | 400 ms | 70 ms | 2.5x |
+| tak | 34 ms | 502 ms | 82 ms | 2.4x |
 
 ### Data Structures & GC
 
 | Benchmark | Spinel | Ruby 4.0.4 | + YJIT | Speedup vs YJIT |
 |---|---|---|---|---|
-| so_lists | 35 ms | 483 ms | 303 ms | 8.7x |
-| rbtree (red-black tree) | 21 ms | 520 ms | 114 ms | 5.4x |
-| splay tree | 15 ms | 177 ms | 64 ms | 4.3x |
-| binary_trees | 5 ms | 36 ms | 20 ms | 4.0x |
-| huffman (encoding) | 17 ms | 63 ms | 64 ms | 3.8x |
-| gcbench | 516 ms | 3_449 ms | 1_757 ms | 3.4x |
-| linked_list | 67 ms | 299 ms | 224 ms | 3.3x |
+| huffman (encoding) | 7 ms | 63 ms | 64 ms | 9.1x |
+| so_lists | 35 ms | 485 ms | 299 ms | 8.5x |
+| rbtree (red-black tree) | 20 ms | 521 ms | 113 ms | 5.6x |
+| splay tree | 14 ms | 179 ms | 65 ms | 4.6x |
+| binary_trees | 5 ms | 36 ms | 19 ms | 3.8x |
+| linked_list | 71 ms | 306 ms | 236 ms | 3.3x |
+| gcbench | 553 ms | 3_455 ms | 1_783 ms | 3.2x |
 
 ### Real-World Programs
 
 | Benchmark | Spinel | Ruby 4.0.4 | + YJIT | Speedup vs YJIT |
 |---|---|---|---|---|
-| str_concat | 1 ms | 10 ms | 11 ms | 11.0x |
-| ao_render (ray tracer) | 103 ms | 3_015 ms | 1_125 ms | 10.9x |
+| ao_render (ray tracer) | 103 ms | 3_033 ms | 1_122 ms | 10.9x |
+| str_concat | 1 ms | 10 ms | 10 ms | 10.0x |
 | bigint_fib (1000 digits) | 1 ms | 10 ms | 10 ms | 10.0x |
+| json_parse | 41 ms | 413 ms | 275 ms | 6.7x |
 | pidigits (bigint) | 2 ms | 10 ms | 10 ms | 5.0x |
-| csv_process | 250 ms | 1_046 ms | 922 ms | 3.7x |
-| io_wordcount | 27 ms | 109 ms | 99 ms | 3.7x |
-| template engine | 275 ms | 1_013 ms | 713 ms | 2.6x |
-| json_parse | 296 ms | 413 ms | 276 ms | 0.93x |
+| template engine | 170 ms | 1_020 ms | 723 ms | 4.3x |
+| io_wordcount | 27 ms | 107 ms | 100 ms | 3.7x |
+| csv_process | 255 ms | 1_050 ms | 924 ms | 3.6x |
 
 A few notes on what YJIT does and doesn't change. On some integer-loop
 workloads (mandelbrot, nqueens, matmul, partial_sums, sieve) YJIT's
@@ -175,9 +175,9 @@ numbers are essentially identical to interpreted Ruby; the benchmark
 is bound by integer / float operations that the interpreter already
 runs at native speed. On call-heavy code (ackermann, fib, tarai, tak,
 rbtree) YJIT gives a real 4-6x lift, but Spinel still wins by ahead-
-of-time specialization. `json_parse` is the one win for YJIT: its
-inner loop is dominated by `String` method dispatch that YJIT inlines
-well, and Spinel's polymorphic-receiver path costs about 7% extra.
+of-time specialization. The two YJIT-only weak spots remaining are
+`tarai` and `tak`, where YJIT inlines the recursive call site so well
+that Spinel's compiled C only beats it by ~2.4x.
 
 ## Supported Ruby Features
 
