@@ -276,7 +276,63 @@ static inline int sp_utf8_char_len(unsigned char c){if(c<0x80)return 1;if(c<0xC0
 static inline int sp_utf8_advance(const char*p){int cn=sp_utf8_char_len((unsigned char)*p);int i=1;while(i<cn&&((unsigned char)p[i]&0xC0)==0x80)i++;return i;}
 static inline int sp_utf8_decode(const char*p,uint32_t*out){unsigned char c=(unsigned char)p[0];if(c<0x80){*out=c;return 1;}if(c<0xC0){*out=c;return 1;}unsigned char c1=(unsigned char)p[1];if((c1&0xC0)!=0x80){*out=c;return 1;}if(c<0xE0){*out=((uint32_t)(c&0x1F)<<6)|(c1&0x3F);return 2;}unsigned char c2=(unsigned char)p[2];if((c2&0xC0)!=0x80){*out=c;return 1;}if(c<0xF0){*out=((uint32_t)(c&0x0F)<<12)|((uint32_t)(c1&0x3F)<<6)|(c2&0x3F);return 3;}unsigned char c3=(unsigned char)p[3];if((c3&0xC0)!=0x80){*out=c;return 1;}*out=((uint32_t)(c&0x07)<<18)|((uint32_t)(c1&0x3F)<<12)|((uint32_t)(c2&0x3F)<<6)|(c3&0x3F);return 4;}
 static inline int sp_utf8_encode(uint32_t cp,char*out){if(cp<0x80){out[0]=(char)cp;return 1;}if(cp<0x800){out[0]=(char)(0xC0|(cp>>6));out[1]=(char)(0x80|(cp&0x3F));return 2;}if(cp<0x10000){out[0]=(char)(0xE0|(cp>>12));out[1]=(char)(0x80|((cp>>6)&0x3F));out[2]=(char)(0x80|(cp&0x3F));return 3;}out[0]=(char)(0xF0|(cp>>18));out[1]=(char)(0x80|((cp>>12)&0x3F));out[2]=(char)(0x80|((cp>>6)&0x3F));out[3]=(char)(0x80|(cp&0x3F));return 4;}
-static mrb_int sp_str_length(const char*s){size_t bl=sp_str_byte_len(s);const char*end=s+bl;mrb_int n=0;while(s<end){s+=sp_utf8_advance(s);n++;}return n;}
+/* Direct-mapped pointer-keyed cache for (byte_len, char_len). Populated lazily
+   by sp_str_length / sp_utf8_byte_offset; the same entries unlock both calls
+   so iterating a single string with `s.length` + `s[i]` walks UTF-8 once
+   instead of per access. ASCII strings (char_len == byte_len) take an O(1)
+   byte_offset fast path. Cleared by sp_str_sweep so freed-and-reused heap
+   addresses can't leak stale entries. Skipped for sp_String wrappers (marker
+   0xfd) whose buffers can move on realloc. */
+#define SP_STR_LCACHE_BITS 5
+#define SP_STR_LCACHE_SIZE (1u << SP_STR_LCACHE_BITS)
+static struct sp_str_lcache_entry {
+  const char *s;
+  size_t byte_len;
+  mrb_int char_len;
+} sp_str_lcache[SP_STR_LCACHE_SIZE];
+
+static inline unsigned sp_str_lcache_hash(const char *s) {
+  uintptr_t k = (uintptr_t)s;
+  return (unsigned)((k ^ (k >> 4) ^ (k >> 12)) & (SP_STR_LCACHE_SIZE - 1));
+}
+
+static inline void sp_str_lcache_clear(void) {
+  for (unsigned i = 0; i < SP_STR_LCACHE_SIZE; i++) sp_str_lcache[i].s = NULL;
+}
+
+/* Count UTF-8 code points in s[0..bl). The 8-byte ASCII-detect prologue skips
+   bytes 8 at a time while the high bit stays clear, so pure-ASCII strings (the
+   common case in the JSON / CSV / template benchmarks) run vastly faster than
+   the per-byte advance loop they used to fall through. */
+static mrb_int sp_str_count_chars(const char *s, size_t bl) {
+  const char *p = s, *end = s + bl;
+  mrb_int n = 0;
+  while (p + 8 <= end) {
+    uint64_t w;
+    memcpy(&w, p, sizeof(w));
+    if (w & 0x8080808080808080ULL) break;
+    p += 8; n += 8;
+  }
+  while (p < end) {
+    if ((unsigned char)*p < 0x80) { p++; n++; }
+    else { p += sp_utf8_advance(p); n++; }
+  }
+  return n;
+}
+
+static mrb_int sp_str_length(const char*s){
+  if (!s) return 0;
+  unsigned char m = ((const unsigned char *)s)[-1];
+  if (m == 0xfd) return sp_str_count_chars(s, sp_str_byte_len(s));
+  unsigned h = sp_str_lcache_hash(s);
+  if (sp_str_lcache[h].s == s) return sp_str_lcache[h].char_len;
+  size_t bl = sp_str_byte_len(s);
+  mrb_int n = sp_str_count_chars(s, bl);
+  sp_str_lcache[h].s = s;
+  sp_str_lcache[h].byte_len = bl;
+  sp_str_lcache[h].char_len = n;
+  return n;
+}
 static mrb_int sp_str_ord(const char*s){if(!*s)return 0;uint32_t cp;sp_utf8_decode(s,&cp);return(mrb_int)cp;}
 /* NULL-safe string equality. ENV[] returns NULL for unset vars
    (the dispatch is `sp_str_dup_external(getenv(...))`, which propagates
@@ -285,7 +341,19 @@ static mrb_int sp_str_ord(const char*s){if(!*s)return 0;uint32_t cp;sp_utf8_deco
    Ruby; nil == nil is true, so falling back to pointer equality on the
    NULL path covers both. */
 static inline int sp_str_eq(const char*a,const char*b){if(!a||!b)return a==b;return strcmp(a,b)==0;}
-static size_t sp_utf8_byte_offset(const char*s,mrb_int char_idx){size_t bl=sp_str_byte_len(s);const char*p=s;const char*end=s+bl;while(char_idx>0&&p<end){p+=sp_utf8_advance(p);char_idx--;}return(size_t)(p-s);}
+static size_t sp_utf8_byte_offset(const char*s,mrb_int char_idx){
+  if (!s || char_idx <= 0) return 0;
+  unsigned char m = ((const unsigned char *)s)[-1];
+  if (m != 0xfd) {
+    unsigned h = sp_str_lcache_hash(s);
+    if (sp_str_lcache[h].s == s
+        && (size_t)sp_str_lcache[h].char_len == sp_str_lcache[h].byte_len) {
+      size_t off = (size_t)char_idx;
+      return off > sp_str_lcache[h].byte_len ? sp_str_lcache[h].byte_len : off;
+    }
+  }
+  size_t bl=sp_str_byte_len(s);const char*p=s;const char*end=s+bl;while(char_idx>0&&p<end){p+=sp_utf8_advance(p);char_idx--;}return(size_t)(p-s);
+}
 static uint32_t*sp_utf8_decode_all(const char*s,size_t*out_n){size_t cap=8,n=0;uint32_t*cps=(uint32_t*)malloc(cap*sizeof(uint32_t));const char*p=s;while(*p){if(n>=cap){cap*=2;cps=(uint32_t*)realloc(cps,cap*sizeof(uint32_t));}uint32_t cp;p+=sp_utf8_decode(p,&cp);cps[n++]=cp;}*out_n=n;return cps;}
 static int sp_utf8_set_has(const uint32_t*cps,size_t n,uint32_t cp){for(size_t i=0;i<n;i++)if(cps[i]==cp)return 1;return 0;}
 
@@ -311,6 +379,7 @@ static void sp_str_sweep(void) {
       free(h);
     }
   }
+  sp_str_lcache_clear();
 }
 
 /* Time#strftime — format the time per `fmt` using libc
