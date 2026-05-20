@@ -53,7 +53,7 @@ jobs:
       # input file misses the cache and reruns every test. See
       # the post-build `touch` step for why mtimes need a refresh.
       - name: Restore test-results cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/test-results
           key: tests-${{ matrix.os }}-${{ matrix.cc }}-${{ hashFiles('test/**', 'spinel_parse.c', 'spinel_analyze.rb', 'spinel_codegen.rb', 'compiler_helpers.rb', 'node_table_loader.rb', 'lib/**', 'Makefile') }}
@@ -148,7 +148,7 @@ jobs:
       # biggest beneficiary because its per-test fork-exec cost
       # dwarfs the cache-restore step.
       - name: Restore test-results cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/test-results
           key: tests-windows-mingw-gcc-${{ hashFiles('test/**', 'spinel_parse.c', 'spinel_analyze.rb', 'spinel_codegen.rb', 'compiler_helpers.rb', 'node_table_loader.rb', 'lib/**', 'Makefile') }}
