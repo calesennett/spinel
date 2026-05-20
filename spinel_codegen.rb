@@ -204,6 +204,11 @@ class Compiler
  # @needs_class_table covers the names table; these extend it.
     @needs_class_parents = 0
     @needs_class_ancestors = 0
+ # Set when `rescue ExplicitClass` or `e.is_a?(C)` (where e was
+ # bound by a rescue) needs to walk a class-name parent chain at
+ # runtime. Gates sp_exc_parent_of + sp_exc_class_le emission.
+ # Issue #627.
+    @needs_exc_class_hierarchy = 0
     @cls_ivar_names = "".split(",")
     @cls_ivar_types = "".split(",")
  # Per-ivar flag: was the ivar's first scanned write a definite
@@ -7300,6 +7305,10 @@ class Compiler
  # a definition.
     if @needs_class_table == 0
       emit_raw("static const char *sp_class_to_s(sp_Class c){(void)c;return \"\";}")
+ # Exception-class hierarchy helpers stand alone (don't need
+ # sp_class_names[]), so emit them even when the rest of the
+ # class-runtime cluster is skipped. Issue #627.
+      emit_exc_class_hierarchy_helpers
       return
     end
     emit_raw("/* sp_Class names table */")
@@ -7468,6 +7477,7 @@ class Compiler
       emit_raw("static sp_PolyArray *sp_class_ancestors_arr(sp_Class c) __attribute__((unused));")
       emit_raw("static sp_PolyArray *sp_class_ancestors_arr(sp_Class c){sp_PolyArray*r=sp_PolyArray_new();if(c.cls_id<0||c.cls_id>=SP_CLASS_COUNT)return r;mrb_int s=sp_class_ancestors_off[c.cls_id];mrb_int e=sp_class_ancestors_off[c.cls_id+1];for(mrb_int k=s;k<e;k++){sp_Class el={sp_class_ancestors_flat[k]};sp_PolyArray_push(r,sp_box_class(el));}return r;}")
     end
+    emit_exc_class_hierarchy_helpers
     if @needs_class_for_poly == 1
  # Tier 4: recover the cls_id of a poly value. Each primitive
  # tag maps to the corresponding built-in cls_id (Integer=9,
@@ -7480,6 +7490,83 @@ class Compiler
       emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v){switch(v.tag){case SP_TAG_NIL:return (sp_Class){5};case SP_TAG_BOOL:return (sp_Class){v.v.b?6:7};case SP_TAG_INT:return (sp_Class){9};case SP_TAG_FLT:return (sp_Class){10};case SP_TAG_STR:return (sp_Class){11};case SP_TAG_SYM:return (sp_Class){12};case SP_TAG_CLASS:return (sp_Class){(mrb_int)v.cls_id};case SP_TAG_OBJ:if(v.cls_id>=0)return (sp_Class){(mrb_int)v.cls_id};switch(v.cls_id){case SP_BUILTIN_INT_ARRAY:case SP_BUILTIN_STR_ARRAY:case SP_BUILTIN_FLT_ARRAY:case SP_BUILTIN_SYM_ARRAY:case SP_BUILTIN_PTR_ARRAY:case SP_BUILTIN_POLY_ARRAY:return (sp_Class){13};case SP_BUILTIN_STR_INT_HASH:case SP_BUILTIN_STR_STR_HASH:case SP_BUILTIN_INT_STR_HASH:case SP_BUILTIN_SYM_INT_HASH:case SP_BUILTIN_SYM_STR_HASH:case SP_BUILTIN_STR_POLY_HASH:case SP_BUILTIN_SYM_POLY_HASH:case SP_BUILTIN_POLY_POLY_HASH:return (sp_Class){14};case SP_BUILTIN_RANGE:return (sp_Class){15};case SP_BUILTIN_TIME:return (sp_Class){16};case SP_BUILTIN_PROC:return (sp_Class){20};default:return (sp_Class){-1};}}return (sp_Class){-1};}")
     end
     emit_raw("")
+  end
+
+ # Exception class-name parent walker. `rescue ParentClass` and
+ # `e.is_a?(ParentClass)` need to know that `class B < A` makes
+ # any `raise B` instance match a `rescue A`. The walker takes
+ # class names (not cls_ids) because the rescue path tracks
+ # sp_last_exc_cls as a string -- the raised class might not be
+ # in the codegen-emitted sp_class_names[] table (e.g. when the
+ # raised class is one of the built-in CRuby exception classes
+ # like StandardError that spinel doesn't track as a user class).
+ # Issue #627. Independent of @needs_class_table since the walker
+ # uses inline strcmp / no sp_class_names lookup.
+  def emit_exc_class_hierarchy_helpers
+    if @needs_exc_class_hierarchy == 0
+      return
+    end
+    emit_raw("static const char *sp_exc_parent_of(const char *cls) __attribute__((unused));")
+    ep_body = "static const char *sp_exc_parent_of(const char *cls){"
+ # Built-in exception class hierarchy. Matches MRI's
+ # Exception class chain that user code routinely names in
+ # `rescue` / `raise` clauses without ever defining them.
+    builtin_parents = [
+      ["StandardError", "Exception"],
+      ["RuntimeError", "StandardError"],
+      ["ArgumentError", "StandardError"],
+      ["TypeError", "StandardError"],
+      ["IndexError", "StandardError"],
+      ["KeyError", "IndexError"],
+      ["RangeError", "StandardError"],
+      ["FloatDomainError", "RangeError"],
+      ["NameError", "StandardError"],
+      ["NoMethodError", "NameError"],
+      ["ZeroDivisionError", "StandardError"],
+      ["IOError", "StandardError"],
+      ["EOFError", "IOError"],
+      ["FrozenError", "RuntimeError"],
+      ["NotImplementedError", "ScriptError"],
+      ["ScriptError", "Exception"],
+      ["LoadError", "ScriptError"],
+      ["SyntaxError", "ScriptError"],
+      ["StopIteration", "IndexError"],
+      ["RegexpError", "StandardError"],
+      ["EncodingError", "StandardError"],
+      ["SystemCallError", "StandardError"],
+      ["LocalJumpError", "StandardError"],
+      ["FiberError", "StandardError"],
+      ["Exception", ""],
+    ]
+    bp = 0
+    while bp < builtin_parents.length
+      cname_bp = builtin_parents[bp][0]
+      pname_bp = builtin_parents[bp][1]
+      if pname_bp == ""
+        ep_body = ep_body + "if(strcmp(cls,\"" + cname_bp + "\")==0)return NULL;"
+      else
+        ep_body = ep_body + "if(strcmp(cls,\"" + cname_bp + "\")==0)return \"" + pname_bp + "\";"
+      end
+      bp = bp + 1
+    end
+ # User exception classes (and any user class -- the walker is
+ # name-based so it works uniformly). Emit each (cname, parent)
+ # pair from @cls_names + @cls_parents.
+    uc = 0
+    while uc < @cls_names.length
+      pname_uc = ""
+      if uc < @cls_parents.length
+        pname_uc = @cls_parents[uc]
+      end
+      if pname_uc != ""
+        ep_body = ep_body + "if(strcmp(cls,\"" + @cls_names[uc] + "\")==0)return \"" + pname_uc + "\";"
+      end
+      uc = uc + 1
+    end
+    ep_body = ep_body + "return NULL;}"
+    emit_raw(ep_body)
+    emit_raw("static mrb_bool sp_exc_class_le(const char *cls, const char *target) __attribute__((unused));")
+    emit_raw("static mrb_bool sp_exc_class_le(const char *cls, const char *target){if(!cls||!target)return FALSE;if(strcmp(cls,target)==0)return TRUE;const char *cur=cls;int depth=0;while(cur&&depth<32){cur=sp_exc_parent_of(cur);if(!cur)return FALSE;if(strcmp(cur,target)==0)return TRUE;depth++;}return FALSE;}")
   end
 
  # unified cls_id space layout.
@@ -10454,10 +10541,19 @@ class Compiler
     if nid < 0
       return
     end
-    if @needs_class_parents == 1 && @needs_class_ancestors == 1 && @needs_class_for_poly == 1
+    t_ch = @nd_type[nid]
+ # Any RescueNode means we'll need the exception-class hierarchy
+ # walker -- the rescue dispatch uses it for `rescue ParentClass`,
+ # and any `e.is_a?(X)` inside the body also needs it. Conservative
+ # (bare `rescue` doesn't strictly need the helper, but the cost
+ # is a couple-hundred bytes of dead code on programs without
+ # is_a? on the bound var). Issue #627.
+    if t_ch == "RescueNode"
+      @needs_exc_class_hierarchy = 1
+    end
+    if @needs_class_parents == 1 && @needs_class_ancestors == 1 && @needs_class_for_poly == 1 && @needs_exc_class_hierarchy == 1
       return
     end
-    t_ch = @nd_type[nid]
     if t_ch == "ConstantReadNode"
       cname_ch = @nd_name[nid]
  # ConstantReadNode resolving to a class / module / built-in
@@ -13121,6 +13217,25 @@ class Compiler
         end
         if mname == "full_message"
           return "sp_sprintf(\"%s: %s\", " + exc_cls + ", lv_" + recv_name + ")"
+        end
+ # `e.is_a?(X)` / `.kind_of?(X)` on an exception binding walks
+ # the class-name parent chain so a `rescue => e` catching a
+ # subclass instance still answers true for the parent class.
+ # Issue #627. The class-snapshot string `exc_cls` carries the
+ # raised class name (set by sp_raise_cls); sp_exc_class_le
+ # walks the parent table emitted from emit_class_runtime.
+        if mname == "is_a?" || mname == "kind_of?"
+          args_id_is = @nd_arguments[nid]
+          if args_id_is >= 0
+            ais = get_args(args_id_is)
+            if ais.length > 0
+              arg_name_is = resolve_introspection_arg_name(ais[0])
+              if arg_name_is != ""
+                @needs_exc_class_hierarchy = 1
+                return "sp_exc_class_le(" + exc_cls + ", \"" + arg_name_is + "\")"
+              end
+            end
+          end
         end
       end
     end
@@ -33643,14 +33758,17 @@ class Compiler
     has_type_check = 0
     if exc_types.length > 0
       has_type_check = 1
- # Build condition: sp_exc_is_a(sp_last_exc_cls, "ClassName")
+ # Build condition: sp_exc_class_le(sp_last_exc_cls, "ClassName")
+ # walks the class-name parent chain so `rescue ParentClass`
+ # catches a raised subclass. Issue #627.
+      @needs_exc_class_hierarchy = 1
       cond = ""
       k = 0
       while k < exc_types.length
         if k > 0
           cond = cond + " || "
         end
-        cond = cond + "sp_exc_is_a((const char*)sp_last_exc_cls, \"" + @nd_name[exc_types[k]] + "\")"
+        cond = cond + "sp_exc_class_le((const char*)sp_last_exc_cls, \"" + @nd_name[exc_types[k]] + "\")"
         k = k + 1
       end
       emit("  if (" + cond + ") {")
@@ -34899,13 +35017,15 @@ class Compiler
     has_type_check = 0
     if exc_types.length > 0
       has_type_check = 1
+ # See compile_rescue_chain for sp_exc_class_le rationale (#627).
+      @needs_exc_class_hierarchy = 1
       cond = ""
       k = 0
       while k < exc_types.length
         if k > 0
           cond = cond + " || "
         end
-        cond = cond + "sp_exc_is_a((const char*)sp_last_exc_cls, \"" + @nd_name[exc_types[k]] + "\")"
+        cond = cond + "sp_exc_class_le((const char*)sp_last_exc_cls, \"" + @nd_name[exc_types[k]] + "\")"
         k = k + 1
       end
       emit("  if (" + cond + ") {")
