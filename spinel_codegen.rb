@@ -26966,6 +26966,10 @@ class Compiler
       else
         if pred_type == "float"
           emit("  mrb_float " + tmp + " = " + pred_val + ";")
+        elsif pred_type == "bigint"
+          @needs_bigint = 1
+          emit("  mrb_int " + tmp + " = sp_bigint_to_int((sp_Bigint *)" + pred_val + ");")
+          pred_type = "int"
         else
           emit("  mrb_int " + tmp + " = " + pred_val + ";")
         end
@@ -36082,6 +36086,10 @@ class Compiler
       else
         if pred_type == "float"
           emit("  mrb_float " + tmp + " = " + pred_val + ";")
+        elsif pred_type == "bigint"
+          @needs_bigint = 1
+          emit("  mrb_int " + tmp + " = sp_bigint_to_int((sp_Bigint *)" + pred_val + ");")
+          pred_type = "int"
         else
           emit("  mrb_int " + tmp + " = " + pred_val + ";")
         end
