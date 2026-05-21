@@ -31526,6 +31526,7 @@ class Compiler
     end
     if rt == "str_int_hash"
       tmp = new_temp
+      bp2_ot_si = bp2 != "" ? find_var_type(bp2) : ""
       emit("  for (mrb_int " + tmp + " = 0; " + tmp + " < " + rc + "->len; " + tmp + "++) {")
       emit("    lv_" + bp1 + " = " + rc + "->order[" + tmp + "];")
       if bp2 != ""
@@ -31535,7 +31536,7 @@ class Compiler
       push_scope
       declare_var(bp1, "string")
       if bp2 != ""
-        declare_var(bp2, "int")
+        declare_var(bp2, bp2_ot_si == "bigint" ? "bigint" : "int")
       end
       redo_label = push_redo_label
       emit_redo_label(redo_label)
@@ -31547,6 +31548,7 @@ class Compiler
     end
     if rt == "int_str_hash"
       tmp = new_temp
+      bp1_ot_is = find_var_type(bp1)
       emit("  for (mrb_int " + tmp + " = 0; " + tmp + " < " + rc + "->len; " + tmp + "++) {")
       emit_block_lv_assign_int(bp1, rc + "->order[" + tmp + "]")
       if bp2 != ""
@@ -31554,7 +31556,7 @@ class Compiler
       end
       @indent = @indent + 1
       push_scope
-      declare_var(bp1, "int")
+      declare_var(bp1, bp1_ot_is == "bigint" ? "bigint" : "int")
       if bp2 != ""
         declare_var(bp2, "string")
       end
@@ -31589,6 +31591,7 @@ class Compiler
     end
     if rt == "sym_int_hash"
       tmp = new_temp
+      bp2_ot_sy = bp2 != "" ? find_var_type(bp2) : ""
       emit("  for (mrb_int " + tmp + " = 0; " + tmp + " < " + rc + "->len; " + tmp + "++) {")
       emit("    lv_" + bp1 + " = " + rc + "->order[" + tmp + "];")
       if bp2 != ""
@@ -31598,7 +31601,7 @@ class Compiler
       push_scope
       declare_var(bp1, "symbol")
       if bp2 != ""
-        declare_var(bp2, "int")
+        declare_var(bp2, bp2_ot_sy == "bigint" ? "bigint" : "int")
       end
       redo_label = push_redo_label
       emit_redo_label(redo_label)
