@@ -5499,7 +5499,7 @@ class Compiler
  # which doesn't match the LHS storage.
     if (is_ptr_array_type(expected_base) == 1 || expected_base == "poly_array") && is_sized_empty_array_default(nid) == 1
       @needs_gc = 1
-      cnt_e = compile_arg0(nid)
+      cnt_e = compile_arg0_as_int(nid)
       tmp = new_temp
       if expected_base == "poly_array"
         @needs_rb_value = 1
@@ -5521,7 +5521,7 @@ class Compiler
     if expected_base == "poly" && is_sized_empty_array_default(nid) == 1
       @needs_gc = 1
       @needs_rb_value = 1
-      cnt_e = compile_arg0(nid)
+      cnt_e = compile_arg0_as_int(nid)
       tmp = new_temp
       emit("  sp_PolyArray *" + tmp + " = sp_PolyArray_new();")
       emit("  { mrb_int _n = " + cnt_e + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp + ", sp_box_nil()); }")
@@ -25301,7 +25301,7 @@ class Compiler
  # holds the matching storage.
       if (ivt == "poly_array" || is_ptr_array_type(ivt) == 1) && is_sized_empty_array_default(expr_id) == 1
         @needs_gc = 1
-        cnt_e = compile_arg0(expr_id)
+        cnt_e = compile_arg0_as_int(expr_id)
         tmp_arr = new_temp
         if ivt == "poly_array"
           @needs_rb_value = 1
@@ -25323,7 +25323,7 @@ class Compiler
       if ivt == "poly" && is_sized_empty_array_default(expr_id) == 1
         @needs_gc = 1
         @needs_rb_value = 1
-        cnt_e = compile_arg0(expr_id)
+        cnt_e = compile_arg0_as_int(expr_id)
         tmp_arr = new_temp
         emit("  sp_PolyArray *" + tmp_arr + " = sp_PolyArray_new();")
         emit("  { mrb_int _n = " + cnt_e + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp_arr + ", sp_box_nil()); }")
