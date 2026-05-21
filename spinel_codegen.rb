@@ -5544,14 +5544,26 @@ class Compiler
  # cached `at` here still says "int". Mirror compile_operator_
  # expr's recv-type check so we don't wrap the already-bigint
  # emit with another sp_bigint_new_int.
-    if at != "bigint" && @nd_type[nid] == "CallNode"
-      cm_recv_p = @nd_receiver[nid]
-      cm_mn_p = @nd_name[nid]
+ # `(b.n = 42)` parses as ParenthesesNode wrapping a CallNode;
+ # peek through so the override below sees the inner call.
+    eff_nid_pft = nid
+    if nid >= 0 && @nd_type[nid] == "ParenthesesNode"
+      pbody_pft = @nd_body[nid]
+      if pbody_pft >= 0
+        pstmts_pft = get_stmts(pbody_pft)
+        if pstmts_pft.length == 1
+          eff_nid_pft = pstmts_pft[0]
+        end
+      end
+    end
+    if at != "bigint" && @nd_type[eff_nid_pft] == "CallNode"
+      cm_recv_p = @nd_receiver[eff_nid_pft]
+      cm_mn_p = @nd_name[eff_nid_pft]
       if cm_recv_p >= 0 && (cm_mn_p == "+" || cm_mn_p == "-" || cm_mn_p == "*" || cm_mn_p == "/" || cm_mn_p == "%" || cm_mn_p == "**" || cm_mn_p == "<<" || cm_mn_p == ">>" || cm_mn_p == "&" || cm_mn_p == "|" || cm_mn_p == "^")
         if base_type(infer_type(cm_recv_p)) == "bigint"
           at = "bigint"
         else
-          cm_args_p = @nd_arguments[nid]
+          cm_args_p = @nd_arguments[eff_nid_pft]
           if cm_args_p >= 0
             cm_aargs_p = get_args(cm_args_p)
             if cm_aargs_p.length > 0 && base_type(infer_type(cm_aargs_p[0])) == "bigint"
@@ -5570,6 +5582,19 @@ class Compiler
           rcname_p = recv_t_p[4, recv_t_p.length - 4]
           rci_p = find_class_idx(rcname_p)
           if rci_p >= 0
+ # attr_writer setter call (`obj.attr = v`) returns the rhs.
+ # The codegen emits as the boxed expr form, so the call's
+ # value carries the slot's type — bigint when the ivar slot
+ # was promoted.
+            if cm_mn_p.length > 1 && cm_mn_p[cm_mn_p.length - 1] == "=" && cm_mn_p != "==" && cm_mn_p != "!=" && cm_mn_p != "<=" && cm_mn_p != ">="
+              bname_aw = cm_mn_p[0, cm_mn_p.length - 1]
+              if cls_has_attr_writer(rci_p, bname_aw) == 1
+                slot_aw = cls_ivar_type(rci_p, "@" + bname_aw)
+                if base_type(slot_aw) == "bigint"
+                  at = "bigint"
+                end
+              end
+            end
             mr_p = cls_method_return(rci_p, cm_mn_p)
             if base_type(mr_p) == "bigint"
               at = "bigint"
@@ -28537,6 +28562,41 @@ class Compiler
                 arg_ids_aw = get_args(args_id_aw)
                 if arg_ids_aw.length > 0
                   arg_t_aw = infer_type(arg_ids_aw[0])
+ # Check if the rhs is itself a promote-mode setter or
+ # bigint-returning method call whose cached type is stale.
+ # Mirror the compile_expr_for_expected_type override so a
+ # `b1.n = b2.n = 7` chain doesn't double-wrap.
+                  inner_aw = arg_ids_aw[0]
+                  if inner_aw >= 0 && @nd_type[inner_aw] == "ParenthesesNode"
+                    pbody_in = @nd_body[inner_aw]
+                    if pbody_in >= 0
+                      pstmts_in = get_stmts(pbody_in)
+                      if pstmts_in.length == 1
+                        inner_aw = pstmts_in[0]
+                      end
+                    end
+                  end
+                  if arg_t_aw != "bigint" && inner_aw >= 0 && @nd_type[inner_aw] == "CallNode"
+                    rcv_in_aw = @nd_receiver[inner_aw]
+                    mn_in_aw = @nd_name[inner_aw]
+                    if rcv_in_aw >= 0
+                      rt_in_aw = base_type(infer_type(rcv_in_aw))
+                      if is_obj_type(rt_in_aw) == 1
+                        rcn_in_aw = rt_in_aw[4, rt_in_aw.length - 4]
+                        rci_in_aw = find_class_idx(rcn_in_aw)
+                        if rci_in_aw >= 0
+                          if mn_in_aw.length > 1 && mn_in_aw[mn_in_aw.length - 1] == "=" && mn_in_aw != "==" && mn_in_aw != "!=" && mn_in_aw != "<=" && mn_in_aw != ">="
+                            bn_in_aw = mn_in_aw[0, mn_in_aw.length - 1]
+                            if cls_has_attr_writer(rci_in_aw, bn_in_aw) == 1
+                              if base_type(cls_ivar_type(rci_in_aw, "@" + bn_in_aw)) == "bigint"
+                                arg_t_aw = "bigint"
+                              end
+                            end
+                          end
+                        end
+                      end
+                    end
+                  end
                 end
               end
               if slot_t == "poly"
