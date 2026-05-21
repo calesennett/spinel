@@ -24462,6 +24462,10 @@ class Compiler
  # compiler rejects the push with "incompatible type".
       if et == "poly"
         ev = "(" + ev + ").v.i"
+      elsif et == "bigint"
+ # promote-mode element: unbox to mrb_int.
+        @needs_bigint = 1
+        ev = "sp_bigint_to_int((sp_Bigint *)" + ev + ")"
       end
       emit("  sp_IntArray_push(" + tmp + ", " + ev + ");")
       k = k + 1
@@ -32797,6 +32801,12 @@ class Compiler
           elsif nested_arr_outer == 1
             emit("  sp_PtrArray_push(" + tmp_arrn + ", " + lastv + ");")
           else
+ # promote-mode block tail returning bigint into IntArray;
+ # unbox before pushing.
+            if infer_type(stmts_n2.last) == "bigint"
+              @needs_bigint = 1
+              lastv = "sp_bigint_to_int((sp_Bigint *)" + lastv + ")"
+            end
             emit("  sp_IntArray_push(" + tmp_arrn + ", " + lastv + ");")
           end
         else
@@ -32957,6 +32967,10 @@ class Compiler
             elsif ec_nested == 1
               emit("  sp_PtrArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
             else
+              if infer_type(ec_stmts_n2.last) == "bigint"
+                @needs_bigint = 1
+                ec_lastv = "sp_bigint_to_int((sp_Bigint *)" + ec_lastv + ")"
+              end
               emit("  sp_IntArray_push(" + ec_tmp_arr + ", " + ec_lastv + ");")
             end
           end
