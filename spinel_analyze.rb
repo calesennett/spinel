@@ -20422,6 +20422,13 @@ class Compiler
     if @int_overflow_mode != "promote"
       return
     end
+ # cls_method_return memoizes (ci, mname) -> return_type into
+ # @cls_meth_return_cache. Earlier inference passes filled that
+ # cache with "int" entries that this sweep is about to render
+ # stale (e.g. Wrapper#grab pre-promote = int, post-promote =
+ # bigint). The cache has no version stamp, so wipe it whole —
+ # next caller refills lazily off the now-promoted tables.
+    @cls_meth_return_cache = {}
  # Top-level methods.
     mi = 0
     while mi < @meth_param_types.length

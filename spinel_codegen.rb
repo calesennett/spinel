@@ -46,6 +46,12 @@ class Compiler
     @indent = 0
     @temp_counter = 0
     @label_counter = 0
+ # `--int-overflow=promote` widens int slots to bigint AFTER
+ # analyze.rb's annotate_all_node_types fills the per-node type
+ # cache. infer_type below uses this to override the now-stale
+ # cache for arithmetic on a bigint recv. In raise / wrap modes
+ # the cache is up-to-date and the override stays off.
+    @int_overflow_mode = ENV["SPINEL_INT_OVERFLOW"] || "raise"
 
  # ---- AST node storage (parallel arrays by node ID) ----
  # Use "".split(",") for StrArray init (v1 infers StrArray from split)
@@ -5508,6 +5514,31 @@ class Compiler
  # expr_emits_poly_rb_val for the failure mode).
     if at != "poly" && expr_emits_poly_rb_val(nid) == 1
       at = "poly"
+    end
+ # `--int-overflow=promote` widens int slots to bigint at the end
+ # of analyze, AFTER annotate_all_node_types has cached per-node
+ # types. An arithmetic CallNode whose recv was annotated as int
+ # but is now bigint (post-promotion) emits via compile_operator_
+ # expr as bigint (sp_bigint_add, sp_bigint_mul, ...), yet the
+ # cached `at` here still says "int". Mirror compile_operator_
+ # expr's recv-type check so we don't wrap the already-bigint
+ # emit with another sp_bigint_new_int.
+    if at != "bigint" && @nd_type[nid] == "CallNode"
+      cm_recv_p = @nd_receiver[nid]
+      cm_mn_p = @nd_name[nid]
+      if cm_recv_p >= 0 && (cm_mn_p == "+" || cm_mn_p == "-" || cm_mn_p == "*" || cm_mn_p == "/" || cm_mn_p == "%" || cm_mn_p == "**" || cm_mn_p == "<<" || cm_mn_p == ">>" || cm_mn_p == "&" || cm_mn_p == "|" || cm_mn_p == "^")
+        if base_type(infer_type(cm_recv_p)) == "bigint"
+          at = "bigint"
+        else
+          cm_args_p = @nd_arguments[nid]
+          if cm_args_p >= 0
+            cm_aargs_p = get_args(cm_args_p)
+            if cm_aargs_p.length > 0 && base_type(infer_type(cm_aargs_p[0])) == "bigint"
+              at = "bigint"
+            end
+          end
+        end
+      end
     end
  # `if v.is_a?(String); helper(v); end` (and analogues for int /
  # float / sym / obj) — `v`'s C storage is sp_RbVal but the
