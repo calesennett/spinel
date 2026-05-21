@@ -173,7 +173,24 @@ class Compiler
                                "Numeric", "Integer", "Float",
                                "String", "Symbol",
                                "Array", "Hash", "Range", "Time",
-                               "Module", "Class", "Complex", "Proc"]
+                               "Module", "Class", "Complex", "Proc",
+ # Exception family — only relevant in value position (`raise C`,
+ # `c = StandardError`, etc.). The sp_exc_class_le / sp_exc_parent_of
+ # name-based hierarchy is the dispatch mechanism for rescue clauses;
+ # these cls_ids just back the value-emit path so #637's
+ # `takes_class(StandardError)` lands a real sp_Class struct.
+                               "Exception", "StandardError",
+                               "RuntimeError", "ArgumentError", "TypeError",
+                               "IndexError", "KeyError",
+                               "RangeError", "FloatDomainError",
+                               "NameError", "NoMethodError",
+                               "ZeroDivisionError",
+                               "IOError", "EOFError",
+                               "FrozenError",
+                               "ScriptError", "NotImplementedError", "LoadError", "SyntaxError",
+                               "StopIteration", "RegexpError",
+                               "EncodingError", "SystemCallError",
+                               "LocalJumpError", "FiberError"]
  # -1 = no parent (root). Module entries (Kernel, Comparable,
  # Enumerable) intentionally have -1 since modules don't
  # have superclasses.
@@ -182,14 +199,38 @@ class Compiler
                                 1, 8, 8,
                                 1, 1,
                                 1, 1, 1, 1,
-                                1, 17, 8, 1]
+                                1, 17, 8, 1,
+                                1, 21,
+                                22, 22, 22,
+                                22, 26,
+                                22, 28,
+                                22, 30,
+                                22,
+                                22, 33,
+                                23,
+                                21, 36, 36, 36,
+                                26, 22,
+                                22, 22,
+                                22, 22]
  # Semicolon-separated module-name includes per built-in class.
     @builtin_class_includes = ["", "Kernel", "", "", "",
                                "", "", "",
                                "Comparable", "", "",
                                "Comparable", "Comparable",
                                "Enumerable", "Enumerable", "Enumerable", "Comparable",
-                               "", "", "", ""]
+                               "", "", "", "",
+                               "", "",
+                               "", "", "",
+                               "", "",
+                               "", "",
+                               "", "",
+                               "",
+                               "", "",
+                               "",
+                               "", "", "", "",
+                               "", "",
+                               "", "",
+                               "", ""]
     @builtin_class_count = @builtin_class_names.length
  # emit-time toggle for the per-program
  # sp_class_names[] table + sp_class_to_s helper. compile_expr's
@@ -11476,6 +11517,25 @@ class Compiler
         ci = find_const_idx(cpname)
         if ci >= 0
           return "cst_" + cpname
+        end
+ # Nested user class as a value (`M::Inner`, `ActiveRecord::Base`).
+ # The qualified name resolves to a registered user class, so emit
+ # the sp_Class compound literal — same shape as ConstantReadNode's
+ # flat user-class arm. Issue #637 shape B.
+        cls_idx_cpn = find_class_idx(cpname)
+        if cls_idx_cpn >= 0
+          @needs_class_table = 1
+          return "((sp_Class){" + cls_id_for_user_internal(cls_idx_cpn).to_s + "LL})"
+        end
+        mod_idx_cpn = find_module_idx_local(cpname)
+        if mod_idx_cpn >= 0
+          @needs_class_table = 1
+          return "((sp_Class){" + cls_id_for_module_internal(mod_idx_cpn).to_s + "LL})"
+        end
+        bi_cpn = builtin_class_id_for_name(cpname)
+        if bi_cpn >= 0
+          @needs_class_table = 1
+          return "((sp_Class){" + bi_cpn.to_s + "LL})"
         end
       end
       if @nd_receiver[nid] >= 0

@@ -7271,6 +7271,30 @@ class Compiler
     if name == "Module" || name == "Class" || name == "Complex" || name == "Proc"
       return 1
     end
+ # Exception family — the codegen builtin table carries cls_ids
+ # for these so `c = StandardError` lowers to an sp_Class value
+ # rather than the undeclared bare identifier. Issue #637 shape A.
+    if name == "Exception" || name == "StandardError" || name == "RuntimeError"
+      return 1
+    end
+    if name == "ArgumentError" || name == "TypeError" || name == "IndexError" || name == "KeyError"
+      return 1
+    end
+    if name == "RangeError" || name == "FloatDomainError" || name == "NameError" || name == "NoMethodError"
+      return 1
+    end
+    if name == "ZeroDivisionError" || name == "IOError" || name == "EOFError" || name == "FrozenError"
+      return 1
+    end
+    if name == "ScriptError" || name == "NotImplementedError" || name == "LoadError" || name == "SyntaxError"
+      return 1
+    end
+    if name == "StopIteration" || name == "RegexpError" || name == "EncodingError" || name == "SystemCallError"
+      return 1
+    end
+    if name == "LocalJumpError" || name == "FiberError"
+      return 1
+    end
     0
   end
 
