@@ -5039,7 +5039,26 @@ class Compiler
  # mismatch (both widths match on every supported target).
         result = result + "((" + ctype + ")(" + compile_expr(call_args[k]) + ")->data)"
       else
-        result = result + "((" + ctype + ")(" + compile_expr(call_args[k]) + "))"
+ # Numeric FFI param (int / uint32 / float / double / ...) with a
+ # poly-typed arg expression: cast the sp_RbVal struct directly
+ # would emit `(int)({.tag=...})` which gcc rejects with
+ # "aggregate value used where an integer was expected". Extract
+ # the unboxed payload first via `.v.i` (integers / bool / ptr-
+ # shaped) or `.v.f` (floats). The poly arg arises from a sibling
+ # cross-class widening pass — e.g. a `recv.attr = val` on a
+ # poly receiver widens every class with an attr_writer of that
+ # name, so a Mat#@nrows that's structurally int can carry an
+ # sp_RbVal slot type after analyze. Issue #626 sub-issue 1.
+        if infer_type(call_args[k]) == "poly"
+          @needs_rb_value = 1
+          if spec == "float" || spec == "double"
+            result = result + "((" + ctype + ")(" + compile_expr(call_args[k]) + ").v.f)"
+          else
+            result = result + "((" + ctype + ")(" + compile_expr(call_args[k]) + ").v.i)"
+          end
+        else
+          result = result + "((" + ctype + ")(" + compile_expr(call_args[k]) + "))"
+        end
       end
       k = k + 1
     end
