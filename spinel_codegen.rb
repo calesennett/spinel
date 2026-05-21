@@ -14681,6 +14681,41 @@ class Compiler
  # a long long.
                         fmt = fmt + "%s"
                         arg_exprs.push("sp_exc_message(" + compile_expr(inner) + ")")
+                      elsif it == "nil"
+ # CRuby: `"#{nil}"` -> `""`. Without an arm,
+ # the default int path emitted `"0"`.
+                        fmt = fmt + "%s"
+                        arg_exprs.push("\"\"")
+                      elsif it == "int_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_IntArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "float_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_FloatArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "str_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_StrArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "sym_array"
+ # sym_array stores ids in an sp_IntArray
+ # backing; sp_SymArray_inspect renders each
+ # element as `:name` via sp_sym_to_s.
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_SymArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "poly_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_PolyArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "int_array_ptr_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_IntArrayPtrArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "float_array_ptr_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_FloatArrayPtrArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "str_array_ptr_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_StrArrayPtrArray_inspect(" + compile_expr(inner) + ")")
+                      elsif it == "sym_array_ptr_array"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_SymArrayPtrArray_inspect(" + compile_expr(inner) + ")")
                       else
                         fmt = fmt + "%lld"
                         arg_exprs.push("(long long)" + compile_expr(inner))
