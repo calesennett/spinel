@@ -104,30 +104,101 @@ static inline mrb_int sp_imod(mrb_int a, mrb_int b) {
   return r;
 }
 /* Overflow-checked integer arithmetic (BIGINT.md option β: raise on
-   overflow, keep locals at native mrb_int width). __builtin_*_overflow
-   compiles to a single ALU op + conditional branch on every supported
-   platform; the branch is well-predicted in hot loops so the cost is
-   close to one extra instruction per op.
+   overflow, keep locals at native mrb_int width).
 
-   Implemented as GCC statement-expression macros rather than static
-   inline functions: the inline variant produces wrong optcarrot
-   output even with __attribute__((always_inline)) (observed: checksum
-   diverges from 59662 to 4096, with no overflow ever firing). I
-   suspect a UB-assumption interaction between the optimizer and the
-   function-call-shaped expression that the macro form bypasses by
-   keeping every operand in its surrounding expression context. */
-#define sp_int_add(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
-  if (__builtin_add_overflow(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in +"); \
-  _sp_r; })
-#define sp_int_sub(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
-  if (__builtin_sub_overflow(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in -"); \
-  _sp_r; })
-#define sp_int_mul(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
-  if (__builtin_mul_overflow(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in *"); \
-  _sp_r; })
-#define sp_int_neg(a) ({ mrb_int _sp_a = (a), _sp_r; \
-  if (__builtin_sub_overflow((mrb_int)0, _sp_a, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in -@"); \
-  _sp_r; })
+   Build modes (preprocessor toggles):
+     default                 : overflow raises RangeError
+     SP_NO_OVERFLOW_CHECK    : bare `+ - *`, silent wrap (UB on signed
+                               overflow, but matches spinel's prior
+                               behaviour where the user asks for
+                               max speed and accepts the risk)
+
+   The actual overflow check is wrapped through
+   `sp_int_*_overflow_p` helpers so non-gcc/clang compilers fall back
+   to a portable unsigned-arithmetic implementation. The shape
+   mirrors mruby's mrb_int_*_overflow in include/mruby/numeric.h.
+
+   The outer sp_int_add/sub/mul/neg are GCC statement-expression
+   macros (`({ ... })`) rather than functions: an earlier inline-
+   function variant produced wrong optcarrot output (checksum
+   diverged 59662→4096) even with __attribute__((always_inline)),
+   apparently from a UB-assumption interaction between the
+   optimizer and the function-call-shaped expression that the
+   macro form bypasses by keeping every operand in its surrounding
+   expression context. The macros also let the compiler fold
+   constant-operand cases at every call site. */
+#ifndef __has_builtin
+#  define __has_builtin(x) 0
+#endif
+#if (defined(__GNUC__) && __GNUC__ >= 5) || \
+    (__has_builtin(__builtin_add_overflow) && \
+     __has_builtin(__builtin_sub_overflow) && \
+     __has_builtin(__builtin_mul_overflow))
+#  define SP_HAVE_OVERFLOW_BUILTINS 1
+#endif
+
+#ifdef SP_HAVE_OVERFLOW_BUILTINS
+static inline mrb_bool sp_int_add_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  return __builtin_add_overflow(a, b, r);
+}
+static inline mrb_bool sp_int_sub_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  return __builtin_sub_overflow(a, b, r);
+}
+static inline mrb_bool sp_int_mul_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  return __builtin_mul_overflow(a, b, r);
+}
+#else
+/* Portable fallback. mrb_int is int64_t (see typedef above), so the
+   add / sub fallbacks compute in mrb_uint (= uint64_t) -- unsigned
+   integer overflow is well-defined wrap-around in C -- and detect
+   signed overflow via the sign-bit XOR trick. Mul checks bounds
+   before multiplying because the 128-bit intermediate isn't
+   portable. */
+#define SP_INT_OVERFLOW_MASK ((mrb_uint)1 << 63)
+static inline mrb_bool sp_int_add_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  mrb_uint x = (mrb_uint)a, y = (mrb_uint)b, z = x + y;
+  *r = (mrb_int)z;
+  return !!(((x ^ z) & (y ^ z)) & SP_INT_OVERFLOW_MASK);
+}
+static inline mrb_bool sp_int_sub_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  mrb_uint x = (mrb_uint)a, y = (mrb_uint)b, z = x - y;
+  *r = (mrb_int)z;
+  return !!(((x ^ z) & (~y ^ z)) & SP_INT_OVERFLOW_MASK);
+}
+static inline mrb_bool sp_int_mul_overflow_p(mrb_int a, mrb_int b, mrb_int *r) {
+  if (a > 0 && b > 0 && a > MRB_INT_MAX / b) { *r = a * b; return TRUE; }
+  if (a < 0 && b > 0 && a < MRB_INT_MIN / b) { *r = a * b; return TRUE; }
+  if (a > 0 && b < 0 && b < MRB_INT_MIN / a) { *r = a * b; return TRUE; }
+  if (a < 0 && b < 0 && (a <= MRB_INT_MIN || b <= MRB_INT_MIN || -a > MRB_INT_MAX / -b)) {
+    *r = a * b; return TRUE;
+  }
+  *r = a * b;
+  return FALSE;
+}
+#undef SP_INT_OVERFLOW_MASK
+#endif
+
+#ifdef SP_NO_OVERFLOW_CHECK
+/* User opted out of overflow detection at compile time. Bare ops
+   with no helper call, no branch, same risk as pre-#638 spinel. */
+#  define sp_int_add(a, b) ((a) + (b))
+#  define sp_int_sub(a, b) ((a) - (b))
+#  define sp_int_mul(a, b) ((a) * (b))
+#  define sp_int_neg(a)    (-(a))
+#else
+#  define sp_int_add(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
+    if (sp_int_add_overflow_p(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in +"); \
+    _sp_r; })
+#  define sp_int_sub(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
+    if (sp_int_sub_overflow_p(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in -"); \
+    _sp_r; })
+#  define sp_int_mul(a, b) ({ mrb_int _sp_a = (a), _sp_b = (b), _sp_r; \
+    if (sp_int_mul_overflow_p(_sp_a, _sp_b, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in *"); \
+    _sp_r; })
+#  define sp_int_neg(a)    ({ mrb_int _sp_a = (a), _sp_r; \
+    if (sp_int_sub_overflow_p((mrb_int)0, _sp_a, &_sp_r)) sp_raise_cls("RangeError", "integer overflow in -@"); \
+    _sp_r; })
+#endif
 
 static mrb_int sp_gcd(mrb_int a,mrb_int b){if(a<0)a=-a;if(b<0)b=-b;while(b){mrb_int t=b;b=a%b;a=t;}return a;}
 static mrb_int sp_lcm(mrb_int a,mrb_int b){if(a==0||b==0)return 0;mrb_int g=sp_gcd(a,b);if(a<0)a=-a;if(b<0)b=-b;return (a/g)*b;}

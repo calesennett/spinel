@@ -56,6 +56,7 @@ EVAL_USED=0
 EVAL_TMP=""
 RBS_DIR=""
 SEED_TMP=""
+OVERFLOW_CHECK=1
 
 # Parse spinel-side flags. In `-E` (run) mode, the first positional
 # `.rb` arg marks the boundary between spinel flags and the script's
@@ -70,6 +71,7 @@ while [ $# -gt 0 ]; do
     --cc=*)     CC_CMD="${1#--cc=}"; shift ;;
     --rbs=*)    RBS_DIR="${1#--rbs=}"; shift ;;
     --rbs)      shift; RBS_DIR="$1"; shift ;;
+    --no-overflow-check) OVERFLOW_CHECK=0; shift ;;
     -o)         shift; OUTPUT="$1"; shift ;;
     -O)         shift; OPT_LEVEL="$1"; shift ;;
     -e)         shift
@@ -150,6 +152,7 @@ if [ -z "$SOURCE" ]; then
   echo "  --cc=CMD    C compiler (default: cc)" >&2
   echo "  -e STR      Inline Ruby source (repeatable; joined with newlines)" >&2
   echo "  --rbs DIR   Seed analyzer with RBS signatures from DIR (advisory)" >&2
+  echo "  --no-overflow-check  Skip int +/-/* overflow checks (faster, silent wrap)" >&2
   exit 1
 fi
 
@@ -283,6 +286,9 @@ case "$(uname -s 2>/dev/null)" in
   MINGW*|MSYS*|CYGWIN*) EXTRA_FLAGS="$EXTRA_FLAGS -Wl,--stack,67108864" ;;
 esac
 
+if [ "$OVERFLOW_CHECK" -eq 0 ]; then
+  EXTRA_FLAGS="$EXTRA_FLAGS -DSP_NO_OVERFLOW_CHECK"
+fi
 $CC_CMD -O${OPT_LEVEL} -Wno-all -ffunction-sections -fdata-sections $INCLUDE_FLAGS $FFI_CFLAGS "$C_FILE" -lm $EXTRA_FLAGS $FFI_LINKS $GC_FLAG -o "$BIN_FILE"
 if [ $? -ne 0 ]; then
   echo "spinel: C compilation failed" >&2
