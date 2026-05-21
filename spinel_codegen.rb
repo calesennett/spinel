@@ -34498,6 +34498,10 @@ class Compiler
         param_map_from.push(flocals_n[k])
         param_map_to.push(tname)
         declare_var(tname, flocals_t[k])
+ # Also expose the original local name so the body emit's
+ # find_var_type lookup (via the unrenamed AST node) returns
+ # the right type. Mirrors the param declare pair above.
+        declare_var(flocals_n[k], flocals_t[k])
         k = k + 1
       end
     end
@@ -35061,10 +35065,28 @@ class Compiler
           end
           if rt_r == "int_array" && mname == "[]"
             arg_r = compile_expr_remap_arg0(nid, map_from, map_to)
+ # Unbox bigint index — promote mode may have widened the
+ # iter counter local to sp_Bigint *.
+            args_id_ir = @nd_arguments[nid]
+            if args_id_ir >= 0
+              aa_ir = get_args(args_id_ir)
+              if aa_ir.length > 0 && infer_type(aa_ir[0]) == "bigint"
+                @needs_bigint = 1
+                arg_r = "sp_bigint_to_int((sp_Bigint *)" + arg_r + ")"
+              end
+            end
             return "sp_IntArray_get(" + rc_r + ", " + arg_r + ")"
           end
           if rt_r == "float_array" && mname == "[]"
             arg_r = compile_expr_remap_arg0(nid, map_from, map_to)
+            args_id_fr = @nd_arguments[nid]
+            if args_id_fr >= 0
+              aa_fr = get_args(args_id_fr)
+              if aa_fr.length > 0 && infer_type(aa_fr[0]) == "bigint"
+                @needs_bigint = 1
+                arg_r = "sp_bigint_to_int((sp_Bigint *)" + arg_r + ")"
+              end
+            end
             return "sp_FloatArray_get(" + rc_r + ", " + arg_r + ")"
           end
           if (rt_r == "str_array" || rt_r == "int_array" || rt_r == "sym_array") && (mname == "length" || mname == "size")
