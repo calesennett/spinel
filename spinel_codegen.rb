@@ -25379,6 +25379,38 @@ class Compiler
         emit("  " + lhs + " = " + disp + ";")
         return
       end
+ # bigint-typed ivar in promote mode: route arithmetic through
+ # sp_bigint_* helpers, wrap an int rhs through sp_bigint_new_int.
+      if ivar_t == "bigint"
+        @needs_bigint = 1
+        rhs_t_iov = infer_type(@nd_expression[nid])
+        rhs_big_iov = rhs_t_iov == "bigint" ? "(sp_Bigint *)(" + val + ")" : "sp_bigint_new_int(" + val + ")"
+        if op == "+"
+          emit("  " + lhs + " = sp_bigint_add((sp_Bigint *)" + lhs + ", " + rhs_big_iov + ");")
+          return
+        end
+        if op == "-"
+          emit("  " + lhs + " = sp_bigint_sub((sp_Bigint *)" + lhs + ", " + rhs_big_iov + ");")
+          return
+        end
+        if op == "*"
+          emit("  " + lhs + " = sp_bigint_mul((sp_Bigint *)" + lhs + ", " + rhs_big_iov + ");")
+          return
+        end
+        if op == "/"
+          emit("  " + lhs + " = sp_bigint_div((sp_Bigint *)" + lhs + ", " + rhs_big_iov + ");")
+          return
+        end
+        if op == "%"
+          emit("  " + lhs + " = sp_bigint_mod((sp_Bigint *)" + lhs + ", " + rhs_big_iov + ");")
+          return
+        end
+        if op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>"
+          rhs_int_iov = rhs_t_iov == "bigint" ? "sp_bigint_to_int(" + rhs_big_iov + ")" : "(" + val + ")"
+          emit("  " + lhs + " = sp_bigint_new_int(sp_bigint_to_int((sp_Bigint *)" + lhs + ") " + op + " " + rhs_int_iov + ");")
+          return
+        end
+      end
  # Bitwise / shift / arithmetic op-assigns map directly onto C
  # `OP=`. Without these arms `@a &= v`, `@a |= v`, etc. were
  # silently dropped — the function emit fell through with no
@@ -30243,6 +30275,38 @@ class Compiler
         emit("  { sp_" + cname + " *" + tt + " = " + rc + "; " +
              tt + "->" + field + " = sp_str_concat(" + tt + "->" + field + ", (" + val + ")); }")
         return
+      end
+ # bigint-typed attr in promote mode: route arithmetic / bitwise
+ # ops through the matching sp_bigint_* helper, wrapping a raw
+ # mrb_int rhs through sp_bigint_new_int first.
+      if ivar_t == "bigint"
+        @needs_bigint = 1
+        rhs_t = infer_type(@nd_expression[nid])
+        rhs_big = rhs_t == "bigint" ? "(sp_Bigint *)(" + val + ")" : "sp_bigint_new_int(" + val + ")"
+        big_op = ""
+        if op == "+"
+          big_op = "sp_bigint_add"
+        elsif op == "-"
+          big_op = "sp_bigint_sub"
+        elsif op == "*"
+          big_op = "sp_bigint_mul"
+        elsif op == "/"
+          big_op = "sp_bigint_div"
+        elsif op == "%"
+          big_op = "sp_bigint_mod"
+        end
+        if big_op != ""
+          emit("  { sp_" + cname + " *" + tt + " = " + rc + "; " +
+               tt + "->" + field + " = " + big_op + "((sp_Bigint *)" + tt + "->" + field + ", " + rhs_big + "); }")
+          return
+        end
+ # Bitwise ops (& | ^ << >>): unbox to mrb_int, apply C op, re-box.
+        if op == "&" || op == "|" || op == "^" || op == "<<" || op == ">>"
+          rhs_int = rhs_t == "bigint" ? "sp_bigint_to_int(" + rhs_big + ")" : "(" + val + ")"
+          emit("  { sp_" + cname + " *" + tt + " = " + rc + "; " +
+               tt + "->" + field + " = sp_bigint_new_int(sp_bigint_to_int((sp_Bigint *)" + tt + "->" + field + ") " + op + " " + rhs_int + "); }")
+          return
+        end
       end
       if op == "%"
         emit("  { sp_" + cname + " *" + tt + " = " + rc + "; " +
