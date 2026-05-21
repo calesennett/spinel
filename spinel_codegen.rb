@@ -31839,16 +31839,39 @@ class Compiler
  # the loop counter (position or value for range); elem_var gets the
  # current element.
   def emit_iter_open(rc, recv_type, elem_var, idx_var)
+ # `--int-overflow=promote` may have widened the block param's
+ # declared slot to sp_Bigint *, but the underlying iterator
+ # (sp_IntArray_get, range counter, ...) yields a raw mrb_int.
+ # Detect the widening via find_var_type on the stripped-`lv_`
+ # name and wrap the get with sp_bigint_new_int so the assign
+ # is typed-clean.
+    iter_elem_t = iter_elem_type(recv_type)
+    needs_big_wrap = 0
+    if elem_var.start_with?("lv_") && iter_elem_t == "int"
+      slot_t_iter = find_var_type(elem_var[3, elem_var.length - 3])
+      if slot_t_iter == "bigint"
+        needs_big_wrap = 1
+        @needs_bigint = 1
+      end
+    end
     if recv_type == "range"
       rtmp = new_temp
       emit("  sp_Range " + rtmp + " = " + rc + ";")
       emit("  for (mrb_int " + idx_var + " = " + rtmp + ".first; " + idx_var + " <= " + rtmp + ".last; " + idx_var + "++) {")
-      emit("    " + elem_var + " = " + idx_var + ";")
+      if needs_big_wrap == 1
+        emit("    " + elem_var + " = sp_bigint_new_int(" + idx_var + ");")
+      else
+        emit("    " + elem_var + " = " + idx_var + ";")
+      end
       return
     end
     pfx = array_c_prefix(recv_type)
     emit("  for (mrb_int " + idx_var + " = 0; " + idx_var + " < sp_" + pfx + "_length(" + rc + "); " + idx_var + "++) {")
-    emit("    " + elem_var + " = sp_" + pfx + "_get(" + rc + ", " + idx_var + ");")
+    if needs_big_wrap == 1
+      emit("    " + elem_var + " = sp_bigint_new_int(sp_" + pfx + "_get(" + rc + ", " + idx_var + "));")
+    else
+      emit("    " + elem_var + " = sp_" + pfx + "_get(" + rc + ", " + idx_var + ");")
+    end
   end
 
  # Element type of an iterable (for block param type inference).
@@ -31873,7 +31896,15 @@ class Compiler
     end
     emit_iter_open(rc, recv_type, "lv_" + bp1, tmp_i)
     push_scope
-    declare_var(bp1, iter_elem_type(recv_type))
+ # promote-mode-widened block param: keep the inner scope in
+ # agreement with the C-level decl so `x * 2` lowers via
+ # sp_bigint_mul, not sp_int_mul. find_var_type before the
+ # push_scope reads the outer (declare_method_locals) entry.
+    bp1_t_sum = find_var_type(bp1)
+    if bp1_t_sum != "bigint"
+      bp1_t_sum = iter_elem_type(recv_type)
+    end
+    declare_var(bp1, bp1_t_sum)
     blk = @nd_block[nid]
     bexpr = "0"
     if @nd_body[blk] >= 0
@@ -31887,7 +31918,12 @@ class Compiler
         bexpr = compile_expr(bs.last)
       end
     end
-    emit("    " + tmp_sum + " += " + bexpr + ";")
+    if bp1_t_sum == "bigint"
+      @needs_bigint = 1
+      emit("    " + tmp_sum + " += sp_bigint_to_int((sp_Bigint *)" + bexpr + ");")
+    else
+      emit("    " + tmp_sum + " += " + bexpr + ";")
+    end
     pop_scope
     emit("  }")
     tmp_sum
