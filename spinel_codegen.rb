@@ -26524,6 +26524,14 @@ class Compiler
  # struct value to an int, tripping the C compiler. Issue #604
  # sibling: a case as a function tail with a Range scrutinee.
       emit("  " + c_type(pred_type) + " " + tmp + " = " + pred_val + ";")
+    elsif pred_type == "bigint"
+ # promote-mode-widened predicate: keep the temp typed as
+ # bigint and unbox to mrb_int for the when comparisons via
+ # the compile_when_conds path (which already handles the
+ # bigint cmp through sp_bigint_to_int when needed).
+      @needs_bigint = 1
+      emit("  mrb_int " + tmp + " = sp_bigint_to_int((sp_Bigint *)" + pred_val + ");")
+      pred_type = "int"
     else
       emit("  mrb_int " + tmp + " = " + pred_val + ";")
     end
@@ -35691,6 +35699,10 @@ class Compiler
         bt_cr = base_type(pred_type)
         cn_cr = bt_cr[4, bt_cr.length - 4]
         emit("  sp_" + cn_cr + " *" + tmp + " = " + pred_val + ";")
+      elsif pred_type == "bigint"
+        @needs_bigint = 1
+        emit("  mrb_int " + tmp + " = sp_bigint_to_int((sp_Bigint *)" + pred_val + ");")
+        pred_type = "int"
       else
         emit("  mrb_int " + tmp + " = " + pred_val + ";")
       end
