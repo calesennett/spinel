@@ -167,6 +167,14 @@ class Compiler
  # dimension is semicolon-separated and parallel to
  # `@cls_ivar_names[ci]`.
     @cls_ivar_observed_types = "".split(",")
+ # Per-class shadow of `@cls_ivar_types`, populated only by
+ # `apply_rbs_seeds`. Each entry mirrors `@cls_ivar_names[ci]`'s
+ # `;`-separated layout: an RBS-pinned slot carries its declared
+ # type; an un-pinned slot carries the empty string. Consumed by
+ # `arbitrate_rbs_vs_inferred_ivars` after the iterative inference
+ # loop -- when inference and RBS disagree, this table is what
+ # we restore the slot to. Issue #626 sub-issue 2.
+    @cls_ivar_rbs_types = "".split(",")
  # Per-class set of ivar names that are read with a nil predicate
  # somewhere in the program — `<ivar>.nil?`, `<ivar> == nil`,
  # `<ivar> != nil`. Gates nil-scalar widening to poly so an ivar
@@ -7647,6 +7655,18 @@ class Compiler
     end
     @cls_ivar_observed_types.push(obs_init)
     @cls_ivar_nil_checked.push("")
+ # RBS shadow: one empty slot per struct field, joined by ";". No
+ # seed yet -- apply_rbs_seeds fills entries when an RBS line
+ # matches a real field name.
+    rbs_init = ""
+    sk4 = 0
+    while sk4 < struct_fields.length
+      if sk4 > 0
+        rbs_init = rbs_init + ";"
+      end
+      sk4 = sk4 + 1
+    end
+    @cls_ivar_rbs_types.push(rbs_init)
  # Auto-generate initialize method for struct-derived classes
     if struct_fields.length > 0
       init_params = ""
@@ -8725,12 +8745,18 @@ class Compiler
       @cls_ivar_types_version = @cls_ivar_types_version + 1
       @cls_ivar_init_definite[ci] = @cls_ivar_init_definite[ci] + ";" + definite.to_s
       @cls_ivar_observed_types[ci] = @cls_ivar_observed_types[ci] + ";"
+      if ci < @cls_ivar_rbs_types.length
+        @cls_ivar_rbs_types[ci] = @cls_ivar_rbs_types[ci] + ";"
+      end
     else
       @cls_ivar_names[ci] = iname
       @cls_ivar_types[ci] = itype
       @cls_ivar_types_version = @cls_ivar_types_version + 1
       @cls_ivar_init_definite[ci] = definite.to_s
       @cls_ivar_observed_types[ci] = ""
+      if ci < @cls_ivar_rbs_types.length
+        @cls_ivar_rbs_types[ci] = ""
+      end
     end
   end
 
@@ -10819,6 +10845,7 @@ class Compiler
     @cls_ivar_init_definite.push("1;1")
     @cls_ivar_observed_types.push("obj_Method;int")
     @cls_ivar_nil_checked.push("")
+    @cls_ivar_rbs_types.push(";")
     @cls_meth_names.push("initialize")
     @cls_meth_params.push("self_obj,fn_ptr")
     @cls_meth_ptypes.push("obj_Method,int")
@@ -10852,6 +10879,7 @@ class Compiler
     @cls_ivar_init_definite.push("")
     @cls_ivar_observed_types.push("")
     @cls_ivar_nil_checked.push("")
+    @cls_ivar_rbs_types.push("")
     @cls_meth_names.push("")
     @cls_meth_params.push("")
     @cls_meth_ptypes.push("")
@@ -20233,6 +20261,120 @@ class Compiler
  # Seed one method's param types and/or return type. `-` in either
  # slot means "leave alone" (don't override what collect_all
  # produced from `def` arity). Missing method = silent skip.
+ # #626 sub-issue 2: confidence-based RBS arbitration. After all
+ # inference passes converge, walk the RBS shadow tables and
+ # compare to the inferred types. When they disagree:
+ #
+ #   * Inference's slot type came from a literal write in
+ #     `initialize` (`@x = 42`, `cls_ivar_init_definite == 1`)
+ #     AND the RBS-declared type is incompatible → hard error.
+ #     The user wrote both a concrete literal and a contradicting
+ #     RBS declaration; only they can resolve the disagreement.
+ #   * Otherwise inference's source was a call-site observation,
+ #     a body-driven widening, a cross-class poly-recv fan-out,
+ #     or just the int placeholder → silently restore the RBS
+ #     type. RBS is the more reliable signal in those cases.
+ #
+ # Runs after the iterative loop / post-passes so the inferred
+ # type is the converged final form rather than an intermediate
+ # state.
+  def arbitrate_rbs_vs_inferred_ivars
+    ci = 0
+    while ci < @cls_ivar_rbs_types.length
+      rbs_row = @cls_ivar_rbs_types[ci]
+      if rbs_row == ""
+        ci = ci + 1
+        next
+      end
+      rbs_parts = rbs_row.split(";", -1)
+      has_pin = 0
+      pk = 0
+      while pk < rbs_parts.length
+        if rbs_parts[pk] != ""
+          has_pin = 1
+          pk = rbs_parts.length
+        else
+          pk = pk + 1
+        end
+      end
+      if has_pin == 0
+        ci = ci + 1
+        next
+      end
+      names = @cls_ivar_names[ci].split(";")
+      types = @cls_ivar_types[ci].split(";")
+      defs = @cls_ivar_init_definite[ci].split(";")
+ # observed_types are the actual concrete types the inference
+ # passes saw written into this slot, accumulated separately from
+ # the running @cls_ivar_types (which apply_rbs_seeds may already
+ # have rewritten to the RBS-declared type). When the user's
+ # source had a definite literal write whose type contradicts
+ # the RBS declaration, the observation lives here even after
+ # the pre-fill -- that's the high-confidence conflict we want
+ # to report.
+      obs_row = @cls_ivar_observed_types[ci].split(";", -1)
+      changed = 0
+      k = 0
+      while k < names.length
+        if k < rbs_parts.length && rbs_parts[k] != "" && k < types.length
+          rbs_t = rbs_parts[k]
+          cur_t = types[k]
+          definite = 0
+          if k < defs.length && defs[k] == "1"
+            definite = 1
+          end
+          if definite == 1 && k < obs_row.length && obs_row[k] != ""
+            obs_list = obs_row[k].split(",")
+            oi = 0
+            while oi < obs_list.length
+              ot = obs_list[oi]
+              if ot != "" && rbs_inferred_incompatible?(rbs_t, ot)
+                $stderr.puts "Spinel: RBS conflict on " + @cls_names[ci] + names[k] + ": declared \"" + rbs_t + "\" but a literal write inferred \"" + ot + "\""
+                exit(1)
+              end
+              oi = oi + 1
+            end
+          end
+ # No definite conflict: silently restore RBS as the slot type.
+          if rbs_t != cur_t
+            types[k] = rbs_t
+            changed = 1
+          end
+        end
+        k = k + 1
+      end
+      if changed == 1
+        @cls_ivar_types[ci] = types.join(";")
+        @cls_ivar_types_version = @cls_ivar_types_version + 1
+      end
+      ci = ci + 1
+    end
+  end
+
+ # Two types are "incompatible" for the RBS arbitration if they're
+ # not the same base AND not a nullable refinement of each other.
+ # Strict equality would over-trigger errors on benign refinements
+ # (`string` vs `string?`, `int_array` vs `poly_array`); the
+ # compatibility test below mirrors the relaxations that
+ # `update_ivar_type` / `unify_call_types` already make.
+  def rbs_inferred_incompatible?(rbs_t, inf_t)
+    if rbs_t == inf_t
+      return false
+    end
+    if base_type(rbs_t) == base_type(inf_t)
+      return false
+    end
+ # Container variant refinements where one is the other's poly form.
+    if (rbs_t == "int_array" && inf_t == "poly_array") ||
+       (rbs_t == "poly_array" && inf_t == "int_array")
+      return false
+    end
+    if is_hash_type(rbs_t) == 1 && is_hash_type(inf_t) == 1
+      return false
+    end
+    true
+  end
+
   def seed_class_method(ci, mname, ret, ptypes_token)
     midx = cls_find_method_direct(ci, mname)
     if midx < 0
@@ -20347,6 +20489,25 @@ class Compiler
     else
       add_ivar(ci, iname, itype, 1)
     end
+ # Record the RBS-declared type in the shadow so
+ # arbitrate_rbs_vs_inferred_ivars can restore it after the
+ # iterative inference loop, in case some pass widens the slot
+ # off the RBS pin. Issue #626 sub-issue 2.
+    rbs_names = @cls_ivar_names[ci].split(";")
+    rbs_types = @cls_ivar_rbs_types[ci].split(";", -1)
+    while rbs_types.length < rbs_names.length
+      rbs_types.push("")
+    end
+    rj = 0
+    while rj < rbs_names.length
+      if rbs_names[rj] == iname
+        rbs_types[rj] = itype
+        rj = rbs_names.length
+      else
+        rj = rj + 1
+      end
+    end
+    @cls_ivar_rbs_types[ci] = rbs_types.join(";")
   end
 
  # End-to-end whole-program analysis. Splits cleanly out of `compile`
@@ -20545,6 +20706,14 @@ class Compiler
     widen_returns_for_mixed_paths
  # Fix lambda return types based on call-site usage
     fix_lambda_return_types
+ # #626 sub-issue 2: confidence-based RBS arbitration. Inference
+ # may have widened ivar slots off the RBS-pinned types (cross-
+ # class poly-recv attr_writer fan-out, body-driven widening,
+ # etc.); restore them now unless a definite literal write in
+ # initialize actually contradicts the RBS declaration -- only
+ # the user can resolve that disagreement. Runs after every type-
+ # inference pass so the slot we're comparing against is final.
+    arbitrate_rbs_vs_inferred_ivars
  # Pre-detect bigint variables before feature detection
     pre_detect_bigint
     detect_features
