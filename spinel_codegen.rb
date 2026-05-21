@@ -15727,6 +15727,12 @@ class Compiler
                   elsif an_ret_is_arr
                     emit("  sp_PtrArray_push(" + arrnew_tmp + ", (void *)(" + arrnew_lastv + "));")
                   else
+ # promote-mode block tail may emit a bigint expr; unbox
+ # for the int_array accumulator.
+                    if infer_type(arrnew_stmts2.last) == "bigint"
+                      @needs_bigint = 1
+                      arrnew_lastv = "sp_bigint_to_int((sp_Bigint *)" + arrnew_lastv + ")"
+                    end
                     emit("  sp_IntArray_push(" + arrnew_tmp + ", " + arrnew_lastv + ");")
                   end
                 end
@@ -32198,7 +32204,11 @@ class Compiler
     emit("  mrb_int " + tmp_cnt + " = 0;")
     emit_iter_open(rc, recv_type, "lv_" + bp1, tmp_i)
     push_scope
-    declare_var(bp1, iter_elem_type(recv_type))
+    bp1_t_cnt = find_var_type(bp1)
+    if bp1_t_cnt != "bigint"
+      bp1_t_cnt = iter_elem_type(recv_type)
+    end
+    declare_var(bp1, bp1_t_cnt)
     blk = @nd_block[nid]
     bexpr = "0"
     if @nd_body[blk] >= 0
@@ -35093,6 +35103,12 @@ class Compiler
             elsif res_type == "float"
               emit("  sp_FloatArray_push(" + tmp_arrn + ", " + lastv + ");")
             else
+ # promote-mode block tail emits a bigint expr; unbox before
+ # pushing into the int_array accumulator.
+              if infer_type(stmts_n2.last) == "bigint"
+                @needs_bigint = 1
+                lastv = "sp_bigint_to_int((sp_Bigint *)" + lastv + ")"
+              end
               emit("  sp_IntArray_push(" + tmp_arrn + ", " + lastv + ");")
             end
           end
