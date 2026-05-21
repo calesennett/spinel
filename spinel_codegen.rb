@@ -25581,6 +25581,16 @@ class Compiler
       if value_type == "poly" && vt != "" && vt != "poly"
         v = unbox_poly_to(vt, value_expr)
       end
+ # promote-mode-widened slot: wrap an int RHS through
+ # sp_bigint_new_int (and unbox the reverse direction).
+      if vt == "bigint" && value_type == "int"
+        @needs_bigint = 1
+        v = "sp_bigint_new_int(" + value_expr + ")"
+      end
+      if vt == "int" && value_type == "bigint"
+        @needs_bigint = 1
+        v = "sp_bigint_to_int((sp_Bigint *)" + value_expr + ")"
+      end
       emit("  " + fiber_var_ref(lname) + " = " + v + ";")
       return
     end
@@ -25611,6 +25621,14 @@ class Compiler
           end
           if value_type == "poly" && it != "" && it != "poly"
             v = unbox_poly_to(it, value_expr)
+          end
+          if it == "bigint" && value_type == "int"
+            @needs_bigint = 1
+            v = "sp_bigint_new_int(" + value_expr + ")"
+          end
+          if it == "int" && value_type == "bigint"
+            @needs_bigint = 1
+            v = "sp_bigint_to_int((sp_Bigint *)" + value_expr + ")"
           end
         end
         emit("  " + self_arrow + sanitize_ivar(iname) + " = " + v + ";")
