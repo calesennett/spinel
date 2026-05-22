@@ -19621,7 +19621,7 @@ class Compiler
         end
         if mname == "[]"
           @needs_argv = 1
-          idx_expr = compile_arg0(nid)
+          idx_expr = compile_arg0_as_int(nid)
           return "((" + idx_expr + " < sp_argv.len) ? sp_argv.data[(int)" + idx_expr + "] : NULL)"
         end
       end
