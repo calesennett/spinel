@@ -34726,7 +34726,20 @@ class Compiler
         k = 0
         while k < aids.length
           if k < bp_names.length
-            emit("  lv_" + bp_names[k] + " = " + compile_expr_remap(aids[k], map_from, map_to) + ";")
+ # Coerce when the block param's slot type differs from the
+ # yielded value's type (the canonical promote-mode shape
+ # `yield 1, 2` against bigint-widened block params).
+            bp_t_yarg = find_var_type(bp_names[k])
+            arg_v_yarg = compile_expr_remap(aids[k], map_from, map_to)
+            arg_t_yarg = infer_type(aids[k])
+            if bp_t_yarg == "bigint" && arg_t_yarg == "int"
+              @needs_bigint = 1
+              arg_v_yarg = "sp_bigint_new_int(" + arg_v_yarg + ")"
+            elsif bp_t_yarg == "int" && arg_t_yarg == "bigint"
+              @needs_bigint = 1
+              arg_v_yarg = "sp_bigint_to_int((sp_Bigint *)" + arg_v_yarg + ")"
+            end
+            emit("  lv_" + bp_names[k] + " = " + arg_v_yarg + ";")
             assigned = assigned + 1
           end
           k = k + 1
@@ -34737,7 +34750,13 @@ class Compiler
  # previous yield's values. Mirrors compile_yield_stmt's "0"
  # padding on the function-pointer dispatch path.
       while assigned < bp_names.length
-        emit("  lv_" + bp_names[assigned] + " = 0;")
+        bp_reset_t = find_var_type(bp_names[assigned])
+        if bp_reset_t == "bigint"
+          @needs_bigint = 1
+          emit("  lv_" + bp_names[assigned] + " = sp_bigint_new_int(0);")
+        else
+          emit("  lv_" + bp_names[assigned] + " = 0;")
+        end
         assigned = assigned + 1
       end
       body = @nd_body[blk]
