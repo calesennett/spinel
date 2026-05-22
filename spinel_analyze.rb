@@ -20435,6 +20435,18 @@ class Compiler
     if base_type(rbs_t) == base_type(inf_t)
       return false
     end
+ # Issue #650: declared `untyped` (which maps to spinel's internal
+ # "poly") is the top type — any literal arm satisfies it. Mirrors
+ # #638's `T?` accept-nil, generalized to "any inf_t".
+    if rbs_t == "poly"
+      return false
+    end
+ # Issue #650: declared `untyped` (which maps to spinel's internal
+ # "poly") is the top type — any literal arm satisfies it. Mirrors
+ # #638's `T?` accept-nil, generalized to "any inf_t".
+    if rbs_t == "poly"
+      return false
+    end
  # Issue #638: a declared nullable return (`String?` = `String |
  # nil`) is satisfied by a literal `nil` return. Accept the nil
  # arm rather than flagging conflict.
