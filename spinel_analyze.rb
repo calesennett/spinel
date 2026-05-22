@@ -20468,6 +20468,21 @@ class Compiler
       if @meth_return_types[mi] == "int"
         @meth_return_types[mi] = "bigint"
         @needs_bigint = 1
+      elsif @meth_return_types[mi].start_with?("tuple:")
+        tparts_mr = @meth_return_types[mi][6, @meth_return_types[mi].length - 6].split(",")
+        changed_tup_mr = 0
+        tpm_i = 0
+        while tpm_i < tparts_mr.length
+          if tparts_mr[tpm_i] == "int"
+            tparts_mr[tpm_i] = "bigint"
+            @needs_bigint = 1
+            changed_tup_mr = 1
+          end
+          tpm_i = tpm_i + 1
+        end
+        if changed_tup_mr == 1
+          @meth_return_types[mi] = "tuple:" + tparts_mr.join(",")
+        end
       end
       mi = mi + 1
     end
@@ -20550,6 +20565,28 @@ class Compiler
         rets[mj] = "bigint"
         @needs_bigint = 1
         changed = 1
+      elsif rets[mj].start_with?("tuple:")
+ # Tuple element types: a return like `tuple:int,int,int` (built
+ # by `return @x, @y, @z` when @x..@z are int) holds raw int
+ # slots in the synthesized sp_Tuple_int_int_int struct. With
+ # promote mode lifting the ivars to bigint, the tuple build emit
+ # produces sp_Tuple_bigint_bigint_bigint at the call site, so
+ # the return type slot must move too.
+        tparts_ret = rets[mj][6, rets[mj].length - 6].split(",")
+        changed_tup_ret = 0
+        tpr_i = 0
+        while tpr_i < tparts_ret.length
+          if tparts_ret[tpr_i] == "int"
+            tparts_ret[tpr_i] = "bigint"
+            @needs_bigint = 1
+            changed_tup_ret = 1
+          end
+          tpr_i = tpr_i + 1
+        end
+        if changed_tup_ret == 1
+          rets[mj] = "tuple:" + tparts_ret.join(",")
+          changed = 1
+        end
       end
       mj = mj + 1
     end
@@ -21523,8 +21560,7 @@ class Compiler
  # Promote-mode safety: annotate may have produced stale "int"
  # entries for nodes whose inferred type derived from cached
  # state captured before promote_int_to_bigint_globally landed
- # (SuperNode reading cls_method_return's pre-promotion result,
- # CallNode chains whose mid-tree return type was cached, etc.).
+ # (SuperNode reading cls_method_return's pre-promotion result).
  # Sweep `@nd_inferred_type` again and rewrite "int" -> "bigint"
  # for node kinds whose concrete C emit is always bigint when the
  # underlying slot is promoted.
