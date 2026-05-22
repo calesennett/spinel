@@ -15126,7 +15126,30 @@ class Compiler
     if lt == "bigint"
       rc_raw = compile_expr(recv)
  # Cast away volatile from bigint locals (see compile_bigint_arg).
-      rc = infer_type(recv) == "bigint" ? "(sp_Bigint *)" + rc_raw : "sp_bigint_new_int(" + rc_raw + ")"
+ # `infer_type(recv)` may say "int" for an arith CallNode whose
+ # actual emit is bigint (operand-side promote — cache stale).
+ # Peek the operands so we don't wrap an already-bigint sub-
+ # expression with another sp_bigint_new_int (canonical
+ # left-associative `a + b + c` chain shape, three bigint locals).
+      recv_t_op = infer_type(recv)
+      if recv_t_op != "bigint" && @nd_type[recv] == "CallNode"
+        rmn_op = @nd_name[recv]
+        if rmn_op == "+" || rmn_op == "-" || rmn_op == "*" || rmn_op == "/" || rmn_op == "%" || rmn_op == "**"
+          rrcv_op = @nd_receiver[recv]
+          if rrcv_op >= 0 && base_type(infer_type(rrcv_op)) == "bigint"
+            recv_t_op = "bigint"
+          else
+            rargs_op = @nd_arguments[recv]
+            if rargs_op >= 0
+              ra_op = get_args(rargs_op)
+              if ra_op.length > 0 && base_type(infer_type(ra_op[0])) == "bigint"
+                recv_t_op = "bigint"
+              end
+            end
+          end
+        end
+      end
+      rc = recv_t_op == "bigint" ? "(sp_Bigint *)" + rc_raw : "sp_bigint_new_int(" + rc_raw + ")"
       arg = compile_bigint_arg(nid)
       if mname == "+"
         return "sp_bigint_add(" + rc + ", " + arg + ")"
