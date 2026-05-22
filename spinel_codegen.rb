@@ -33557,8 +33557,26 @@ class Compiler
             end
           else
  # promote-mode block tail returning bigint into IntArray;
- # unbox before pushing.
-            if infer_type(stmts_r2.last) == "bigint"
+ # unbox before pushing. The plain infer_type doesn't catch the
+ # arith-callnode-with-bigint-arg shape (cache stale at "int"), so
+ # also peek the operator's arg side.
+            tail_t_rng = infer_type(stmts_r2.last)
+            if tail_t_rng != "bigint" && @nd_type[stmts_r2.last] == "CallNode"
+              tn_mn = @nd_name[stmts_r2.last]
+              if tn_mn == "+" || tn_mn == "-" || tn_mn == "*" || tn_mn == "/" || tn_mn == "%" || tn_mn == "**"
+                tn_recv = @nd_receiver[stmts_r2.last]
+                tn_args_id = @nd_arguments[stmts_r2.last]
+                if tn_recv >= 0 && base_type(infer_type(tn_recv)) == "bigint"
+                  tail_t_rng = "bigint"
+                elsif tn_args_id >= 0
+                  tn_aa = get_args(tn_args_id)
+                  if tn_aa.length > 0 && base_type(infer_type(tn_aa[0])) == "bigint"
+                    tail_t_rng = "bigint"
+                  end
+                end
+              end
+            end
+            if tail_t_rng == "bigint"
               @needs_bigint = 1
               lastv_r = "sp_bigint_to_int((sp_Bigint *)" + lastv_r + ")"
             end
@@ -33917,6 +33935,10 @@ class Compiler
           elsif block_ret_p == "float"
             emit("  sp_FloatArray_push(" + tmp_arr + ", " + lastv_p + ");")
           elsif block_ret_p == "int" || block_ret_p == "bool"
+            if infer_type(stmts_p2.last) == "bigint"
+              @needs_bigint = 1
+              lastv_p = "sp_bigint_to_int((sp_Bigint *)" + lastv_p + ")"
+            end
             emit("  sp_IntArray_push(" + tmp_arr + ", " + lastv_p + ");")
           else
             emit("  sp_PolyArray_push(" + tmp_arr + ", " + box_value_to_poly(block_ret_p, lastv_p) + ");")
