@@ -15025,6 +15025,27 @@ class Compiler
       arg_ids = get_args(args_id)
       if arg_ids.length > 0
         at = infer_type(arg_ids[0])
+ # The cache may say "int" even though the arg emits bigint
+ # (arith CallNode with bigint operand). Peek operands so we
+ # don't wrap an already-bigint expression with sp_bigint_new
+ # _int.
+        if at != "bigint" && @nd_type[arg_ids[0]] == "CallNode"
+          ar_mn_bg = @nd_name[arg_ids[0]]
+          if ar_mn_bg == "+" || ar_mn_bg == "-" || ar_mn_bg == "*" || ar_mn_bg == "/" || ar_mn_bg == "%" || ar_mn_bg == "**"
+            ar_recv_bg = @nd_receiver[arg_ids[0]]
+            if ar_recv_bg >= 0 && base_type(infer_type(ar_recv_bg)) == "bigint"
+              at = "bigint"
+            else
+              ar_args_bg = @nd_arguments[arg_ids[0]]
+              if ar_args_bg >= 0
+                aa_bg = get_args(ar_args_bg)
+                if aa_bg.length > 0 && base_type(infer_type(aa_bg[0])) == "bigint"
+                  at = "bigint"
+                end
+              end
+            end
+          end
+        end
         val = compile_expr(arg_ids[0])
         if at == "bigint"
  # Cast away volatile (locals in setjmp-bearing functions are
@@ -25388,6 +25409,27 @@ class Compiler
       end
       if vt == "bigint"
         at = infer_type(@nd_expression[nid])
+ # The cache may say "int" even though the rhs emits bigint
+ # (arith CallNode with bigint operand, or any of the rhs
+ # shapes mirrored by compile_stmt's IVW arm). Peek the
+ # operator's operands to upgrade the cached type.
+        if at != "bigint" && @nd_expression[nid] >= 0 && @nd_type[@nd_expression[nid]] == "CallNode"
+          rhs_mn_lv = @nd_name[@nd_expression[nid]]
+          if rhs_mn_lv == "+" || rhs_mn_lv == "-" || rhs_mn_lv == "*" || rhs_mn_lv == "/" || rhs_mn_lv == "%" || rhs_mn_lv == "**"
+            rhs_recv_lv = @nd_receiver[@nd_expression[nid]]
+            if rhs_recv_lv >= 0 && base_type(infer_type(rhs_recv_lv)) == "bigint"
+              at = "bigint"
+            else
+              rhs_args_lv = @nd_arguments[@nd_expression[nid]]
+              if rhs_args_lv >= 0
+                ra_lv = get_args(rhs_args_lv)
+                if ra_lv.length > 0 && base_type(infer_type(ra_lv[0])) == "bigint"
+                  at = "bigint"
+                end
+              end
+            end
+          end
+        end
  # Cast away volatile from bigint locals (see compile_bigint_arg).
         barg = at == "bigint" ? "(sp_Bigint *)" + val : "sp_bigint_new_int(" + val + ")"
         vref_b = "(sp_Bigint *)" + vref
@@ -32131,6 +32173,14 @@ class Compiler
         cmp = range_excl_end(lit_range) == 1 ? "<" : "<="
         lo = compile_expr(@nd_left[lit_range])
         hi = compile_expr(@nd_right[lit_range])
+        if infer_type(@nd_left[lit_range]) == "bigint"
+          @needs_bigint = 1
+          lo = "sp_bigint_to_int((sp_Bigint *)" + lo + ")"
+        end
+        if infer_type(@nd_right[lit_range]) == "bigint"
+          @needs_bigint = 1
+          hi = "sp_bigint_to_int((sp_Bigint *)" + hi + ")"
+        end
         if bp_t_re == "bigint"
           @needs_bigint = 1
           rtmp_re = new_temp
