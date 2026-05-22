@@ -15849,14 +15849,14 @@ class Compiler
               @needs_float_array = 1
               tmp = new_temp
               emit("  sp_FloatArray *" + tmp + " = sp_FloatArray_new();")
-              emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; mrb_float _v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_FloatArray_push(" + tmp + ", _v); }")
+              emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; mrb_float _v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_FloatArray_push(" + tmp + ", _v); }")
               return tmp
             end
             if vt == "string"
               @needs_str_array = 1
               tmp = new_temp
               emit("  sp_StrArray *" + tmp + " = sp_StrArray_new();")
-              emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; const char *_v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_StrArray_push(" + tmp + ", _v); }")
+              emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; const char *_v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_StrArray_push(" + tmp + ", _v); }")
               return tmp
             end
  # `Array.new(n, nil)` -- the fill value is the nil singleton, so
@@ -15872,7 +15872,7 @@ class Compiler
               @needs_rb_value = 1
               tmp = new_temp
               emit("  sp_PolyArray *" + tmp + " = sp_PolyArray_new();")
-              emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp + ", sp_box_nil()); }")
+              emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp + ", sp_box_nil()); }")
               return tmp
             end
  # Pointer-type fills (objects, other arrays) need a typed PtrArray
@@ -15882,13 +15882,13 @@ class Compiler
               @needs_gc = 1
               tmp = new_temp
               emit("  sp_PtrArray *" + tmp + " = sp_PtrArray_new();")
-              emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; void *_v = (void *)(" + compile_expr(aargs[1]) + "); for (mrb_int _i = 0; _i < _n; _i++) sp_PtrArray_push(" + tmp + ", _v); }")
+              emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; void *_v = (void *)(" + compile_expr(aargs[1]) + "); for (mrb_int _i = 0; _i < _n; _i++) sp_PtrArray_push(" + tmp + ", _v); }")
               return tmp
             end
             @needs_int_array = 1
             tmp = new_temp
             emit("  sp_IntArray *" + tmp + " = sp_IntArray_new();")
-            emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; mrb_int _v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_IntArray_push(" + tmp + ", _v); }")
+            emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; mrb_int _v = " + compile_expr(aargs[1]) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_IntArray_push(" + tmp + ", _v); }")
             return tmp
           end
  # `Array.new(n)` (single arg, no fill value) creates an array of
@@ -15902,7 +15902,7 @@ class Compiler
             @needs_rb_value = 1
             tmp = new_temp
             emit("  sp_PolyArray *" + tmp + " = sp_PolyArray_new();")
-            emit("  { mrb_int _n = " + compile_expr(aargs.first) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp + ", sp_box_nil()); }")
+            emit("  { mrb_int _n = " + compile_expr_as_int(aargs.first) + "; for (mrb_int _i = 0; _i < _n; _i++) sp_PolyArray_push(" + tmp + ", sp_box_nil()); }")
             return tmp
           end
         end
