@@ -15036,9 +15036,10 @@ class Compiler
       if arg_ids.length > 0
         at = infer_type(arg_ids[0])
  # The cache may say "int" even though the arg emits bigint
- # (arith CallNode with bigint operand). Peek operands so we
- # don't wrap an already-bigint expression with sp_bigint_new
- # _int.
+ # (arith CallNode with bigint operand, or an attr-reader / user-
+ # method call whose return slot is now promoted). Peek operands
+ # / consult the post-promote method-return tables so we don't
+ # wrap an already-bigint expression with sp_bigint_new_int.
         if at != "bigint" && @nd_type[arg_ids[0]] == "CallNode"
           ar_mn_bg = @nd_name[arg_ids[0]]
           if ar_mn_bg == "+" || ar_mn_bg == "-" || ar_mn_bg == "*" || ar_mn_bg == "/" || ar_mn_bg == "%" || ar_mn_bg == "**"
@@ -15051,6 +15052,31 @@ class Compiler
                 aa_bg = get_args(ar_args_bg)
                 if aa_bg.length > 0 && base_type(infer_type(aa_bg[0])) == "bigint"
                   at = "bigint"
+                end
+              end
+            end
+          end
+ # `obj.method` call: re-resolve through cls_method_return on the
+ # now-promoted table. Stale cache may say "int". Also check
+ # attr_reader directly (auto-generated, ivar-slot-typed).
+          if at != "bigint"
+            recv_bgp = @nd_receiver[arg_ids[0]]
+            if recv_bgp >= 0
+              recv_t_bgp = base_type(infer_type(recv_bgp))
+              if is_obj_type(recv_t_bgp) == 1
+                cn_bgp = recv_t_bgp[4, recv_t_bgp.length - 4]
+                ci_bgp = find_class_idx(cn_bgp)
+                if ci_bgp >= 0
+                  mr_bgp = cls_method_return(ci_bgp, ar_mn_bg)
+                  if base_type(mr_bgp) == "bigint"
+                    at = "bigint"
+                  end
+                  if at != "bigint" && cls_has_attr_reader(ci_bgp, ar_mn_bg) == 1
+                    slot_bgp = cls_ivar_type(ci_bgp, "@" + ar_mn_bg)
+                    if base_type(slot_bgp) == "bigint"
+                      at = "bigint"
+                    end
+                  end
                 end
               end
             end
