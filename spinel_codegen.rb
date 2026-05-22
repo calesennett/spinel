@@ -34638,6 +34638,11 @@ class Compiler
         param_map_from.push(flocals_n[kf])
         param_map_to.push(tname)
         declare_var(tname, flocals_t[kf])
+ # Also expose the original name so find_var_type lookups in
+ # the inlined body (which sees the unrenamed AST node) find
+ # the right type — mirrors compile_yield_call_stmt /
+ # compile_yield_method_call_stmt.
+        declare_var(flocals_n[kf], flocals_t[kf])
         kf = kf + 1
       end
     end
@@ -34668,7 +34673,16 @@ class Compiler
           compile_stmt_with_block(last_y, blk, bp_names, param_map_from, param_map_to)
         else
  # Expression-shaped: capture the value via compile_expr_remap.
-          emit("  " + result_tmp + " = " + compile_expr_remap(last_y, param_map_from, param_map_to) + ";")
+          last_val_yc = compile_expr_remap(last_y, param_map_from, param_map_to)
+          last_t_yc = infer_type(last_y)
+          if base_type(rt_yc) == "bigint" && last_t_yc == "int"
+            @needs_bigint = 1
+            last_val_yc = "sp_bigint_new_int(" + last_val_yc + ")"
+          elsif base_type(rt_yc) == "int" && last_t_yc == "bigint"
+            @needs_bigint = 1
+            last_val_yc = "sp_bigint_to_int((sp_Bigint *)" + last_val_yc + ")"
+          end
+          emit("  " + result_tmp + " = " + last_val_yc + ";")
         end
       end
     end
