@@ -21508,7 +21508,14 @@ class Compiler
  # guarded code path is silently skipped.
     if mname == "length" || mname == "size"
       slen_c = "sp_str_length(" + recv_tmp + ".v.s)"
-      slen_rhs = is_poly_ret == 1 ? "sp_box_int(" + slen_c + ")" : slen_c
+      if is_poly_ret == 1
+        slen_rhs = "sp_box_int(" + slen_c + ")"
+      elsif base_type(result_t) == "bigint"
+        @needs_bigint = 1
+        slen_rhs = "sp_bigint_new_int(" + slen_c + ")"
+      else
+        slen_rhs = slen_c
+      end
       emit("  if (" + recv_tmp + ".tag == SP_TAG_STR) " + tmp + " = " + slen_rhs + ";")
     end
  # SP_TAG_STR arm for empty? on a poly recv. Issue #552.
@@ -21850,36 +21857,40 @@ class Compiler
  # reads the result_tmp default (0) for every non-string
  # runtime value. Result type is always int / sp_box_int.
     if mname == "length" || mname == "size"
-      ic = "sp_IntArray_length((sp_IntArray *)" + recv_tmp + ".v.p)"
-      irhs = is_poly_ret == 1 ? "sp_box_int(" + ic + ")" : ic
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) " + result_tmp + " = " + irhs + ";")
-      fc = "sp_FloatArray_length((sp_FloatArray *)" + recv_tmp + ".v.p)"
-      frhs = is_poly_ret == 1 ? "sp_box_int(" + fc + ")" : fc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_FLT_ARRAY) " + result_tmp + " = " + frhs + ";")
-      sc = "sp_StrArray_length((sp_StrArray *)" + recv_tmp + ".v.p)"
-      srhs = is_poly_ret == 1 ? "sp_box_int(" + sc + ")" : sc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_ARRAY) " + result_tmp + " = " + srhs + ";")
-      yc = "sp_IntArray_length((sp_IntArray *)" + recv_tmp + ".v.p)"
-      yrhs = is_poly_ret == 1 ? "sp_box_int(" + yc + ")" : yc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_ARRAY) " + result_tmp + " = " + yrhs + ";")
-      pc = "sp_PtrArray_length((sp_PtrArray *)" + recv_tmp + ".v.p)"
-      prhs = is_poly_ret == 1 ? "sp_box_int(" + pc + ")" : pc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_PTR_ARRAY) " + result_tmp + " = " + prhs + ";")
-      polyc = "sp_PolyArray_length((sp_PolyArray *)" + recv_tmp + ".v.p)"
-      polyrhs = is_poly_ret == 1 ? "sp_box_int(" + polyc + ")" : polyc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_POLY_ARRAY) " + result_tmp + " = " + polyrhs + ";")
-      sihc = "sp_StrIntHash_length((sp_StrIntHash *)" + recv_tmp + ".v.p)"
-      sihrhs = is_poly_ret == 1 ? "sp_box_int(" + sihc + ")" : sihc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_INT_HASH) " + result_tmp + " = " + sihrhs + ";")
-      sshc = "sp_StrStrHash_length((sp_StrStrHash *)" + recv_tmp + ".v.p)"
-      sshrhs = is_poly_ret == 1 ? "sp_box_int(" + sshc + ")" : sshc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_STR_HASH) " + result_tmp + " = " + sshrhs + ";")
-      isthc = "sp_IntStrHash_length((sp_IntStrHash *)" + recv_tmp + ".v.p)"
-      isthrhs = is_poly_ret == 1 ? "sp_box_int(" + isthc + ")" : isthc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_STR_HASH) " + result_tmp + " = " + isthrhs + ";")
-      sphc = "sp_StrPolyHash_length((sp_StrPolyHash *)" + recv_tmp + ".v.p)"
-      sphrhs = is_poly_ret == 1 ? "sp_box_int(" + sphc + ")" : sphc
-      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_POLY_HASH) " + result_tmp + " = " + sphrhs + ";")
+ # Pre-compute the wrap-by-int-result-type pattern once; the
+ # length arms below paste this onto each runtime-typed length
+ # call. poly-ret needs sp_box_int; bigint result slot needs
+ # sp_bigint_new_int; everything else takes the mrb_int raw.
+      pbd_len_open = ""
+      pbd_len_close = ""
+      if is_poly_ret == 1
+        pbd_len_open = "sp_box_int("
+        pbd_len_close = ")"
+      elsif base_type(result_t) == "bigint"
+        @needs_bigint = 1
+        pbd_len_open = "sp_bigint_new_int("
+        pbd_len_close = ")"
+      end
+      ic = pbd_len_open + "sp_IntArray_length((sp_IntArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) " + result_tmp + " = " + ic + ";")
+      fc = pbd_len_open + "sp_FloatArray_length((sp_FloatArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_FLT_ARRAY) " + result_tmp + " = " + fc + ";")
+      sc = pbd_len_open + "sp_StrArray_length((sp_StrArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_ARRAY) " + result_tmp + " = " + sc + ";")
+      yc = pbd_len_open + "sp_IntArray_length((sp_IntArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_ARRAY) " + result_tmp + " = " + yc + ";")
+      pc = pbd_len_open + "sp_PtrArray_length((sp_PtrArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_PTR_ARRAY) " + result_tmp + " = " + pc + ";")
+      polyc = pbd_len_open + "sp_PolyArray_length((sp_PolyArray *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_POLY_ARRAY) " + result_tmp + " = " + polyc + ";")
+      sihc = pbd_len_open + "sp_StrIntHash_length((sp_StrIntHash *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_INT_HASH) " + result_tmp + " = " + sihc + ";")
+      sshc = pbd_len_open + "sp_StrStrHash_length((sp_StrStrHash *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_STR_HASH) " + result_tmp + " = " + sshc + ";")
+      isthc = pbd_len_open + "sp_IntStrHash_length((sp_IntStrHash *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_STR_HASH) " + result_tmp + " = " + isthc + ";")
+      sphc = pbd_len_open + "sp_StrPolyHash_length((sp_StrPolyHash *)" + recv_tmp + ".v.p)" + pbd_len_close
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_POLY_HASH) " + result_tmp + " = " + sphc + ";")
       ypc = "sp_SymPolyHash_length((sp_SymPolyHash *)" + recv_tmp + ".v.p)"
       yprhs = is_poly_ret == 1 ? "sp_box_int(" + ypc + ")" : ypc
       emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_POLY_HASH) " + result_tmp + " = " + yprhs + ";")
