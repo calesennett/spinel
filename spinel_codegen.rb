@@ -12889,12 +12889,15 @@ class Compiler
  # array indices, sp_*_get / _set, and other int-expecting C
  # helpers still need an `mrb_int` here. Unbox through
  # sp_bigint_to_int so the index is a native int even when the
- # source expression came from a promoted slot.
-        if infer_type(arg_ids[0]) == "bigint"
+ # source expression came from a promoted slot. Cover both
+ # direct-type (infer_type) and stale-cache cases (a method call
+ # returning bigint that infer_type still reports as "int").
+        at_a0i = infer_type(arg_ids[0])
+        if at_a0i == "bigint" || expr_emit_is_bigint(arg_ids[0]) == 1
           @needs_bigint = 1
           return "sp_bigint_to_int((sp_Bigint *)" + ce + ")"
         end
-        if infer_type(arg_ids[0]) == "poly"
+        if at_a0i == "poly"
           return "(" + ce + ").v.i"
         end
         return ce
@@ -15361,6 +15364,11 @@ class Compiler
  # method call whose return slot is now promoted). Peek operands
  # / consult the post-promote method-return tables so we don't
  # wrap an already-bigint expression with sp_bigint_new_int.
+ # The unified `expr_emit_is_bigint` walker covers arith, bitop,
+ # unary, paren, and user-method-return cases in one pass.
+        if at != "bigint" && expr_emit_is_bigint(arg_ids[0]) == 1
+          at = "bigint"
+        end
         if at != "bigint" && @nd_type[arg_ids[0]] == "CallNode"
           ar_mn_bg = @nd_name[arg_ids[0]]
           if ar_mn_bg == "+" || ar_mn_bg == "-" || ar_mn_bg == "*" || ar_mn_bg == "/" || ar_mn_bg == "%" || ar_mn_bg == "**"
@@ -15517,8 +15525,29 @@ class Compiler
       return 0
     end
     mn_eb = @nd_name[nid]
+ # CallNode dispatch to a user method whose return slot has been
+ # promoted to bigint: infer_type can be stale (the cls_method
+ # _return / @meth_return_types tables get rewritten by
+ # promote_int_to_bigint_globally after annotate_all_node_types
+ # populates @nd_inferred_type). Resolve the call directly to
+ # cross-check.
+    rcv_eb_user = @nd_receiver[nid]
+    if rcv_eb_user >= 0
+      rcv_t_eb_user = base_type(infer_type(rcv_eb_user))
+      if is_obj_type(rcv_t_eb_user) == 1
+        cls_eb = rcv_t_eb_user[4, rcv_t_eb_user.length - 4]
+        ci_eb_user = find_class_idx(cls_eb)
+        if ci_eb_user >= 0
+          ret_eb_user = cls_method_return(ci_eb_user, mn_eb)
+          if base_type(ret_eb_user) == "bigint"
+            return 1
+          end
+        end
+      end
+    end
     if mn_eb != "+" && mn_eb != "-" && mn_eb != "*" && mn_eb != "/" && mn_eb != "%" && mn_eb != "**" &&
-       mn_eb != "&" && mn_eb != "|" && mn_eb != "^" && mn_eb != "<<" && mn_eb != ">>"
+       mn_eb != "&" && mn_eb != "|" && mn_eb != "^" && mn_eb != "<<" && mn_eb != ">>" &&
+       mn_eb != "~" && mn_eb != "-@"
       return 0
     end
     rcv_eb = @nd_receiver[nid]
@@ -15539,12 +15568,14 @@ class Compiler
  # Bigint operators
     lt = infer_type(recv)
     if lt != "bigint"
- # Check if argument is bigint
+ # Check if argument is bigint (direct type or via emit walker).
       args_id = @nd_arguments[nid]
       if args_id >= 0
         aargs = get_args(args_id)
-        if aargs.length > 0 && infer_type(aargs[0]) == "bigint"
-          lt = "bigint"
+        if aargs.length > 0
+          if infer_type(aargs[0]) == "bigint" || expr_emit_is_bigint(aargs[0]) == 1
+            lt = "bigint"
+          end
         end
       end
     end
@@ -16235,6 +16266,13 @@ class Compiler
       return "(" + compile_expr(recv) + " ^ " + compile_arg0_as_int(nid) + ")"
     end
     if mname == "~"
+ # Unary bit-complement. Promote-mode widens int recvs to bigint,
+ # so route through sp_bigint_not when the C emit is bigint.
+      if base_type(infer_type(recv)) == "bigint" || expr_emit_is_bigint(recv) == 1
+        @needs_bigint = 1
+        rc_not = compile_expr(recv)
+        return "sp_bigint_not((sp_Bigint *)" + rc_not + ")"
+      end
       return "(~" + compile_expr(recv) + ")"
     end
     if mname == "-@"
@@ -28243,9 +28281,16 @@ class Compiler
           ret_ctype = c_type(@current_method_return)
  # `--int-overflow=promote` widens return slots to bigint; an
  # explicit `return <int_expr>` needs sp_bigint_new_int wrap.
- # Reverse covers callers that still want mrb_int.
+ # Reverse covers callers that still want mrb_int. Use the
+ # stale-cache walker so a bigint-emitting arith/bitop chain
+ # (`return a | b | c` with bigint operands) doesn't get
+ # double-wrapped just because infer_type still reports "int".
         elsif (base_type(@current_method_return) == "bigint" && rt == "int") || (base_type(@current_method_return) == "int" && rt == "bigint")
-          ret_val = maybe_bigint_coerce(ret_val, rt, @current_method_return)
+          rt_eff = rt
+          if rt == "int" && expr_emit_is_bigint(arg_ids[0]) == 1
+            rt_eff = "bigint"
+          end
+          ret_val = maybe_bigint_coerce(ret_val, rt_eff, @current_method_return)
           ret_ctype = c_type(@current_method_return)
         end
         if @in_gc_scope == 1
@@ -37319,10 +37364,15 @@ class Compiler
       end
       val = compile_expr(last)
       expr_type = infer_type(last)
- # Peek arith operands to upgrade a stale "int" expr_type into
- # bigint when the actual emit produces bigint — mirrors the
- # other call sites (compile_bigint_arg, compile_operator_expr,
- # LV op-write).
+ # Peek arith/bitop operands to upgrade a stale "int" expr_type
+ # into bigint when the actual emit produces bigint — mirrors
+ # the other call sites (compile_bigint_arg, compile_operator
+ # _expr, LV op-write). The unified `expr_emit_is_bigint` walker
+ # covers arith, bitop, unary `~` / `-@`, parens, and user
+ # method calls whose return slot was promoted.
+      if expr_type != "bigint" && expr_emit_is_bigint(last) == 1
+        expr_type = "bigint"
+      end
       if expr_type != "bigint" && @nd_type[last] == "CallNode"
         ml_ret = @nd_name[last]
         if ml_ret == "+" || ml_ret == "-" || ml_ret == "*" || ml_ret == "/" || ml_ret == "%" || ml_ret == "**"
