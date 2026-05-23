@@ -5199,8 +5199,11 @@ class Compiler
         if infer_type(call_args[k]) == "poly"
           @needs_rb_value = 1
           result = result + "((void *)(" + compile_expr(call_args[k]) + ").v.p)"
+        elsif infer_type(call_args[k]) == "bigint" || expr_emit_is_bigint(call_args[k]) == 1
+          @needs_bigint = 1
+          result = result + "((void *)(uintptr_t)sp_bigint_to_int((sp_Bigint *)" + compile_expr(call_args[k]) + "))"
         else
-          result = result + "((void *)" + compile_expr(call_args[k]) + ")"
+          result = result + "((void *)(uintptr_t)" + compile_expr(call_args[k]) + ")"
         end
       elsif spec == "float_array" || spec == "int_array"
  # Zero-copy bulk transfer (#474). The Spinel Array's contiguous
