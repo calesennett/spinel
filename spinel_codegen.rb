@@ -5800,6 +5800,15 @@ class Compiler
         @needs_rb_value = 1
         return "(" + val + ").v.sym"
       end
+      if expected_base == "bigint"
+ # `--int-overflow=promote` widens slots to bigint; a poly recv
+ # whose underlying value is an int (sp_poly_bxor / poly arith
+ # returning SP_TAG_INT-tagged sp_RbVal) needs to land in a
+ # sp_Bigint * slot. Unbox via .v.i then re-box.
+        @needs_rb_value = 1
+        @needs_bigint = 1
+        return "sp_bigint_new_int((" + val + ").v.i)"
+      end
       if is_obj_type(expected_base) == 1
         @needs_rb_value = 1
         cname = expected_base[4, expected_base.length - 4]
@@ -26435,6 +26444,13 @@ class Compiler
             val = "(" + val + ").v.s"
           elsif ivt_b == "float"
             val = "(" + val + ").v.f"
+          elsif ivt_b == "bigint"
+ # poly bitop helpers (sp_poly_band / _bor / _bxor / _shl / _shr)
+ # return sp_RbVal with SP_TAG_INT (Ruby bitops produce ints).
+ # Unbox via .v.i and rebox into sp_Bigint * to match the
+ # promote-mode bigint ivar slot.
+            @needs_bigint = 1
+            val = "sp_bigint_new_int((" + val + ").v.i)"
           elsif is_obj_type(ivt_b) == 1 || is_array_type(ivt_b) == 1 || is_hash_type(ivt_b) == 1 || is_ptr_array_type(ivt_b) == 1 || ivt_b == "proc"
             val = "(" + c_type(ivt) + ")(" + val + ").v.p"
           end
@@ -37429,6 +37445,12 @@ class Compiler
             emit("  return " + val + ";")
           end
         end
+      elsif expr_type == "poly" && base_type(return_type) == "bigint"
+ # poly bitop helpers / dispatchers can return sp_RbVal with
+ # SP_TAG_INT into a bigint-promoted return slot. Unbox + rebox.
+        @needs_rb_value = 1
+        @needs_bigint = 1
+        emit("  return sp_bigint_new_int((" + val + ").v.i);")
       else
  # `--int-overflow=promote` promotes int slots (incl. return
  # type) to bigint at analyze time, so a literal/int-typed
