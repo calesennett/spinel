@@ -25447,6 +25447,15 @@ class Compiler
     if expr_id >= 0
       may_gc = expr_may_gc(expr_id)
     end
+ # Detect a wrapped sp_bigint_new_int(...) emit. The wrap itself
+ # allocates an sp_Bigint via sp_bigint_alloc, which may trigger
+ # GC -- but expr_may_gc walks the AST and sees only the IntegerNode
+ # literal at the source level, so we have to look at the C expr.
+ # Same shape for any "sp_bigint_*(" prefix that returns a freshly
+ # allocated sp_Bigint*.
+    if may_gc == 0 && (expr.start_with?("sp_bigint_new_int(") || expr.start_with?("sp_bigint_add(") || expr.start_with?("sp_bigint_sub(") || expr.start_with?("sp_bigint_mul("))
+      may_gc = 1
+    end
     if may_gc == 0 && later_arg_may_gc == 0
       return expr
     end
