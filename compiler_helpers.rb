@@ -389,6 +389,9 @@ class Compiler
         if (at_b == "int" && pt_b == "symbol") || (at_b == "symbol" && pt_b == "int") ||
            (at_b == "int" && pt_b == "bool")   || (at_b == "bool"   && pt_b == "int")
  # compatible
+        elsif (at_b == "int" && pt_b == "bigint") || (at_b == "bigint" && pt_b == "int")
+ # promote mode: int and bigint coerce at the call boundary via
+ # sp_bigint_new_int / sp_bigint_to_int.
         else
           return 0
         end

@@ -22405,6 +22405,17 @@ class Compiler
             if arm_pt_base == "poly" && pk < arg_types.length && arg_types[pk] != "poly" && arg_types[pk] != ""
               arg_v = box_value_to_poly(arg_types[pk], arg_v)
             end
+ # Promote mode: arm param is bigint but arg is int (literal /
+ # int LV / int-typed expr) — wrap with sp_bigint_new_int. And
+ # vice versa: arm param is int but arg is bigint — unbox via
+ # sp_bigint_to_int.
+            if arm_pt_base == "bigint" && pk < arg_types.length && base_type(arg_types[pk]) == "int"
+              @needs_bigint = 1
+              arg_v = "sp_bigint_new_int(" + arg_v + ")"
+            elsif arm_pt_base == "int" && pk < arg_types.length && base_type(arg_types[pk]) == "bigint"
+              @needs_bigint = 1
+              arg_v = "sp_bigint_to_int((sp_Bigint *)" + arg_v + ")"
+            end
             arm_arg_strs = arm_arg_strs + ", " + arg_v
           else
             pad = "0"
@@ -22442,6 +22453,9 @@ class Compiler
             if (at_b == "int" && pt_b == "symbol") || (at_b == "symbol" && pt_b == "int") ||
                (at_b == "int" && pt_b == "bool")   || (at_b == "bool"   && pt_b == "int")
  # compatible
+            elsif (at_b == "int" && pt_b == "bigint") || (at_b == "bigint" && pt_b == "int")
+ # promote mode: int and bigint are numerically compatible.
+ # compile_expr_for_expected_type box/unbox bridges them.
             else
               arm_incompat = 1
             end
