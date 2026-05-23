@@ -20629,7 +20629,7 @@ class Compiler
         ppj = 0
         while ppj < psj.length && ppj < pnj.length
           cur_t = psj[ppj]
-          if cur_t == "int_array_ptr_array" || cur_t == "str_array_ptr_array" || cur_t == "float_array_ptr_array" || cur_t == "sym_array_ptr_array"
+          if cur_t == "int_array_ptr_array" || cur_t == "str_array_ptr_array" || cur_t == "float_array_ptr_array" || cur_t == "sym_array_ptr_array" || cur_t == "int_array" || cur_t == "str_array" || cur_t == "float_array" || cur_t == "sym_array"
             new_t = reinfer_lv_array_type_from_scope(sj, pnj[ppj], cur_t)
             if new_t != "" && new_t != cur_t
               psj[ppj] = new_t
@@ -20675,6 +20675,25 @@ class Compiler
         rhs_t = infer_type(expr)
         if rhs_t == "poly_array" || (is_ptr_array_type(rhs_t) == 1 && rhs_t != @reinfer_lv_cur)
           @reinfer_lv_found = "poly_array"
+        end
+ # Even when the cached rhs type still says int_array / similar
+ # the codegen-side compile_map_expr emits PolyArray when the
+ # block's last expr is bigint (promote-mode times.map / range.map
+ # / etc.). Pre-empt that here so the LV slot widens too.
+        if @reinfer_lv_found == "" && @nd_type[expr] == "CallNode" && @nd_name[expr] == "map"
+          map_blk = @nd_block[expr]
+          if map_blk >= 0
+            map_body = @nd_body[map_blk]
+            if map_body >= 0
+              map_stmts = get_stmts(map_body)
+              if map_stmts.length > 0
+                bret_late = infer_type(map_stmts.last)
+                if bret_late == "bigint"
+                  @reinfer_lv_found = "poly_array"
+                end
+              end
+            end
+          end
         end
       end
     end
@@ -21885,6 +21904,11 @@ class Compiler
       end
     end
     annotate_all_node_types
+ # Re-run the LV slot widening pass now that annotate has filled
+ # @nd_inferred_type. The earlier pre-annotate run catches simple
+ # shapes; the post-annotate run resolves chained .map calls whose
+ # inferred type depends on cached block-body annotations.
+    promote_reinfer_lv_scope_types
  # Promote-mode safety: annotate may have produced stale "int"
  # entries for nodes whose inferred type derived from cached
  # state captured before promote_int_to_bigint_globally landed
@@ -21901,6 +21925,36 @@ class Compiler
           ntp = @nd_type[ni_p]
           if ntp == "SuperNode" || ntp == "ForwardingSuperNode"
             @nd_inferred_type[ni_p] = "bigint"
+          elsif ntp == "IfNode" || ntp == "UnlessNode"
+ # IfNode / UnlessNode result types may have unified to "int" when
+ # one arm was a literal 0 / fallback and the other was an LV that
+ # the post-promote scope_types sweep then widened to bigint. The
+ # cached unify_return_type didn't see the widening. If either
+ # arm's currently-cached type is bigint, the unified type should
+ # be bigint too (sp_bigint_new_int(0) bridges the int literal arm
+ # downstream).
+            if_then_t_p = ""
+            if_body_p = @nd_body[ni_p]
+            if if_body_p >= 0
+              if_stmts_p = get_stmts(if_body_p)
+              if if_stmts_p.length > 0
+                if_then_t_p = base_type(@nd_inferred_type[if_stmts_p.last])
+              end
+            end
+            if_else_t_p = ""
+            if_sub_p = @nd_subsequent[ni_p]
+            if if_sub_p >= 0 && @nd_type[if_sub_p] == "ElseNode"
+              if_eb_p = @nd_body[if_sub_p]
+              if if_eb_p >= 0
+                if_es_p = get_stmts(if_eb_p)
+                if if_es_p.length > 0
+                  if_else_t_p = base_type(@nd_inferred_type[if_es_p.last])
+                end
+              end
+            end
+            if if_then_t_p == "bigint" || if_else_t_p == "bigint"
+              @nd_inferred_type[ni_p] = "bigint"
+            end
           elsif ntp == "CallNode"
  # Only re-resolve when there's a concrete recv class to consult
  # and the resolved method's return slot is bigint. Avoids the

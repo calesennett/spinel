@@ -15931,6 +15931,31 @@ class Compiler
       end
       return 0
     end
+ # `cond ? T : F`: if either arm emits bigint, the unified C type
+ # of the ternary is sp_Bigint* (compile_if_expr boxes the other
+ # arm via sp_bigint_new_int). Surface that to callers so a
+ # bigint-arg coercer doesn't wrap the whole thing in another
+ # sp_bigint_new_int treating it as int.
+    if t == "IfNode" || t == "UnlessNode"
+      if_then_eb = @nd_body[nid]
+      if_sub_eb = @nd_subsequent[nid]
+      if if_then_eb >= 0
+        if_then_stmts_eb = get_stmts(if_then_eb)
+        if if_then_stmts_eb.length > 0 && expr_emit_is_bigint(if_then_stmts_eb.last) == 1
+          return 1
+        end
+      end
+      if if_sub_eb >= 0 && @nd_type[if_sub_eb] == "ElseNode"
+        if_else_body_eb = @nd_body[if_sub_eb]
+        if if_else_body_eb >= 0
+          if_else_stmts_eb = get_stmts(if_else_body_eb)
+          if if_else_stmts_eb.length > 0 && expr_emit_is_bigint(if_else_stmts_eb.last) == 1
+            return 1
+          end
+        end
+      end
+      return 0
+    end
  # `lv_x &&= ...` / `lv_x ||= ...` / `lv_x += ...` returns the
  # updated slot value. When the LV is bigint, the result is too.
     if t == "LocalVariableAndWriteNode" || t == "LocalVariableOrWriteNode" || t == "LocalVariableOperatorWriteNode"
@@ -26043,6 +26068,21 @@ class Compiler
         else_val = box_value_to_poly(else_t, else_val)
       end
     end
+ # Same shape for unified bigint: the two arms must share an
+ # sp_Bigint* C type so the ternary doesn't mix int / pointer.
+ # Boxes an int literal arm via sp_bigint_new_int (and the rarely
+ # firing inverse int-unified-but-arm-is-bigint via
+ # sp_bigint_to_int).
+    if base_type(unified_t) == "bigint"
+      if then_t == "int" || then_t == "nil"
+        @needs_bigint = 1
+        then_val = "sp_bigint_new_int(" + then_val + ")"
+      end
+      if else_t == "int" || else_t == "nil"
+        @needs_bigint = 1
+        else_val = "sp_bigint_new_int(" + else_val + ")"
+      end
+    end
     "(" + cond + " ? " + then_val + " : " + else_val + ")"
   end
 
@@ -34276,6 +34316,15 @@ class Compiler
     end
     emit("  for (mrb_int " + tmp + " = 0; " + tmp + " < " + rc + "; " + tmp + "++) {")
     bp_t_tb = bp1 != "" ? find_var_type(bp1) : ""
+ # Under promote mode the block param slot is widened to bigint
+ # at analyze time, but find_var_type returns "" when the bp's
+ # scope hasn't been pushed yet (this call site reads before the
+ # declare_var below). Default to bigint so the assignment matches
+ # the slot's declared C type. Same shape as compile_map_expr's
+ # bpn_t_mp peek; sort_by / each_cons fold the same way.
+    if bp_t_tb == "" && @int_overflow_mode == "promote"
+      bp_t_tb = "bigint"
+    end
     if bp1 != ""
       if bp_t_tb == "bigint"
         @needs_bigint = 1
@@ -35083,9 +35132,14 @@ class Compiler
       bpn = get_block_param(nid, 0)
       res_type = "int"
       blk_n = @nd_block[nid]
+ # Block param type: under promote mode the analyzer widens int
+ # LVs to bigint. Default to "int" but bump to "bigint" under
+ # promote so the inline assignment / arithmetic dispatches
+ # consistently.
+      bpn_decl_t = (@int_overflow_mode == "promote") ? "bigint" : "int"
       push_scope
       if bpn != ""
-        declare_var(bpn, "int")
+        declare_var(bpn, bpn_decl_t)
       end
       if blk_n >= 0
         body_n = @nd_body[blk_n]
@@ -35093,6 +35147,12 @@ class Compiler
           stmts_n = get_stmts(body_n)
           if stmts_n.length > 0
             res_type = infer_type(stmts_n.last)
+ # Stale-int cache: block's `i + 1` may cache as int even when
+ # the bp `i` was widened to bigint at scope_types time. Re-walk
+ # the expr emit at the result-type peek.
+            if res_type == "int" && expr_emit_is_bigint(stmts_n.last) == 1
+              res_type = "bigint"
+            end
           end
         end
       end
