@@ -3217,7 +3217,17 @@ class Compiler
       while k < elems.length
         et2 = infer_type(elems[k])
         if et2 != et
-          return "poly_array"
+ # Under promote mode int / bigint share IntArray storage (the
+ # literal-side codegen unboxes any sp_Bigint* element via
+ # sp_bigint_to_int before the push). Stale-int cache on an arith
+ # CallNode whose actual emit is bigint shows up here as et2=int
+ # while a sibling LV read sees et=bigint -- recognize the pair
+ # as compatible instead of widening to poly_array.
+          if @int_overflow_mode == "promote" && (et == "int" || et == "bigint") && (et2 == "int" || et2 == "bigint")
+ # compatible; continue
+          else
+            return "poly_array"
+          end
         end
         k = k + 1
       end
@@ -18686,10 +18696,12 @@ class Compiler
         return tmp
       end
     end
- # Common array methods (all array types)
+ # Common array methods (all array types). compile_arg0_as_int unboxes
+ # a bigint count operand into an mrb_int so the inline loop counter
+ # has the right type (the take / drop emit assumes mrb_int).
     if mname == "take"
       pfx = array_c_prefix(recv_type)
-      n = compile_arg0(nid)
+      n = compile_arg0_as_int(nid)
       tmp = new_temp
       itmp = new_temp
       emit("  " + c_type(recv_type) + tmp + " = sp_" + pfx + "_new();")
@@ -18699,7 +18711,7 @@ class Compiler
     end
     if mname == "drop"
       pfx = array_c_prefix(recv_type)
-      n = compile_arg0(nid)
+      n = compile_arg0_as_int(nid)
       tmp = new_temp
       itmp = new_temp
       emit("  " + c_type(recv_type) + tmp + " = sp_" + pfx + "_new();")
@@ -33832,10 +33844,21 @@ class Compiler
  # this guard the slot read is OOB into the sub-array's data buffer.
         dlen_tmp = new_temp
         emit("    mrb_int " + dlen_tmp + " = sp_" + elem_pfx + "_length(" + bp_tmp + ");")
+        destruct_slot_box = (@int_overflow_mode == "promote" && elem_pfx == "IntArray") ? 1 : 0
         di = 0
         while di < destruct_n
           slot = "lv__" + (di + 1).to_s
-          emit("    " + slot + " = (" + dlen_tmp + " > " + di.to_s + ") ? sp_" + elem_pfx + "_get(" + bp_tmp + ", " + di.to_s + ") : 0;")
+ # promote-mode numbered destruct slot widened to bigint via the
+ # scope_types sweep but the inner array is still IntArray; box
+ # each get with sp_bigint_new_int (and use sp_bigint_new_int(0)
+ # as the missing-slot default) so the slot's sp_Bigint* type
+ # matches.
+          if destruct_slot_box == 1
+            @needs_bigint = 1
+            emit("    " + slot + " = (" + dlen_tmp + " > " + di.to_s + ") ? sp_bigint_new_int(sp_" + elem_pfx + "_get(" + bp_tmp + ", " + di.to_s + ")) : sp_bigint_new_int(0);")
+          else
+            emit("    " + slot + " = (" + dlen_tmp + " > " + di.to_s + ") ? sp_" + elem_pfx + "_get(" + bp_tmp + ", " + di.to_s + ") : 0;")
+          end
           di = di + 1
         end
       else
@@ -33849,7 +33872,16 @@ class Compiler
       if destruct_n > 0
         di = 0
         while di < destruct_n
-          declare_var("_" + (di + 1).to_s, elem_type_of_array(elem_type))
+ # promote-mode: each_with numbered destructuring slots boxed
+ # to sp_Bigint* (see emit_destruct_box above). Declare the
+ # codegen-side scope type as "bigint" so subsequent infer_type
+ # calls inside the block body see bigint instead of int -- avoids
+ # compile_bigint_arg double-wrapping `_1` with sp_bigint_new_int.
+          d_decl_t = elem_type_of_array(elem_type)
+          if destruct_slot_box == 1 && d_decl_t == "int"
+            d_decl_t = "bigint"
+          end
+          declare_var("_" + (di + 1).to_s, d_decl_t)
           di = di + 1
         end
       else

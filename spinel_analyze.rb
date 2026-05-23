@@ -2558,7 +2558,16 @@ class Compiler
       while k < elems.length
         et2 = infer_type(elems[k])
         if et2 != et
-          return "poly_array"
+ # Under promote mode, int / bigint are numerically interchangeable
+ # (the literal codegen unboxes via sp_bigint_to_int for IntArray
+ # storage). Stale-int cache on an arith CallNode whose actual
+ # value is bigint causes a spurious mismatch here -- recognize
+ # int<>bigint as compatible.
+          if @int_overflow_mode == "promote" && (et == "int" || et == "bigint") && (et2 == "int" || et2 == "bigint")
+ # compatible; continue
+          else
+            return "poly_array"
+          end
         end
         k = k + 1
       end
@@ -21908,6 +21917,14 @@ class Compiler
                   if base_type(mr_pn) == "bigint"
                     @nd_inferred_type[ni_p] = "bigint"
                   end
+                end
+ # Arith/bitop on bigint recv produces bigint. The cache was
+ # filled before promote_int_to_bigint_globally widened the
+ # recv's scope_type, so the call's cached return is stale "int".
+              elsif rcv_t_pn == "bigint"
+                mn_pn = @nd_name[ni_p]
+                if mn_pn == "+" || mn_pn == "-" || mn_pn == "*" || mn_pn == "/" || mn_pn == "%" || mn_pn == "**" || mn_pn == "&" || mn_pn == "|" || mn_pn == "^" || mn_pn == "<<" || mn_pn == ">>" || mn_pn == "~" || mn_pn == "-@"
+                  @nd_inferred_type[ni_p] = "bigint"
                 end
               end
             end
