@@ -9837,7 +9837,20 @@ class Compiler
                       if ak < p_ptypes.length
                         at_arg = infer_type(arg_ids[ak])
                         if p_ptypes[ak] != at_arg && p_ptypes[ak] != ""
-                          arg_expr2 = "(" + c_type(p_ptypes[ak]) + ")" + arg_expr2
+ # int -> bigint: box via sp_bigint_new_int. A raw cast would
+ # produce a NULL pointer for literal 0 / negative ints and
+ # garbage for nonzero literals (interprets the int as a heap
+ # address). Same shape on the inverse path: bigint -> int
+ # unbox via sp_bigint_to_int.
+                          if base_type(p_ptypes[ak]) == "bigint" && base_type(at_arg) == "int"
+                            @needs_bigint = 1
+                            arg_expr2 = "sp_bigint_new_int(" + arg_expr2 + ")"
+                          elsif base_type(p_ptypes[ak]) == "int" && base_type(at_arg) == "bigint"
+                            @needs_bigint = 1
+                            arg_expr2 = "sp_bigint_to_int((sp_Bigint *)" + arg_expr2 + ")"
+                          else
+                            arg_expr2 = "(" + c_type(p_ptypes[ak]) + ")" + arg_expr2
+                          end
                         end
                       end
                       super_args = super_args + arg_expr2
