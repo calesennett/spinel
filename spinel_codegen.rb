@@ -15740,6 +15740,44 @@ class Compiler
             return 1
           end
         end
+ # Const-as-instance: `APP.count` where APP is `const obj_App` and
+ # `count` is App's instance method (or attr_reader). Look up the
+ # const's static type and resolve the imeth.
+        ci_eb_const = find_const_idx(rname_eb)
+        if ci_eb_const >= 0 && ci_eb_const < @const_types.length
+          ct_eb_const = base_type(@const_types[ci_eb_const])
+          if is_obj_type(ct_eb_const) == 1
+            cls_eb_const = ct_eb_const[4, ct_eb_const.length - 4]
+            cidx_eb_const = find_class_idx(cls_eb_const)
+            if cidx_eb_const >= 0
+              cret_eb_const = cls_method_return(cidx_eb_const, mn_eb)
+              if base_type(cret_eb_const) == "bigint"
+                return 1
+              end
+ # attr_reader on obj instance — return type is the ivar slot.
+              if cls_has_attr_reader(cidx_eb_const, mn_eb) == 1
+                slot_eb_const = cls_ivar_type(cidx_eb_const, "@" + mn_eb)
+                if base_type(slot_eb_const) == "bigint"
+                  return 1
+                end
+              end
+            end
+          end
+        end
+      end
+ # Same shape: recv is an obj_<C> typed expression and mname is
+ # an attr_reader. Cover the bigint slot regardless of whether
+ # the method-return table reports the right type.
+      rcv_t_eb_attr = base_type(infer_type(rcv_eb_user))
+      if is_obj_type(rcv_t_eb_attr) == 1
+        cls_eb_attr = rcv_t_eb_attr[4, rcv_t_eb_attr.length - 4]
+        cidx_eb_attr = find_class_idx(cls_eb_attr)
+        if cidx_eb_attr >= 0 && cls_has_attr_reader(cidx_eb_attr, mn_eb) == 1
+          slot_eb_attr = cls_ivar_type(cidx_eb_attr, "@" + mn_eb)
+          if base_type(slot_eb_attr) == "bigint"
+            return 1
+          end
+        end
       end
     end
     if mn_eb != "+" && mn_eb != "-" && mn_eb != "*" && mn_eb != "/" && mn_eb != "%" && mn_eb != "**" &&
