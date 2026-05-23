@@ -22043,10 +22043,14 @@ class Compiler
  # For non-int keys (string, sym, ...) the SP_TAG_INT branch
  # is unreachable at runtime and `(recv.v.i >> key)` is
  # invalid C — `>> const char *` won't compile.
-    if mname == "[]" && arg_compiled.length >= 1 && (arg_types[0] == "int" || arg_types[0] == "poly")
+    if mname == "[]" && arg_compiled.length >= 1 && (arg_types[0] == "int" || arg_types[0] == "poly" || arg_types[0] == "bigint")
       a0_int = arg_compiled[0]
       if arg_types[0] == "poly"
         a0_int = "(" + a0_int + ").v.i"
+      end
+      if arg_types[0] == "bigint"
+        @needs_bigint = 1
+        a0_int = "sp_bigint_to_int((sp_Bigint *)" + a0_int + ")"
       end
       bit = "((" + recv_tmp + ".v.i >> (" + a0_int + ")) & 1)"
       brhs = is_poly_ret == 1 ? "sp_box_int(" + bit + ")" : bit
