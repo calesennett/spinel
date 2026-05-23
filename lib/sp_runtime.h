@@ -1822,16 +1822,39 @@ static inline void sp_poly_puts(sp_RbVal v) {
     case SP_TAG_NIL: putchar('\n'); break;
     case SP_TAG_SYM: { const char *_ss = sp_sym_to_s((sp_sym)v.v.i); fputs(_ss, stdout); putchar('\n'); break; }
     case SP_TAG_OBJ: {
-      /* Built-in pointer types route through their inspect helpers
-         (one line per array, matching `puts arr`'s short form). User
-         classes (cls_id >= 0) fall through to the raw-pointer path
-         since we don't have per-class inspect dispatch here. */
+      /* MRI's `puts arr` iterates an Array, printing one element per
+         line (using to_s on each); a non-Array OBJ falls back to
+         inspect / class-name. */
       switch (v.cls_id) {
-        case SP_BUILTIN_INT_ARRAY: puts(sp_IntArray_inspect((sp_IntArray *)v.v.p)); break;
-        case SP_BUILTIN_FLT_ARRAY: puts(sp_FloatArray_inspect((sp_FloatArray *)v.v.p)); break;
-        case SP_BUILTIN_STR_ARRAY: puts(sp_StrArray_inspect((sp_StrArray *)v.v.p)); break;
-        case SP_BUILTIN_SYM_ARRAY: puts(sp_SymArray_inspect((sp_IntArray *)v.v.p)); break;
-        case SP_BUILTIN_PTR_ARRAY: puts(sp_PtrArray_inspect((sp_PtrArray *)v.v.p)); break;
+        case SP_BUILTIN_INT_ARRAY: {
+          sp_IntArray *_a = (sp_IntArray *)v.v.p;
+          for (mrb_int _i = 0; _i < _a->len; _i++)
+            printf("%lld\n", (long long)_a->data[_a->start + _i]);
+          break;
+        }
+        case SP_BUILTIN_FLT_ARRAY: {
+          sp_FloatArray *_a = (sp_FloatArray *)v.v.p;
+          for (mrb_int _i = 0; _i < _a->len; _i++) {
+            fputs(sp_float_to_s(_a->data[_i]), stdout); putchar('\n');
+          }
+          break;
+        }
+        case SP_BUILTIN_STR_ARRAY: {
+          sp_StrArray *_a = (sp_StrArray *)v.v.p;
+          for (mrb_int _i = 0; _i < _a->len; _i++) {
+            const char *_s = _a->data[_i];
+            if (_s) { fputs(_s, stdout); if (!*_s || _s[strlen(_s)-1] != '\n') putchar('\n'); } else putchar('\n');
+          }
+          break;
+        }
+        case SP_BUILTIN_SYM_ARRAY: {
+          sp_IntArray *_a = (sp_IntArray *)v.v.p;
+          for (mrb_int _i = 0; _i < _a->len; _i++) {
+            const char *_s = sp_sym_to_s((sp_sym)_a->data[_a->start + _i]);
+            fputs(_s, stdout); putchar('\n');
+          }
+          break;
+        }
         case SP_BUILTIN_RANGE: puts(sp_Range_inspect((sp_Range *)v.v.p)); break;
         case SP_BUILTIN_TIME: puts(sp_Time_inspect((sp_Time *)v.v.p)); break;
         default: printf("#<Object:0x%p>\n", v.v.p); break;

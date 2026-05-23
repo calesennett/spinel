@@ -22403,6 +22403,34 @@ class Compiler
       brhs = is_poly_ret == 1 ? "sp_box_int(" + bit + ")" : bit
       emit("  if (" + recv_tmp + ".tag == SP_TAG_INT) " + tmp + " = " + brhs + ";")
     end
+ # 2-arg `[]` on a poly recv carrying a String: `s[start, length]`
+ # substring. Mirrors compile_string_method_expr's typed path
+ # using sp_str_sub_range. Issue #659. Without this arm, the
+ # poly recv falls through to the SP_TAG_OBJ block (no String
+ # branch), and the result temp stays sp_box_nil() -> empty.
+    if mname == "[]" && arg_compiled.length == 2 && is_poly_ret == 1
+      a1_t_idx = arg_types.length > 0 ? arg_types[0] : ""
+      a2_t_idx = arg_types.length > 1 ? arg_types[1] : ""
+      if (a1_t_idx == "int" || a1_t_idx == "poly" || base_type(a1_t_idx) == "bigint") &&
+         (a2_t_idx == "int" || a2_t_idx == "poly" || base_type(a2_t_idx) == "bigint")
+        a1s_idx = arg_compiled[0]
+        if a1_t_idx == "poly"
+          a1s_idx = "(" + a1s_idx + ").v.i"
+        elsif base_type(a1_t_idx) == "bigint"
+          @needs_bigint = 1
+          a1s_idx = "sp_bigint_to_int((sp_Bigint *)" + a1s_idx + ")"
+        end
+        a2s_idx = arg_compiled[1]
+        if a2_t_idx == "poly"
+          a2s_idx = "(" + a2s_idx + ").v.i"
+        elsif base_type(a2_t_idx) == "bigint"
+          @needs_bigint = 1
+          a2s_idx = "sp_bigint_to_int((sp_Bigint *)" + a2s_idx + ")"
+        end
+        ssub_c = "sp_str_sub_range(" + recv_tmp + ".v.s, " + a1s_idx + ", " + a2s_idx + ")"
+        emit("  if (" + recv_tmp + ".tag == SP_TAG_STR) " + tmp + " = sp_box_str(" + ssub_c + ");")
+      end
+    end
  # SP_TAG_STR arm for string methods that have a concrete
  # str-recv lowering. `v.gsub(/re/, repl)` where v is poly
  # (e.g. v came from `poly_hash[k]`) needs a per-tag dispatch
@@ -23033,7 +23061,43 @@ class Compiler
       end
       emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_PROC) " + result_tmp + " = " + proc_rhs + ";")
     end
-    if mname == "[]" && arg_compiled.length >= 1 && a0_is_int
+    if mname == "[]" && arg_compiled.length == 2 && is_poly_ret == 1
+ # 2-arg `recv[start, length]` slice form on a poly recv carrying
+ # an Array variant. Issue #659. Each branch dispatches to the
+ # element type's `_slice` helper; the result is itself an Array
+ # of the same element type, boxed back into the recv's Array tag.
+ # Limit to is_poly_ret because a concretely-typed result temp
+ # (mrb_int / const char *) can't hold an Array pointer.
+      a1_t_s = arg_types.length > 0 ? arg_types[0] : ""
+      a2_t_s = arg_types.length > 1 ? arg_types[1] : ""
+      a1s = arg_compiled[0]
+      a2s = arg_compiled[1]
+ # Unbox poly / bigint to mrb_int (slice helpers take mrb_int).
+      if a1_t_s == "poly"
+        a1s = "(" + a1s + ").v.i"
+      elsif base_type(a1_t_s) == "bigint"
+        @needs_bigint = 1
+        a1s = "sp_bigint_to_int((sp_Bigint *)" + a1s + ")"
+      end
+      if a2_t_s == "poly"
+        a2s = "(" + a2s + ").v.i"
+      elsif base_type(a2_t_s) == "bigint"
+        @needs_bigint = 1
+        a2s = "sp_bigint_to_int((sp_Bigint *)" + a2s + ")"
+      end
+      isc = "sp_IntArray_slice((sp_IntArray *)" + recv_tmp + ".v.p, " + a1s + ", " + a2s + ")"
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) " + result_tmp + " = sp_box_int_array(" + isc + ");")
+      fsc = "sp_FloatArray_slice((sp_FloatArray *)" + recv_tmp + ".v.p, " + a1s + ", " + a2s + ")"
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_FLT_ARRAY) " + result_tmp + " = sp_box_float_array(" + fsc + ");")
+      ssc = "sp_StrArray_slice((sp_StrArray *)" + recv_tmp + ".v.p, " + a1s + ", " + a2s + ")"
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_STR_ARRAY) " + result_tmp + " = sp_box_str_array(" + ssc + ");")
+      ysc = "sp_IntArray_slice((sp_IntArray *)" + recv_tmp + ".v.p, " + a1s + ", " + a2s + ")"
+      emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_SYM_ARRAY) " + result_tmp + " = sp_box_obj((void *)" + ysc + ", SP_BUILTIN_SYM_ARRAY);")
+      if narrowed_int == 0
+        psc = "sp_PtrArray_slice((sp_PtrArray *)" + recv_tmp + ".v.p, " + a1s + ", " + a2s + ")"
+        emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_PTR_ARRAY) " + result_tmp + " = sp_box_obj((void *)" + psc + ", SP_BUILTIN_PTR_ARRAY);")
+      end
+    elsif mname == "[]" && arg_compiled.length >= 1 && a0_is_int
       ic = "sp_IntArray_get((sp_IntArray *)" + recv_tmp + ".v.p, " + a0 + ")"
       irhs = is_poly_ret == 1 ? "sp_box_int(" + ic + ")" : ic
       emit("    if (" + recv_tmp + ".cls_id == SP_BUILTIN_INT_ARRAY) " + result_tmp + " = " + irhs + ";")
