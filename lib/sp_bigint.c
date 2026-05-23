@@ -5363,7 +5363,12 @@ int sp_bigint_cmp(sp_Bigint *a, sp_Bigint *b) {
 }
 
 int64_t sp_bigint_to_int(sp_Bigint *b) {
-  /* Extract int64 from mpz - for small values */
+  /* Extract int64 from mpz - for small values.
+     Treat NULL as 0 -- a promote-mode method body whose tail is a
+     setter / void-shape statement returns NULL (the bigint default),
+     and the caller may unwrap with sp_bigint_to_int when its slot
+     wants mrb_int. */
+  if (b == NULL) return 0;
   mpz_t *z = &b->mpz;
   if (z->sz == 0) return 0;
   int64_t v = 0;
