@@ -22362,13 +22362,16 @@ class Compiler
     a0 = ""
     if arg_compiled.length > 0
       a0 = arg_compiled[0]
- # Unbox if poly — every built-in `[]` arm here passes a0 to a
- # function expecting `mrb_int` (sp_IntArray_get etc., or the
- # Method fn_ptr's int parameter). When the caller's arg is
- # poly (e.g. `def fetch(addr); @fetch[addr][addr]; end` with
- # addr widened), we must unbox before the C call.
+ # Unbox if poly / bigint — every built-in `[]` arm here passes
+ # a0 to a function expecting `mrb_int` (sp_IntArray_get etc.,
+ # or the Method fn_ptr's int parameter). When the caller's arg
+ # is poly or promote-mode bigint, unbox before the C call.
       if arg_types.length > 0 && arg_types[0] == "poly"
         a0 = "(" + a0 + ").v.i"
+      end
+      if arg_types.length > 0 && arg_types[0] == "bigint"
+        @needs_bigint = 1
+        a0 = "sp_bigint_to_int((sp_Bigint *)" + a0 + ")"
       end
     end
  # `[]` — element types differ per built-in. When the result temp
@@ -22387,7 +22390,7 @@ class Compiler
  # runtime (a poly recv carrying a String key would be a hash,
  # not an array) and emitting them produces Wint-conversion
  # warnings — or hard errors under -Werror.
-    a0_is_int = arg_compiled.length >= 1 && (arg_types.length == 0 || arg_types[0] == "int" || arg_types[0] == "poly")
+    a0_is_int = arg_compiled.length >= 1 && (arg_types.length == 0 || arg_types[0] == "int" || arg_types[0] == "poly" || arg_types[0] == "bigint")
  # Hash dispatch arms for `[]` on a poly recv whose runtime
  # storage is a *-Hash variant. The chained `outer[k1][k2]`
  # shape where outer is StrPolyHash lands here — the inner []
