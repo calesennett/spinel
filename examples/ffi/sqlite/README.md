@@ -65,9 +65,10 @@ Comments on the FFI post:
 
 ## Notes
 
-The demo uses inline-quoted SQL with `Sql.q` for escaping, not bound
-parameters. The reason: `sqlite3_bind_text`'s last argument is a
-destructor callback (the `SQLITE_TRANSIENT` sentinel is `(void *)-1`),
-and the MVP FFI can't yet construct a `:ptr` from a sentinel integer.
-For real applications you'd write a tiny C helper that wraps `bind_text`
-with `SQLITE_TRANSIENT` baked in and link it alongside.
+The demo uses inline-quoted SQL with `Sql.q` for escaping, kept as the
+minimal path through `prepare_v2` / `step` / `finalize`. For bound
+parameters, `sqlite3_bind_text` is supported directly — pass `-1` as
+the destructor argument to get `SQLITE_TRANSIENT` (`(void *)-1`); the
+FFI accepts an integer literal in a `:ptr` arg slot and emits
+`((void *)-1LL)`. See `sqlite3_lib.rb` for the `ffi_func` declaration
+and `test/ffi_ptr_int_literal.rb` for the regression test.
