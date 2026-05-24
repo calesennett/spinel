@@ -1,32 +1,40 @@
-class Actor
-  attr_reader :present, :id
+class NameTag
+  attr_reader :present, :text
 
-  def initialize(present, id)
+  def initialize(present, text)
     @present = present
-    @id = id
+    @text = text
   end
 end
 
-class Context
+class Payload
 end
 
-class Scope
-  attr_reader :actor, :context
+class Wrapper
+  attr_reader :tag, :payload
 
-  def initialize(actor, context)
-    @actor = actor
-    @context = context
+  def initialize(tag, payload)
+    @tag = tag
+    @payload = payload
   end
 
-  def self.for_actor(actor)
-    Scope.new(actor, Context.new)
+  def self.for_tag(tag)
+    junk = []
+    i = 0
+    while i < 50
+      junk << "junk" + i.to_s
+      i = i + 1
+    end
+
+    Wrapper.new(tag, Payload.new)
   end
 end
 
+wrapper = nil
 i = 0
 while i < 2000
-  Scope.for_actor(Actor.new(1, "alice"))
+  wrapper = Wrapper.for_tag(NameTag.new(1, "label" + i.to_s))
   i = i + 1
 end
 
-puts "ok"
+puts wrapper.tag.text
