@@ -13515,6 +13515,13 @@ class Compiler
  # id. Issue #633.
                         fmt = fmt + "%s"
                         arg_exprs.push("sp_sym_to_s(" + compile_expr(inner) + ")")
+                      elsif it == "exception"
+ # `"#{e}"` on an sp_Exception * implicitly calls
+ # to_s, which returns the message. Without this
+ # arm the default int path printed the pointer as
+ # a long long. Phase 2.3.
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_exc_message(" + compile_expr(inner) + ")")
                       else
                         fmt = fmt + "%lld"
                         arg_exprs.push("(long long)" + compile_expr(inner))
@@ -33951,6 +33958,13 @@ class Compiler
       emit("  { const char *_ps = (const char *)(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
       return
     end
+ # `puts <exc>` in Ruby implicitly calls .to_s -> message. Print the
+ # sp_Exception's message field so the Phase 1 shape (`e` was the
+ # raw message string) keeps working.
+    if at == "exception"
+      emit("  { const char *_ps = sp_exc_message(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
+      return
+    end
     if at == "time"
       emit("  { const char *_ts = sp_time_inspect_v(" + val + "); fputs(_ts, stdout); putchar('" + bsl_n + "'); }")
       return
@@ -34051,6 +34065,12 @@ class Compiler
       end
       if at == "symbol"
         emit("  puts(sp_sym_to_s(" + val + "));")
+        k = k + 1
+        next
+      end
+ # Phase 2.3: `puts <exc>` -- print the message (CRuby calls to_s).
+      if at == "exception"
+        emit("  { const char *_ps = sp_exc_message(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
         k = k + 1
         next
       end
@@ -37485,15 +37505,13 @@ class Compiler
     bound_rname = ""
     if ref >= 0
       bound_rname = @nd_name[ref]
-      emit("  lv_" + bound_rname + " = " + saved_msg + ";")
-      @exc_var_names.push(bound_rname)
-      @exc_var_cls_vars.push(saved_cls)
+ # Phase 2.3: bind `e` to a first-class sp_Exception * (was the
+ # raw message string in Phase 1). saved_cls / saved_msg snapshot
+ # the in-flight exception above; wrap them in sp_exc_new so the
+ # LV holds a typed object that dispatch / re-raise can use.
+      emit("  lv_" + bound_rname + " = sp_exc_new(" + saved_cls + ", " + saved_msg + ");")
     end
     compile_rescue_body(@nd_body[rc], has_retry)
-    if bound_rname != ""
-      @exc_var_names.pop
-      @exc_var_cls_vars.pop
-    end
     @rescue_cls_stack.pop
     @rescue_msg_stack.pop
     @rescue_depth = @rescue_depth - 1
@@ -39163,15 +39181,10 @@ class Compiler
     bound_rname = ""
     if ref >= 0
       bound_rname = @nd_name[ref]
-      emit("  lv_" + bound_rname + " = " + saved_msg + ";")
-      @exc_var_names.push(bound_rname)
-      @exc_var_cls_vars.push(saved_cls)
+ # Phase 2.3: see compile_rescue_chain — same sp_Exception * lower.
+      emit("  lv_" + bound_rname + " = sp_exc_new(" + saved_cls + ", " + saved_msg + ");")
     end
     compile_body_into(@nd_body[rc], ret_tmp, return_type)
-    if bound_rname != ""
-      @exc_var_names.pop
-      @exc_var_cls_vars.pop
-    end
     @rescue_cls_stack.pop
     @rescue_msg_stack.pop
     @rescue_depth = @rescue_depth - 1

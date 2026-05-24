@@ -25861,7 +25861,10 @@ class Compiler
         end
       end
     end
- # Rescue reference (=> e) needs to be declared as a local
+ # Rescue reference (=> e) needs to be declared as a local. Phase 2
+ # promotes the binding to a first-class sp_Exception * (was const
+ # char * in Phase 1); compile_rescue_chain emits the
+ # `lv_<name> = sp_exc_new(<cls>, <msg>);` assignment that fills it.
     if @nd_type[nid] == "RescueNode"
       ref = @nd_reference[nid]
       if ref >= 0
@@ -25869,7 +25872,7 @@ class Compiler
         if not_in(lname, names) == 1
           if not_in(lname, params) == 1
             names.push(lname)
-            types.push("string")
+            types.push("exception")
             @scan_literal_flags.push("")
             @scan_empty_flags.push("")
             @scan_empty_hash_flags.push("")
@@ -28046,20 +28049,10 @@ class Compiler
     if @nd_type[nid] == "DefNode"
       return
     end
- # RescueNode: register the bound exception var so infer_call_type
- # recognises `.message` / `.class` / etc. as string-returning methods
- # within the rescue body. compile_begin_with_rescue does the same
- # at emit time; we mirror it here.
+ # RescueNode: the bound exception var is typed "exception" (Phase 2.3),
+ # so infer_call_type's recv_type == "exception" arm handles dispatch
+ # without needing the @exc_var_names side-channel.
     if @nd_type[nid] == "RescueNode"
-      ref_re = @nd_reference[nid]
-      bound_re = ""
-      if ref_re >= 0
-        bound_re = @nd_name[ref_re]
-        @exc_var_names.push(bound_re)
- # Class is unknown at analyze time but find_exc_var_cls's
- # callers only check for non-empty (presence). Use a sentinel.
-        @exc_var_cls_vars.push("?")
-      end
       cs_re = []
       push_child_ids(nid, cs_re)
       blk_re = @nd_block[nid]
@@ -28069,10 +28062,6 @@ class Compiler
           walk_and_cache(cs_re[k])
         end
         k = k + 1
-      end
-      if bound_re != ""
-        @exc_var_names.pop
-        @exc_var_cls_vars.pop
       end
       @nd_inferred_type[nid] = infer_type(nid)
       return
