@@ -4278,6 +4278,13 @@ class Compiler
                 @needs_rb_value = 1
                 return "poly"
               end
+ # nil default (`fetch "k", nil`). Lower to int? so a downstream
+ # `.nil?` distinguishes missing-key from a legit 0 value (#682).
+ # The codegen-side fetch arm pairs this by emitting SP_INT_NIL
+ # in the default slot.
+              if @nd_type[fargs_f[1]] == "NilNode"
+                return "int?"
+              end
             end
           end
         end

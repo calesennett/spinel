@@ -20409,6 +20409,12 @@ class Compiler
             if def_at_f == "string" || def_at_f == "mutable_str"
               return "(sp_SymIntHash_has_key(" + rc + ", " + key + ") ? sp_int_to_s(sp_SymIntHash_get(" + rc + ", " + key + ")) : " + defval + ")"
             end
+ # nil default: emit SP_INT_NIL so the result's int? slot can
+ # distinguish missing-key from a legit 0 (#682). Paired with
+ # the analyze-side "int?" return.
+            if @nd_type[aargs[1]] == "NilNode"
+              return "(sp_SymIntHash_has_key(" + rc + ", " + key + ") ? sp_SymIntHash_get(" + rc + ", " + key + ") : SP_INT_NIL)"
+            end
             return "(sp_SymIntHash_has_key(" + rc + ", " + key + ") ? sp_SymIntHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
           return "sp_SymIntHash_get((sp_SymIntHash *)(" + rc + "), " + key + ")"
@@ -20940,6 +20946,12 @@ class Compiler
               @needs_rb_value = 1
               boxed_def = box_value_to_poly(def_at_f, defval)
               return "(sp_StrIntHash_has_key(" + rc + ", " + key + ") ? sp_box_int(sp_StrIntHash_get(" + rc + ", " + key + ")) : " + boxed_def + ")"
+            end
+ # nil default: SP_INT_NIL sentinel; the call's static type is
+ # int? so a downstream .nil? distinguishes missing-key from a
+ # legit 0 value (#682).
+            if @nd_type[aargs[1]] == "NilNode"
+              return "(sp_StrIntHash_has_key(" + rc + ", " + key + ") ? sp_StrIntHash_get(" + rc + ", " + key + ") : SP_INT_NIL)"
             end
             return "(sp_StrIntHash_has_key(" + rc + ", " + key + ") ? sp_StrIntHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
