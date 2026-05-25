@@ -9706,6 +9706,18 @@ class Compiler
         ti = ti + 1
       end
     end
+ # Read-only ivars: `def x; @x; end` with no write anywhere
+ # should not fail with "struct has no field iv_x". Register the
+ # slot as "nil" so codegen emits self->iv_x (defaulting to 0/nil)
+ # and Ruby semantics surface (`puts c.x.inspect` -> "nil"). A
+ # later write in another method widens the slot via the usual
+ # update_ivar_type path. Issue #712.
+    if @nd_type[nid] == "InstanceVariableReadNode"
+      iname_r = @nd_name[nid]
+      if ivar_exists(ci, iname_r) == 0 && ivar_exists_in_ancestor(ci, iname_r) == 0
+        add_ivar(ci, iname_r, "nil", 0)
+      end
+    end
  # Recurse into children
     scan_ivars_children(ci, nid)
   end
