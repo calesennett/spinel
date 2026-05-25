@@ -1816,6 +1816,50 @@ class Compiler
  # `sp_StrPolyHash *` slot — different struct layouts (vals[] of
  # `const char **` vs `sp_RbVal *`), so reads through the slot return
  # garbage even when -Werror is off. Issue #614.
+ # Cross-variant hash converter at call boundary. Returns the C
+ # expression for promoting `src_var` (typed `src_t`) into a hash
+ # of `dst_t`, or "" when no converter is available. Currently
+ # covers conversions into str_poly_hash from the four source
+ # variants: str_int_hash, str_str_hash, sym_int_hash, sym_str_hash,
+ # sym_poly_hash. Symmetric directions (into sym_poly_hash from
+ # str-keyed variants) are absent because spinel's str_poly_hash
+ # is the canonical wide-keyed shape.
+  def hash_variant_convert(src_t, dst_t, src_var)
+    if dst_t == "str_poly_hash"
+      if src_t == "str_int_hash"
+        @needs_str_poly_hash = 1
+        @needs_str_int_hash = 1
+        @needs_rb_value = 1
+        return "sp_StrPolyHash_from_str_int_hash(" + src_var + ")"
+      end
+      if src_t == "str_str_hash"
+        @needs_str_poly_hash = 1
+        @needs_str_str_hash = 1
+        @needs_rb_value = 1
+        return "sp_StrPolyHash_from_str_str_hash(" + src_var + ")"
+      end
+      if src_t == "sym_int_hash"
+        @needs_str_poly_hash = 1
+        @needs_sym_int_hash = 1
+        @needs_rb_value = 1
+        return "sp_StrPolyHash_from_sym_int_hash(" + src_var + ")"
+      end
+      if src_t == "sym_str_hash"
+        @needs_str_poly_hash = 1
+        @needs_sym_str_hash = 1
+        @needs_rb_value = 1
+        return "sp_StrPolyHash_from_sym_str_hash(" + src_var + ")"
+      end
+      if src_t == "sym_poly_hash"
+        @needs_str_poly_hash = 1
+        @needs_sym_poly_hash = 1
+        @needs_rb_value = 1
+        return "sp_StrPolyHash_from_sym_poly_hash(" + src_var + ")"
+      end
+    end
+    ""
+  end
+
   def widen_hash_assign(val, vt, rhs_t)
     if vt == "str_poly_hash" && rhs_t == "str_str_hash"
       @needs_str_poly_hash = 1
@@ -6198,6 +6242,15 @@ class Compiler
         return "((" + c_type(expected_base) + ")(" + val + ").v.p)"
       end
     end
+ # Cross-variant hash arg: `<Variant_A> hash` passed where the
+ # callee expects `<Variant_B>` hash. Convert via a runtime helper
+ # so the destination's struct layout matches.
+    if is_hash_type(at) == 1 && is_hash_type(expected_base) == 1 && at != expected_base
+      conv_h = hash_variant_convert(at, expected_base, val)
+      if conv_h != ""
+        return conv_h
+      end
+    end
     if expected_base == "poly" && at != "poly"
       return box_value_to_poly(at, val)
     end
@@ -8271,6 +8324,22 @@ class Compiler
     end
     if @needs_sym_str_hash == 1
       emit_sym_str_hash_runtime
+    end
+ # Sym-key -> str-key converters: emit when both the source sym-keyed
+ # variant and the destination str_poly_hash are in use. Lets
+ # cross-key-shape merge sites (`{:a => 1}.merge({"b" => 2})`) compose
+ # both sides into a single str_poly_hash via sp_StrPolyHash_merge.
+ # Sym keys go through sp_sym_to_s; values are boxed to sp_RbVal.
+    if @needs_str_poly_hash == 1
+      if @needs_sym_int_hash == 1
+        emit_raw("static sp_StrPolyHash*sp_StrPolyHash_from_sym_int_hash(sp_SymIntHash*h){sp_StrPolyHash*r=sp_StrPolyHash_new();if(!h)return r;r->default_v=sp_box_int(h->default_v);for(mrb_int i=0;i<h->len;i++){sp_sym k=h->order[i];sp_StrPolyHash_set(r,sp_sym_to_s(k),sp_box_int(sp_SymIntHash_get(h,k)));}return r;}")
+      end
+      if @needs_sym_str_hash == 1
+        emit_raw("static sp_StrPolyHash*sp_StrPolyHash_from_sym_str_hash(sp_SymStrHash*h){sp_StrPolyHash*r=sp_StrPolyHash_new();if(!h)return r;if(h->default_v)r->default_v=sp_box_str(h->default_v);for(mrb_int i=0;i<h->len;i++){sp_sym k=h->order[i];sp_StrPolyHash_set(r,sp_sym_to_s(k),sp_box_str(sp_SymStrHash_get(h,k)));}return r;}")
+      end
+      if @needs_sym_poly_hash == 1
+        emit_raw("static sp_StrPolyHash*sp_StrPolyHash_from_sym_poly_hash(sp_SymPolyHash*h){sp_StrPolyHash*r=sp_StrPolyHash_new();if(!h)return r;r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++){sp_sym k=h->order[i];sp_StrPolyHash_set(r,sp_sym_to_s(k),sp_SymPolyHash_get(h,k));}return r;}")
+      end
     end
   end
 
