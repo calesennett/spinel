@@ -14718,6 +14718,55 @@ class Compiler
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
 
+ # Safe navigation `recv&.method`: short-circuit to nil when recv
+ # is nil. The result type is nullable (T? where T is the method's
+ # normal return type). Three cases:
+ # - Statically-nil recv (`nil&.foo`): emit a nil-valued constant
+ #   matching the call's inferred return type. No method dispatch,
+ #   no warning.
+ # - Dynamically-nullable recv: emit `(recv ? method_call : nil)`.
+ #   Defer to the regular dispatch via the existing pipeline for
+ #   the non-nil branch.
+ # - Non-nullable recv: `&.` is equivalent to `.` here; fall through.
+    if recv >= 0 && @nd_callop[nid] == "&."
+      recv_t_sn = infer_type(recv)
+      if @nd_type[recv] == "NilNode" || recv_t_sn == "nil"
+ # Statically nil — entire expression is nil. Pick a C constant
+ # appropriate for the inferred result type. infer_type already
+ # widens the call's return to "nil" via the matching analyze arm.
+        ret_t_sn = infer_type(nid)
+        return c_default_val(ret_t_sn)
+      end
+      if is_nullable_pointer_type(recv_t_sn) == 1 || is_scalar_nullable_type(recv_t_sn) == 1
+        recv_tmp_sn = new_temp
+        recv_c_sn = compile_expr(recv)
+        ret_t_sn = infer_type(nid)
+        nil_v_sn = c_default_val(ret_t_sn)
+        recv_ct_sn = c_type(recv_t_sn)
+ # Temporarily strip the `&.` so the nested compile_call_expr
+ # call for the non-nil branch dispatches as a regular method
+ # call (`.`). Restore afterwards. The runtime check below
+ # ensures the nested dispatch only fires when recv is non-nil.
+        saved_callop_sn = @nd_callop[nid]
+        @nd_callop[nid] = ""
+ # Narrow recv's type to the non-nullable base so the nested
+ # dispatch picks the right arm (e.g. str_str_hash, not str_str_hash?).
+        narrow_pushed_sn = 0
+        if @nd_type[recv] == "LocalVariableReadNode" && is_nullable_type(recv_t_sn) == 1
+          push_type_narrow(@nd_name[recv], base_type(recv_t_sn))
+          narrow_pushed_sn = 1
+        end
+        call_c_sn = compile_call_expr(nid)
+        if narrow_pushed_sn == 1
+          pop_type_narrow
+        end
+        @nd_callop[nid] = saved_callop_sn
+        nil_check_sn = is_scalar_nullable_type(recv_t_sn) == 1 ? "sp_int_is_nil(" + recv_tmp_sn + ")" : "(" + recv_tmp_sn + " == NULL)"
+        return "({ " + recv_ct_sn + " " + recv_tmp_sn + " = " + recv_c_sn + "; " + nil_check_sn + " ? " + nil_v_sn + " : " + call_c_sn + "; })"
+      end
+ # Non-nullable recv — `&.` is equivalent to `.`. Fall through.
+    end
+
  # `Regexp.new(<arg>)` / `Regexp.compile(<arg>)` evaluates to a
  # `mrb_regexp_pattern *`. regex_pat_c_expr already maps it to
  # `sp_re_pat_<i>` (literal source) or `sp_re_dyn_<i>(<arg>)`

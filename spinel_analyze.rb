@@ -1895,6 +1895,37 @@ class Compiler
  # the cache once with correct context, infer_type stays
  # uncached during emission.
     t = @nd_type[nid]
+ # Safe navigation `recv&.method`: result is nil when recv is nil.
+ # - Statically nil recv → result is "nil"
+ # - Otherwise → method's normal return type, widened to nullable
+ # The cache lookup above already returns the persisted result for
+ # subsequent calls; we only compute this path at first visit.
+    if t == "CallNode" && @nd_callop[nid] == "&."
+      sn_recv = @nd_receiver[nid]
+      if sn_recv >= 0
+        sn_recv_t = infer_type(sn_recv)
+        if @nd_type[sn_recv] == "NilNode" || sn_recv_t == "nil"
+          return "nil"
+        end
+ # For dynamic nullable recv, compute the regular method return
+ # type by temporarily clearing the call_operator field so the
+ # nested infer_type call sees a plain `.` dispatch. Then widen
+ # to nullable if the base type supports it.
+        @nd_callop[nid] = ""
+        base_ret_sn = infer_type(nid)
+        @nd_callop[nid] = "&."
+        if base_ret_sn == "" || base_ret_sn == "void" || base_ret_sn == "nil"
+          return base_ret_sn
+        end
+        if is_nullable_type(base_ret_sn) == 1
+          return base_ret_sn
+        end
+        if is_nullable_pointer_type(base_ret_sn) == 1 || base_ret_sn == "int"
+          return base_ret_sn + "?"
+        end
+        return base_ret_sn
+      end
+    end
     if t == "SuperNode" || t == "ForwardingSuperNode"
  # `super` returns whatever the parent's same-named method
  # returns. Walk to the parent's `find_method_owner`-resolved
