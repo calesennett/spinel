@@ -40036,6 +40036,20 @@ class Compiler
  # type is `const char *`. Read the underlying buffer via
  # `->data` so the return value matches the sig.
         emit("  return (" + val + ")->data;")
+      elsif is_hash_type(expr_type) == 1 && is_hash_type(base_type(return_type)) == 1 && expr_type != base_type(return_type)
+ # Body builds a wider hash variant (e.g. str_poly_hash from
+ # `result["k"] = nullable_str` where the slot widens to poly)
+ # but the RBS-declared return is a narrower variant
+ # (`Hash[String, String]` -> sp_StrStrHash *). The user-level
+ # `if !@x.nil?` guard ensures only non-nil values reach the
+ # hash, so the wider variant's runtime contents satisfy the
+ # narrower variant's element type. Convert at the boundary.
+        conv_ret = hash_variant_convert(expr_type, base_type(return_type), val)
+        if conv_ret != ""
+          emit("  return " + conv_ret + ";")
+        else
+          emit("  return (" + c_type(return_type) + ")(" + val + ");")
+        end
       elsif (expr_type == "int" || expr_type == "nil") && is_nullable_pointer_type(return_type) == 1 && fetch_with_nil_default?(last) == 1
  # Issue #671: `hash.fetch(k, nil)` against an int-leaf hash
  # (typically empty `@slots = {}`) returns int but the
