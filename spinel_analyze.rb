@@ -3528,6 +3528,16 @@ class Compiler
         end
       end
     end
+    if mname == "values_at"
+ # `arr.values_at(...)` returns an array of the same element
+ # type. Issue #742.
+      if recv >= 0
+        rt_va = infer_type(recv)
+        if is_array_type(rt_va) == 1
+          return rt_va
+        end
+      end
+    end
     if mname == "<<"
       if recv >= 0
         if lt == "mutable_str"

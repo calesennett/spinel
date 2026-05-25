@@ -20151,6 +20151,25 @@ class Compiler
       if mname == "length" || mname == "size"
         return "sp_IntArray_length(" + rc + ")"
       end
+ # `arr.values_at(i, j, ...)` -- pick elements at the given
+ # indices, return a fresh array of the same element type.
+ # Issue #742.
+      if mname == "values_at"
+        @needs_int_array = 1
+        @needs_gc = 1
+        tmp_va = new_temp
+        emit("  sp_IntArray *" + tmp_va + " = sp_IntArray_new();")
+        va_args = @nd_arguments[nid]
+        if va_args >= 0
+          va_ids = get_args(va_args)
+          va_k = 0
+          while va_k < va_ids.length
+            emit("  sp_IntArray_push(" + tmp_va + ", sp_IntArray_get(" + rc + ", " + compile_expr(va_ids[va_k]) + "));")
+            va_k = va_k + 1
+          end
+        end
+        return tmp_va
+      end
       if mname == "[]"
  # a[range] and a[start, len] return slices; bare a[i] stays a get.
  # Mirrors compile_string_method_expr's slicing dispatch.
@@ -20715,6 +20734,24 @@ class Compiler
       end
       if mname == "size"
         return "sp_StrArray_length(" + rc + ")"
+      end
+ # `arr.values_at(i, j, ...)` -- pick elements at the given
+ # indices. Issue #742.
+      if mname == "values_at"
+        @needs_str_array = 1
+        @needs_gc = 1
+        tmp_va_s = new_temp
+        emit("  sp_StrArray *" + tmp_va_s + " = sp_StrArray_new();")
+        va_args_s = @nd_arguments[nid]
+        if va_args_s >= 0
+          va_ids_s = get_args(va_args_s)
+          va_ks = 0
+          while va_ks < va_ids_s.length
+            emit("  sp_StrArray_push(" + tmp_va_s + ", sp_StrArray_get(" + rc + ", " + compile_expr(va_ids_s[va_ks]) + "));")
+            va_ks = va_ks + 1
+          end
+        end
+        return tmp_va_s
       end
       if mname == "[]"
  # a[range] / a[start, len] return slices; bare a[i] stays a get.
