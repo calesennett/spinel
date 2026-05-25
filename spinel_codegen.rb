@@ -16210,7 +16210,7 @@ class Compiler
       cmidx_r = 0
       while cmidx_r < cmnames_r.length
         if cmnames_r[cmidx_r] == mname
-          ca_r = compile_call_args(nid)
+          ca_r = compile_call_args_coerced_for_cmeth(nid, @current_class_idx, cmidx_r)
           owning_r = @cls_names[@current_class_idx]
           if ca_r == ""
             return "sp_" + owning_r + "_cls_" + sanitize_name(mname) + "()"
@@ -26125,6 +26125,55 @@ class Compiler
       ki = ki + 1
     end
     0
+  end
+
+ # Like compile_call_args but coerces each arg's type to match the
+ # callee class-method's declared param type. Used by the bare cls
+ # method call path (`_adapter_exists_by_id_p(id)` inside `def self.X`)
+ # which previously emitted raw compile_expr and tripped clang on
+ # poly<->concrete mismatches (#685, Article#exists? -> Article#
+ # _adapter_exists_by_id_p with sp_RbVal arg into mrb_int param).
+  def compile_call_args_coerced_for_cmeth(nid, ci, cmidx)
+    args_id = @nd_arguments[nid]
+    if args_id < 0
+      return ""
+    end
+    arg_ids = get_args(args_id)
+    if arg_ids.length == 0
+      return ""
+    end
+    ptypes = cls_cmeth_ptypes_get(ci, cmidx)
+    result = ""
+    k = 0
+    while k < arg_ids.length
+      if k > 0
+        result = result + ", "
+      end
+      pt_arg = k < ptypes.length ? ptypes[k] : ""
+      at_arg = infer_type(arg_ids[k])
+      pt_base_arg = base_type(pt_arg)
+      needs_arg = 0
+      if pt_arg != ""
+        if pt_base_arg == "bigint" || pt_base_arg == "int"
+          needs_arg = 1
+        elsif at_arg == "poly" && pt_base_arg != "poly" && pt_base_arg != ""
+          needs_arg = 1
+        elsif at_arg != "poly" && pt_base_arg == "poly"
+          needs_arg = 1
+        elsif pt_base_arg == "string" || pt_base_arg == "mutable_str"
+          needs_arg = 1
+        elsif is_hash_type(pt_base_arg) == 1 || is_array_type(pt_base_arg) == 1
+          needs_arg = 1
+        end
+      end
+      if needs_arg == 1
+        result = result + compile_expr_for_expected_type(arg_ids[k], pt_arg)
+      else
+        result = result + cast_away_volatile_arg(arg_ids[k], compile_expr(arg_ids[k]))
+      end
+      k = k + 1
+    end
+    result
   end
 
   def compile_call_args(nid)
