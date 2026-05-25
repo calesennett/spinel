@@ -2395,6 +2395,12 @@ class Compiler
             types.push(infer_type(es.last))
           end
         end
+      else
+ # No `else` clause: Ruby returns nil on fallthrough. Push "nil"
+ # into the unify so a `string`-returning when-arm widens to
+ # `string?`, an int-returning arm widens to `int?`, etc.
+ # Issue #707.
+        types.push("nil")
       end
       if types.length > 0
         return unify_return_type(types)
@@ -18836,6 +18842,14 @@ class Compiler
         if is_nullable_type(result) == 0
           result = result + "?"
         end
+      end
+ # `int` + `nil` widens to `int?` (scalar-nullable, SP_INT_NIL
+ # sentinel). Hash#fetch(k, nil) already returns int? for the
+ # int-leaf shape; this extends the same widening to `case`-
+ # without-else and similar fallthrough returns of int-valued
+ # arms. Issue #707.
+      if result == "int"
+        result = "int?"
       end
     end
     result

@@ -17698,7 +17698,13 @@ class Compiler
         emit("  sp_RbVal " + tmp + " = " + compile_expr(recv) + ";")
         return "(!" + truthy_c_expr(lt, tmp) + ")"
       end
-      return "(!" + compile_expr(recv) + ")"
+ # `!val` on a concrete-typed receiver: Ruby treats only nil
+ # and false as falsy. C's `!` would say `!0` is true (since 0
+ # is C-falsy), but Ruby says 0 is truthy, so `!0` is false.
+ # Route through truthy_c_expr so int/symbol/etc. get the
+ # Ruby-correct fallback `((val), TRUE)` and `!truthy` produces
+ # FALSE. Issue #703.
+      return "(!" + truthy_c_expr(lt, compile_expr(recv)) + ")"
     end
     if mname == "between?"
       args_id = @nd_arguments[nid]
@@ -34465,6 +34471,13 @@ class Compiler
       emit("  printf(\"%lld" + bsl_n + "\", (long long)" + val + ");")
       return
     end
+    if at == "int?"
+ # `puts nil` outputs an empty line in Ruby. The int? slot uses
+ # SP_INT_NIL as the nil inhabitant; raw printf would emit
+ # INT64_MIN's decimal instead.
+      emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
+      return
+    end
     if at == "float"
       emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
       return
@@ -34613,6 +34626,11 @@ class Compiler
       end
       if at == "int"
         emit("  printf(\"%lld" + bsl_n + "\", (long long)" + val + ");")
+      elsif at == "int?"
+ # `puts nil` outputs an empty line in Ruby. The int? slot uses
+ # SP_INT_NIL as the nil inhabitant; raw printf would emit
+ # INT64_MIN's decimal instead.
+        emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
       else
         if at == "float"
           emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
