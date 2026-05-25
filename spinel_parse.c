@@ -1295,11 +1295,19 @@ static int flatten(pm_node_t *node) {
 static char *read_file(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) return NULL;
-  fseek(f, 0, SEEK_END);
+  if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
   long len = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  char *buf = malloc(len + 1);
-  size_t nread = fread(buf, 1, len, f);
+  /* Issue #768: ftell returning -1 (stream error) used to wrap len + 1
+     to 0, malloc(0) returns NULL, then fread(NULL, 1, SIZE_MAX, f)
+     tried to read 16 exabytes. Bail cleanly. */
+  if (len < 0) { fclose(f); return NULL; }
+  if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
+  char *buf = malloc((size_t)len + 1);
+  if (!buf) { fclose(f); return NULL; }
+  size_t nread = fread(buf, 1, (size_t)len, f);
+  /* Issue #763: detect short read and bail rather than processing
+     a truncated source file silently. */
+  if (nread != (size_t)len) { free(buf); fclose(f); return NULL; }
   buf[nread] = '\0';
   fclose(f);
   return buf;
