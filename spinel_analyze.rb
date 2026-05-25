@@ -6194,6 +6194,12 @@ class Compiler
     if val_id < 0
       return "int"
     end
+ # `a, b = nil` -- every target gets nil (Ruby semantic). Avoids
+ # the typed-array destructure path that NULL-derefs at runtime
+ # (#705).
+    if @nd_type[val_id] == "NilNode"
+      return "nil"
+    end
     rt = infer_type(val_id)
     if is_tuple_type(rt) == 1
       return tuple_elem_type_at(rt, ti)

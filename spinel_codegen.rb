@@ -15928,6 +15928,12 @@ class Compiler
     if @in_yield_method == 1
       return "(_block != NULL)"
     end
+ # Inlined yield-using method body: block_given? statically answers
+ # `true` when @inline_yield_blk is set (caller's block IS the
+ # given block). Issue #706.
+    if @inline_yield_blk != nil && @inline_yield_blk >= 0
+      return "1"
+    end
     "0"
   end
 
@@ -16202,7 +16208,15 @@ class Compiler
           return "sp_" + sanitize_name(mname) + "(" + ca + ", " + block_proc + ")"
         end
       end
-      return "sp_" + sanitize_name(mname) + "(" + compile_call_args_with_defaults(nid, mi) + yargs + ")"
+      ca_ndef = compile_call_args_with_defaults(nid, mi)
+      yargs_eff = yargs
+      if ca_ndef == "" && yargs_eff != "" && yargs_eff[0, 2] == ", "
+ # Strip the leading ", " when the regular-args list is empty,
+ # so `f` (no args) on a yield-bearing method emits
+ # `sp_f(NULL, NULL)` instead of `sp_f(, NULL, NULL)`. Issue #706.
+        yargs_eff = yargs_eff[2, yargs_eff.length - 2]
+      end
+      return "sp_" + sanitize_name(mname) + "(" + ca_ndef + yargs_eff + ")"
     end
  # Check if we're inside an open class method: implicit self.method
     st = find_var_type("__self_type")
@@ -28355,13 +28369,39 @@ class Compiler
     if t == "LocalVariableOrWriteNode"
       vref = fiber_var_ref(@nd_name[nid])
       val = compile_expr(@nd_expression[nid])
-      emit("  if (!(" + vref + ")) " + vref + " = " + val + ";")
+      lvw_t = find_var_declared_type(@nd_name[nid])
+      rhs_t_orw = infer_type(@nd_expression[nid])
+ # Type-aware truthy check + value coerce to slot. Issue #702.
+ # Raw `if (!vref)` fails to compile when vref is an sp_RbVal
+ # struct, so use truthy_c_expr for poly / scalar-nullable
+ # specifically. For other types (incl. "nil" -- the first-write
+ # type for `a = nil; a ||= ...` where scan_locals never widened),
+ # keep the C-truthy fallback so the runtime value gets checked.
+      check_orw = "(!(" + vref + "))"
+      if lvw_t == "poly" || is_scalar_nullable_type(lvw_t) == 1
+        check_orw = "(!" + truthy_c_expr(lvw_t, vref) + ")"
+      end
+      val_orw = val
+      if lvw_t == "poly" && rhs_t_orw != "" && rhs_t_orw != "poly"
+        val_orw = box_value_to_poly(rhs_t_orw, val)
+      end
+      emit("  if " + check_orw + " " + vref + " = " + val_orw + ";")
       return
     end
     if t == "LocalVariableAndWriteNode"
       vref = fiber_var_ref(@nd_name[nid])
       val = compile_expr(@nd_expression[nid])
-      emit("  if (" + vref + ") " + vref + " = " + val + ";")
+      lvw_t = find_var_declared_type(@nd_name[nid])
+      rhs_t_aw = infer_type(@nd_expression[nid])
+      check_aw = "(" + vref + ")"
+      if lvw_t == "poly" || is_scalar_nullable_type(lvw_t) == 1
+        check_aw = truthy_c_expr(lvw_t, vref)
+      end
+      val_aw = val
+      if lvw_t == "poly" && rhs_t_aw != "" && rhs_t_aw != "poly"
+        val_aw = box_value_to_poly(rhs_t_aw, val)
+      end
+      emit("  if (" + check_aw + ") " + vref + " = " + val_aw + ";")
       return
     end
     if t == "InstanceVariableWriteNode"
@@ -29259,6 +29299,23 @@ class Compiler
     targets = parse_id_list(@nd_targets[nid])
     val_id = @nd_expression[nid]
     if val_id < 0
+      return
+    end
+ # `a, b = nil` -- Ruby semantics: every target binds to nil. Pre-
+ # fix the codegen fell through to the typed-array destructure path
+ # and emitted `sp_IntArray *_t = 0; sp_IntArray_get(_t, 0)` which
+ # segfaults on the NULL deref. Issue #705.
+    if @nd_type[val_id] == "NilNode"
+      k = 0
+      while k < targets.length
+        tid = targets[k]
+        if @nd_type[tid] == "LocalVariableTargetNode"
+          emit_multi_write_target(tid, "0", "nil")
+        elsif @nd_type[tid] == "InstanceVariableTargetNode"
+          emit_multi_write_target(tid, "0", "nil")
+        end
+        k = k + 1
+      end
       return
     end
     rest_id = @nd_rest[nid]
