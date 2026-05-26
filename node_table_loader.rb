@@ -22,6 +22,16 @@ class NodeTableLoader
           if parts.first == "ROOT"
             @table.set_root_id(parts[1].to_i)
           end
+ # Issue #878: SOURCE_FILE <escaped-path> appears once near the
+ # top of the AST. Loader stashes the unescaped path on the
+ # table so __dir__ et al. can recover it without scanning
+ # SourceFileNode entries (which only exist if the source
+ # references __FILE__).
+          if parts.first == "SOURCE_FILE"
+            if parts.length >= 2
+              @table.set_source_file_path(unescape_str(parts[1]))
+            end
+          end
           if parts.first == "N"
             nid = parts[1].to_i
             if nid > max_id

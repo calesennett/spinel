@@ -3803,7 +3803,7 @@ class Compiler
     if mname == "itself" || mname == "then" || mname == "yield_self"
       return 1
     end
-    if mname == "getbyte" || mname == "setbyte" || mname == "__method__"
+    if mname == "getbyte" || mname == "setbyte" || mname == "__method__" || mname == "__dir__"
       return 1
     end
     if mname == "slice!" || mname == "intern"
@@ -4365,6 +4365,10 @@ class Compiler
       return "int"
     end
     if mname == "__method__"
+      return "string"
+    end
+ # Issue #878: Kernel#__dir__ -- compile-time string.
+    if mname == "__dir__" && recv < 0
       return "string"
     end
     if mname == "join"

@@ -1854,6 +1854,11 @@ int main(int argc, char **argv) {
   }
 
   fprintf(out, "ROOT %d\n", root_id);
+  /* Issue #878: emit the source file path as a top-level fact so
+     `__dir__` and similar compile-time helpers can recover it
+     even when the source contains no `__FILE__` reference. The
+     loader stashes it in @source_file_path. */
+  fprintf(out, "SOURCE_FILE %s\n", g_source_file_escaped);
   for (int i = 0; i < line_count; i++) {
     fprintf(out, "%s\n", lines[i]);
     free(lines[i]);

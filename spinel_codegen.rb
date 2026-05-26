@@ -3981,6 +3981,56 @@ class Compiler
     tuple_elem_types_str(t).split(",", -1).length
   end
 
+ # Issue #878: dirname of the source file path baked into the
+ # AST. Memoized; the parser writes the same toplevel path into
+ # every SourceFileNode's content (require/require_relative are
+ # inlined at parse time so we lose per-site source mapping --
+ # same documented limitation as __FILE__). For files passed as
+ # a relative path, the result is also relative.
+  def source_file_dirname
+    if @source_file_dirname_cache != nil
+      return @source_file_dirname_cache
+    end
+ # Parser emits SOURCE_FILE near the top of the AST. Fall back
+ # to scanning for SourceFileNode (set by `__FILE__`) for older
+ # AST files that predate the SOURCE_FILE prelude.
+    path = ""
+    if @source_file_path != nil
+      path = @source_file_path
+    end
+    if path == ""
+      i = 0
+      while i < @nd_type.length
+        if @nd_type[i] == "SourceFileNode"
+          path = @nd_content[i]
+          i = @nd_type.length
+        else
+          i = i + 1
+        end
+      end
+    end
+    if path == ""
+      @source_file_dirname_cache = "."
+      return @source_file_dirname_cache
+    end
+    last_slash = -1
+    j = 0
+    while j < path.length
+      if path[j] == "/"
+        last_slash = j
+      end
+      j = j + 1
+    end
+    if last_slash < 0
+      @source_file_dirname_cache = "."
+    elsif last_slash == 0
+      @source_file_dirname_cache = "/"
+    else
+      @source_file_dirname_cache = path[0, last_slash]
+    end
+    @source_file_dirname_cache
+  end
+
   def tuple_c_name(t)
  # "tuple:int,string" → "sp_Tuple_int_string". base_type strips
  # nullable `?` suffixes: a tuple of int? has the same C storage
@@ -16446,6 +16496,13 @@ class Compiler
     end
     if mname == "__method__"
       return "\"" + @current_method_name + "\""
+    end
+ # Issue #878: Kernel#__dir__ -- compile-time dirname of the
+ # source file path baked into every SourceFileNode. `caller`
+ # is intentionally not supported (requires per-call frame
+ # tracking which slows the dispatch hot path).
+    if mname == "__dir__"
+      return c_string_literal(source_file_dirname)
     end
     if mname == "Integer"
       @needs_setjmp = 1

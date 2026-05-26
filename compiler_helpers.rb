@@ -571,6 +571,13 @@ class Compiler
     @root_id = root_id
   end
 
+ # Issue #878: parser emits SOURCE_FILE near the top so __dir__
+ # (and similar compile-time helpers) can recover the path
+ # without scanning for SourceFileNode entries.
+  def set_source_file_path(path)
+    @source_file_path = path
+  end
+
   def set_node_type(nid, node_type)
     @nd_type[nid] = node_type
   end
