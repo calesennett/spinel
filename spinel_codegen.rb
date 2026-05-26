@@ -13307,6 +13307,18 @@ class Compiler
             return "2.71828182845904523536"
           end
         end
+ # File::SEPARATOR / ALT_SEPARATOR / PATH_SEPARATOR. Issue #891.
+        if rname == "File"
+          if nname == "SEPARATOR"
+            return "(&(\"\\xff\" \"/\")[1])"
+          end
+          if nname == "ALT_SEPARATOR"
+            return "sp_str_empty"
+          end
+          if nname == "PATH_SEPARATOR"
+            return "(&(\"\\xff\" \":\")[1])"
+          end
+        end
         if cpname != ""
           return cpname
         end

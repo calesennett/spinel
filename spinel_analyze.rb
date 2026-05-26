@@ -2347,6 +2347,13 @@ class Compiler
         if rname == "Math"
           return "float"
         end
+ # Issue #891: File::SEPARATOR / ALT_SEPARATOR / PATH_SEPARATOR.
+        if rname == "File"
+          nn_file = @nd_name[nid]
+          if nn_file == "SEPARATOR" || nn_file == "ALT_SEPARATOR" || nn_file == "PATH_SEPARATOR"
+            return "string"
+          end
+        end
       end
       return "int"
     end
