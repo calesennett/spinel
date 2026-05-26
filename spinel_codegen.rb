@@ -7873,6 +7873,9 @@ class Compiler
     emit_raw("static sp_IntArray*sp_SymIntHash_keys(sp_SymIntHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,(mrb_int)h->order[i]);return a;}")
     emit_raw("static sp_IntArray*sp_SymIntHash_values(sp_SymIntHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,sp_SymIntHash_get(h,h->order[i]));return a;}")
     emit_raw("static sp_SymIntHash*sp_SymIntHash_dup(sp_SymIntHash*h){sp_SymIntHash*r=sp_SymIntHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_SymIntHash_set(r,h->order[i],sp_SymIntHash_get(h,h->order[i]));return r;}")
+ # Issue #738: Hash#to_a as poly_array of poly_array pairs.
+ # Each inner pair is [sym, int] boxed via sp_box_*.
+    emit_raw("static sp_PolyArray*sp_SymIntHash_to_a(sp_SymIntHash*h){sp_PolyArray*r=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++){sp_PolyArray*p=sp_PolyArray_new();sp_PolyArray_push(p,sp_box_sym(h->order[i]));sp_PolyArray_push(p,sp_box_int(sp_SymIntHash_get(h,h->order[i])));sp_PolyArray_push(r,sp_box_poly_array(p));}return r;}")
     emit_raw("static sp_SymIntHash*sp_SymIntHash_merge(sp_SymIntHash*a,sp_SymIntHash*b){sp_SymIntHash*r=sp_SymIntHash_new();r->default_v=a->default_v;for(mrb_int i=0;i<a->len;i++)sp_SymIntHash_set(r,a->order[i],sp_SymIntHash_get(a,a->order[i]));if(b){for(mrb_int i=0;i<b->len;i++)sp_SymIntHash_set(r,b->order[i],sp_SymIntHash_get(b,b->order[i]));}return r;}")
     emit_raw("static mrb_bool sp_SymIntHash_eq(sp_SymIntHash*a,sp_SymIntHash*b){if(!a||!b)return a==b;if(a->len!=b->len)return FALSE;for(mrb_int i=0;i<a->len;i++){sp_sym k=a->order[i];if(!sp_SymIntHash_has_key(b,k))return FALSE;if(sp_SymIntHash_get(a,k)!=sp_SymIntHash_get(b,k))return FALSE;}return TRUE;}")
  # Hash inspect — Ruby's modern shorthand `{k: v, ...}`. All keys
@@ -7915,6 +7918,7 @@ class Compiler
     emit_raw("static sp_StrArray*sp_SymStrHash_values(sp_SymStrHash*h){sp_StrArray*a=sp_StrArray_new();for(mrb_int i=0;i<h->len;i++)sp_StrArray_push(a,sp_SymStrHash_get(h,h->order[i]));return a;}")
     emit_raw("static mrb_bool sp_SymStrHash_has_value(sp_SymStrHash*h,const char*v){if(!h||!v)return FALSE;for(mrb_int i=0;i<h->len;i++){const char*x=sp_SymStrHash_get(h,h->order[i]);if(x&&strcmp(x,v)==0)return TRUE;}return FALSE;}")
     emit_raw("static sp_SymStrHash*sp_SymStrHash_dup(sp_SymStrHash*h){sp_SymStrHash*r=sp_SymStrHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_SymStrHash_set(r,h->order[i],sp_SymStrHash_get(h,h->order[i]));return r;}")
+    emit_raw("static sp_PolyArray*sp_SymStrHash_to_a(sp_SymStrHash*h){sp_PolyArray*r=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++){sp_PolyArray*p=sp_PolyArray_new();sp_PolyArray_push(p,sp_box_sym(h->order[i]));sp_PolyArray_push(p,sp_box_str(sp_SymStrHash_get(h,h->order[i])));sp_PolyArray_push(r,sp_box_poly_array(p));}return r;}")
     emit_raw("static sp_SymStrHash*sp_SymStrHash_merge(sp_SymStrHash*a,sp_SymStrHash*b){sp_SymStrHash*r=sp_SymStrHash_new();r->default_v=a->default_v;for(mrb_int i=0;i<a->len;i++)sp_SymStrHash_set(r,a->order[i],sp_SymStrHash_get(a,a->order[i]));for(mrb_int i=0;i<b->len;i++)sp_SymStrHash_set(r,b->order[i],sp_SymStrHash_get(b,b->order[i]));return r;}")
     emit_raw("static mrb_bool sp_SymStrHash_eq(sp_SymStrHash*a,sp_SymStrHash*b){if(!a||!b)return a==b;if(a->len!=b->len)return FALSE;for(mrb_int i=0;i<a->len;i++){sp_sym k=a->order[i];if(!sp_SymStrHash_has_key(b,k))return FALSE;if(!sp_str_eq(sp_SymStrHash_get(a,k),sp_SymStrHash_get(b,k)))return FALSE;}return TRUE;}")
  # Cross-variant merge: when a `sym_str_hash` and a `sym_poly_hash`
@@ -21060,6 +21064,12 @@ class Compiler
         @needs_int_array = 1
         return "sp_SymIntHash_values(" + rc + ")"
       end
+ # Issue #738: to_a -- poly_array of [key, value] pairs. Each
+ # pair is itself a poly_array boxed via sp_box_poly_array.
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_SymIntHash_to_a(" + rc + ")"
+      end
  # transform_values { |v| ... } — same key set, block-transformed
  # int values. Keeps the result a sym_int_hash; the block's last
  # expression is set as the new value (truncated to mrb_int by
@@ -21196,6 +21206,10 @@ class Compiler
       end
       if mname == "value?" || mname == "has_value?"
         return "sp_SymStrHash_has_value((sp_SymStrHash *)(" + rc + "), " + compile_str_arg0(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_SymStrHash_to_a((sp_SymStrHash *)(" + rc + "))"
       end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
         return "sp_SymStrHash_length((sp_SymStrHash *)(" + rc + "))"
@@ -21560,6 +21574,10 @@ class Compiler
       if mname == "value?" || mname == "has_value?"
         return "sp_StrIntHash_has_value(" + rc + ", " + compile_arg0_as_int(nid) + ")"
       end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_StrIntHash_to_a(" + rc + ")"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
         return "sp_StrIntHash_length(" + rc + ")"
       end
@@ -21731,6 +21749,10 @@ class Compiler
       if mname == "value?" || mname == "has_value?"
         return "sp_IntStrHash_has_value(" + rc + ", " + compile_str_arg0(nid) + ")"
       end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_IntStrHash_to_a(" + rc + ")"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
         return "sp_IntStrHash_length(" + rc + ")"
       end
@@ -21810,6 +21832,10 @@ class Compiler
       end
       if mname == "value?" || mname == "has_value?"
         return "sp_StrStrHash_has_value(" + rc + ", " + compile_str_arg0(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_StrStrHash_to_a(" + rc + ")"
       end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
         return "sp_StrStrHash_length(" + rc + ")"

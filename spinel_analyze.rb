@@ -4706,17 +4706,8 @@ class Compiler
       end
       return "tuple:int_array,int_array"
     end
-    if mname == "to_a"
-      if recv >= 0
-        rt = infer_type(recv)
-        if rt == "str_int_hash"
-          return "tuple:string,int_ptr_array"
-        end
-        if rt == "str_str_hash"
-          return "tuple:string,string_ptr_array"
-        end
-      end
-    end
+    # Hash#to_a is handled by the later to_a arm (returns poly_array
+    # of [key, value] pairs). Issue #738.
  # `to_h` on a Hash variant is identity. Surface so the caller
  # gets the recv's exact type rather than an unresolved fallback.
     if mname == "to_h"
@@ -5927,6 +5918,11 @@ class Compiler
         end
         if rt == "str_array" || rt == "sym_array" || rt == "float_array"
           return rt
+        end
+ # Issue #738: hash.to_a returns poly_array of [key, value] pairs
+ # (each pair is itself a poly_array, boxed via sp_box_poly_array).
+        if is_hash_type(rt) == 1
+          return "poly_array"
         end
       end
       return "int_array"
