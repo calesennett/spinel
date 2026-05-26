@@ -135,6 +135,12 @@ mrb_regexp_pattern* re_compile(const char *pattern, mrb_int len, uint32_t flags)
 /* Free a compiled pattern */
 void re_free(mrb_regexp_pattern *pat);
 
+/* Issue #781: install a callback that handles regex compile errors.
+   The callback receives a formatted message and is expected NOT to
+   return (typically it wraps sp_raise_cls via longjmp). Unset by
+   default; the library falls back to fprintf + exit. */
+void sp_re_set_error_handler(void (*fn)(const char *msg));
+
 /* Execute a match.
    Returns number of captures filled (0 = no match).
    captures[2*n] = start, captures[2*n+1] = end for group n. */

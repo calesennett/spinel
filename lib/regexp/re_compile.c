@@ -33,18 +33,31 @@ typedef struct {
 
 static void compile_alt(re_compiler *c);  /* forward */
 
-/* Issue #781: kept exit(1) for now -- routing through sp_raise_cls
-   would require a non-static linkage hook (the runtime's
-   sp_raise_cls is `static inline` per translation unit, so the
-   library cannot reference the user program's copy directly). A
-   later commit can introduce an extern raise hook + populate it
-   from the user program. */
+/* Issue #781: error handler hook so the library can route through
+   the user program's sp_raise_cls (which is `static inline` per
+   translation unit and not directly linkable from a .a). The user
+   program calls sp_re_set_error_handler(fn) at startup; fn should
+   not return (typically wraps sp_raise_cls). If unset, fall back
+   to fprintf + exit. */
+static void (*sp_re_error_handler)(const char *msg) = NULL;
+void sp_re_set_error_handler(void (*fn)(const char *msg)) {
+  sp_re_error_handler = fn;
+}
+
 static void
 compile_error(re_compiler *c, const char *msg)
 {
   if (c->stripped) free(c->stripped);
   c->stripped = NULL;
-  fprintf(stderr, "RegexpError: %s: /%.*s/\n", msg, (int)(c->src_end - c->src), c->src); exit(1);
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "%s: /%.*s/",
+           msg, (int)(c->src_end - c->src), c->src);
+  if (sp_re_error_handler) {
+    sp_re_error_handler(buf);
+    /* shouldn't return; fall through to exit as a safety net */
+  }
+  fprintf(stderr, "RegexpError: %s\n", buf);
+  exit(1);
 }
 
 static uint32_t

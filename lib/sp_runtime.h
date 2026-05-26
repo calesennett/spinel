@@ -2263,6 +2263,16 @@ static const char *sp_exc_cls[SP_EXC_STACK_MAX];
 static volatile const char *sp_last_exc_cls = sp_str_empty;
 static void sp_raise_cls(const char *cls, const char *msg) { if (sp_exc_top > 0) { sp_exc_msg[sp_exc_top-1] = msg; sp_exc_cls[sp_exc_top-1] = cls; sp_last_exc_cls = cls; longjmp(sp_exc_stack[sp_exc_top-1], 1); } fprintf(stderr, "unhandled exception: %s\n", msg); exit(1); }
 static void sp_raise(const char *msg) { sp_raise_cls("RuntimeError", msg); }
+
+/* Issue #781: bridge between the regex compile-error path (which lives
+   in the .a library and can't see the user program's static-inline
+   sp_raise_cls) and the user's Ruby-level exception machinery. The
+   library calls sp_re_set_error_handler at startup -- codegen emits
+   the install call after the exception infrastructure is set up. */
+static void sp_re_default_error_handler(const char *msg) {
+  sp_raise_cls("RegexpError", msg);
+}
+extern void sp_re_set_error_handler(void (*fn)(const char *msg));
 static void sp_mark_in_flight_exceptions(void) { for (int i = 0; i < sp_exc_top; i++) sp_mark_string(sp_exc_msg[i]); }
 
 /* sp_Exception: first-class exception object. cls_name is a pointer

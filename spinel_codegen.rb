@@ -11942,6 +11942,11 @@ class Compiler
     if @needs_rand == 1
       emit_raw("  srand((unsigned)time(NULL));")
     end
+ # Issue #781: install the regex compile-error handler so a bad
+ # pattern raises RegexpError instead of fprintf + exit.
+    if @needs_regexp == 1
+      emit_raw("  sp_re_set_error_handler(sp_re_default_error_handler);")
+    end
     if @needs_regexp == 1
       emit_raw("  sp_re_init();")
     end
