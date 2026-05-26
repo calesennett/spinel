@@ -19880,6 +19880,20 @@ class Compiler
         end
       end
     end
+ # Integer#times / upto / downto in expression position. The stmt
+ # form is handled by compile_block_iteration_stmt; the expression
+ # form needs the same loop emit but a value too -- return self
+ # per MRI. Issue #877.
+    if (mname == "times" || mname == "upto" || mname == "downto") && @nd_block[nid] >= 0
+      if mname == "times"
+        compile_times_block(nid)
+      elsif mname == "upto"
+        compile_upto_block(nid)
+      else
+        compile_downto_block(nid)
+      end
+      return rc
+    end
     ""
   end
 
