@@ -234,10 +234,20 @@ int sp_StringIO_eof_p(sp_StringIO *sio) {
 
 /* truncate(length) — truncate buffer to given length */
 int64_t sp_StringIO_truncate(sp_StringIO *sio, int64_t length) {
+  if (!sio) return 0;
   if (length < 0) length = 0;
   if (length < sio->len) {
     sio->len = length;
     sio->buf[length] = '\0';
+  } else if (length > sio->len) {
+    /* Issue #816: grow the buffer + NUL-fill the gap, matching
+       CRuby's "truncate(N) where N > current length pads with NULs". */
+    sio_grow(sio, length - sio->pos);
+    if (length > sio->len) {
+      memset(sio->buf + sio->len, 0, (size_t)(length - sio->len));
+    }
+    sio->len = length;
+    if (length < sio->cap) sio->buf[length] = '\0';
   }
   return 0;
 }
