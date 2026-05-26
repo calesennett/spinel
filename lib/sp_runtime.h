@@ -442,6 +442,16 @@ static const char sp_str_empty_data[] = "\xff";
 static const char sp_ruby_platform_data[] = "\xff" SP_RUBY_ARCH "-" SP_RUBY_OS;
 static inline const char *sp_ruby_platform_str(void) { return sp_ruby_platform_data + 1; }
 
+/* Process.ppid wrapper. MinGW's unistd.h doesn't expose getppid;
+   return 0 there. Issue #893. */
+static inline mrb_int sp_process_ppid(void) {
+#ifdef _WIN32
+  return 0;
+#else
+  return (mrb_int)getppid();
+#endif
+}
+
 static void sp_oom_die(void);
 static char *sp_str_alloc(size_t len) {
   size_t total = sizeof(sp_str_hdr) + 1 + len + 1;

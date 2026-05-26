@@ -22718,12 +22718,14 @@ class Compiler
           return "({ struct timespec _ts; clock_gettime(CLOCK_MONOTONIC, &_ts); (mrb_float)_ts.tv_sec + (mrb_float)_ts.tv_nsec / 1e9; })"
         end
  # Process.pid / .ppid: direct syscall lowering. unistd.h is
- # already included in the runtime. Issue #893.
+ # already included in the runtime. MinGW's <unistd.h> lacks
+ # getppid -- route through a runtime wrapper that #ifdef's
+ # away on Windows. Issue #893.
         if mname == "pid"
           return "((mrb_int)getpid())"
         end
         if mname == "ppid"
-          return "((mrb_int)getppid())"
+          return "sp_process_ppid()"
         end
       end
  # Regexp.escape / Regexp.quote -- single-string-arg form. Routes
