@@ -133,6 +133,12 @@ const char *sp_StringScanner_matched(sp_StringScanner *sc) {
     return sc->matched ? sc->matched : "";
 }
 
+/* Issue #814: matched? -- true when the last scan succeeded. */
+int sp_StringScanner_matched_p(sp_StringScanner *sc) {
+    if (!sc) return 0;
+    return sc->matched != NULL ? 1 : 0;
+}
+
 /* pos — current position */
 int64_t sp_StringScanner_pos(sp_StringScanner *sc) {
     return sc->pos;

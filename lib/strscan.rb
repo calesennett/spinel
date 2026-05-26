@@ -29,6 +29,14 @@ class StringScanner
     @matched
   end
 
+  # Issue #814: matched? returns true when the last scan succeeded.
+  # The stub tracks matched state through the @matched ivar which
+  # scan/check/scan_until/getch update -- if @matched is non-empty,
+  # the previous scan matched.
+  def matched?
+    @matched != ""
+  end
+
   def pos
     @pos
   end
