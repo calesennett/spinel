@@ -17239,6 +17239,18 @@ class Compiler
         end
       end
     end
+ # Issue #746: `bigint.abs` / `bigint.succ` / `bigint.pred` /
+ # `bigint.divmod` return bigint when the recv is bigint. Without
+ # this arm, expr_emit_is_bigint returns 0 and the caller wraps
+ # the result with sp_bigint_new_int (treating the pointer as
+ # int) -- garbage output.
+    if mn_eb == "abs" || mn_eb == "succ" || mn_eb == "pred" || mn_eb == "next"
+      rcv_abs = @nd_receiver[nid]
+      if rcv_abs >= 0 && (base_type(infer_type(rcv_abs)) == "bigint" ||
+                          expr_emit_is_bigint(rcv_abs) == 1)
+        return 1
+      end
+    end
     if mn_eb != "+" && mn_eb != "-" && mn_eb != "*" && mn_eb != "/" && mn_eb != "%" && mn_eb != "**" &&
        mn_eb != "&" && mn_eb != "|" && mn_eb != "^" && mn_eb != "<<" && mn_eb != ">>" &&
        mn_eb != "~" && mn_eb != "-@"
