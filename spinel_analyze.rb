@@ -7934,6 +7934,21 @@ class Compiler
               end
             end
           end
+ # `prepend M` -- spinel doesn't model the full MRO, so this
+ # behaves like `include M` (M's instance methods become
+ # callable on the class). super resolution to the original
+ # method isn't implemented here. Issue #720.
+          if @nd_name[sid] == "prepend"
+            pre_args = @nd_arguments[sid]
+            if pre_args >= 0
+              pre_ids = get_args(pre_args)
+              pk = 0
+              while pk < pre_ids.length
+                prepend_module_on_class(ci, pre_ids[pk], module_prefix)
+                pk = pk + 1
+              end
+            end
+          end
         end
       }
  # Pin lexical scope while collecting ivars. See longer comment
@@ -8212,6 +8227,19 @@ class Compiler
             end
           end
         end
+ # `prepend M` -- M's instance methods take precedence over the
+ # class's own. Issue #720.
+        if @nd_name[sid] == "prepend"
+          pre_args2 = @nd_arguments[sid]
+          if pre_args2 >= 0
+            pre_ids2 = get_args(pre_args2)
+            pk2 = 0
+            while pk2 < pre_ids2.length
+              prepend_module_on_class(ci, pre_ids2[pk2], module_prefix)
+              pk2 = pk2 + 1
+            end
+          end
+        end
       end
     }
 
@@ -8480,6 +8508,57 @@ class Compiler
                 if existing < 0
                   collect_class_method(ci, sid)
                 end
+              end
+            end
+            mk = mk + 1
+          end
+        end
+      end
+      mi = mi + 1
+    end
+  end
+
+ # `prepend M` -- M's instance methods take precedence over the
+ # class's own. spinel doesn't model the full MRO; the simplest
+ # approximation is to copy M's methods over the class's via the
+ # last-def-wins path in append_cls_meth. super resolution back
+ # to the original is NOT implemented -- a prepended method that
+ # calls super hits the unresolved-call fallback.
+ # Issue #720.
+  def prepend_module_on_class(ci, inc_nid, module_prefix)
+    inc_t = @nd_type[inc_nid]
+    if inc_t != "ConstantReadNode" && inc_t != "ConstantPathNode"
+      return
+    end
+    mod_name = const_ref_flat_name(inc_nid)
+    if mod_name == ""
+      return
+    end
+    effective_prefix = module_prefix
+    if const_ref_is_relative(inc_nid) == 0
+      effective_prefix = ""
+    end
+    resolved_mod_name = resolve_include_module_name(mod_name, effective_prefix)
+    record_class_include(ci, resolved_mod_name)
+    mi = 0
+    while mi < @module_names.length
+      if @module_names[mi] == resolved_mod_name
+        mbody = @module_body_ids[mi]
+        if mbody >= 0
+          mstmts = get_stmts(mbody)
+          mk = 0
+          while mk < mstmts.length
+            sid = mstmts[mk]
+            if @nd_type[sid] == "DefNode"
+              is_cls_def_p = 0
+              if @nd_receiver[sid] >= 0 && @nd_type[@nd_receiver[sid]] == "SelfNode"
+                is_cls_def_p = 1
+              end
+              if is_cls_def_p == 0
+ # collect_class_method routes through append_cls_meth
+ # which has last-def-wins on collision -- the prepended
+ # method replaces the class's own.
+                collect_class_method(ci, sid)
               end
             end
             mk = mk + 1
