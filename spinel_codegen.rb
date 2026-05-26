@@ -19788,6 +19788,12 @@ class Compiler
     if mname == "zero?"
       return "((" + rc + ") == 0)"
     end
+ # Integer#nonzero?: returns nil for 0, self otherwise. Uses the
+ # int? nullable representation (SP_INT_NIL sentinel for nil).
+ # Issue #874.
+    if mname == "nonzero?"
+      return "((" + rc + ") == 0 ? SP_INT_NIL : (" + rc + "))"
+    end
     if mname == "gcd"
       return "sp_gcd(" + rc + ", " + compile_arg0(nid) + ")"
     end

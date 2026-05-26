@@ -3780,6 +3780,9 @@ class Compiler
     if mname == "magnitude" || mname == "modulo" || mname == "remainder" || mname == "size"
       return 1
     end
+    if mname == "nonzero?"
+      return 1
+    end
     if mname == "itself" || mname == "then" || mname == "yield_self"
       return 1
     end
@@ -4448,6 +4451,15 @@ class Compiler
       rt_sz = infer_type(recv)
       if rt_sz == "int"
         return "int"
+      end
+    end
+ # Integer#nonzero? returns nil when receiver is 0, self otherwise.
+ # Surfaces as int? (nullable int) so downstream .nil? and
+ # arithmetic handling stay on the integer path. Issue #874.
+    if mname == "nonzero?" && recv >= 0
+      rt_nz = infer_type(recv)
+      if rt_nz == "int"
+        return "int?"
       end
     end
  # Integer#gcdlcm returns [gcd, lcm] as a tuple value. Issue #894.
