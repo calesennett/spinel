@@ -334,6 +334,23 @@ static mrb_int sp_str_to_i_strict(const char *s) {
   if (*endptr != '\0') sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Integer(): \"%s\"", s));
   return (mrb_int)v;
 }
+
+/* Kernel#Float() raises ArgumentError on unparseable input. strtod
+   on its own would silently return 0.0 for "abc" or empty input;
+   match MRI semantics by validating at-least-one-digit + no-trailing-
+   junk. Whitespace flanking is fine. Issue #888. */
+static mrb_float sp_str_to_f_strict(const char *s) {
+  if (!s) sp_raise_cls("ArgumentError", "invalid value for Float(): nil");
+  const char *p = s;
+  while (isspace((unsigned char)*p)) p++;
+  if (*p == '\0') sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Float(): \"%s\"", s));
+  char *endptr;
+  double v = strtod(p, &endptr);
+  if (endptr == p) sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Float(): \"%s\"", s));
+  while (isspace((unsigned char)*endptr)) endptr++;
+  if (*endptr != '\0') sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Float(): \"%s\"", s));
+  return (mrb_float)v;
+}
 typedef struct{mrb_int first;mrb_int last;}sp_Range;
 static sp_Range sp_range_new(mrb_int f,mrb_int l){sp_Range r;r.first=f;r.last=l;return r;}
 /* Inclusive-form `Range#include?`/`#cover?` on the boxed (SP_TAG_OBJ

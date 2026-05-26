@@ -16544,6 +16544,7 @@ class Compiler
       return "(mrb_int)(" + compile_arg0(nid) + ")"
     end
     if mname == "Float"
+      @needs_setjmp = 1
       args_id = @nd_arguments[nid]
       if args_id >= 0
         arg_ids = get_args(args_id)
@@ -16551,7 +16552,10 @@ class Compiler
           a0 = arg_ids[0]
           at = infer_type(a0)
           if at == "string" || at == "argv"
-            return "(mrb_float)strtod(" + compile_expr(a0) + ", NULL)"
+ # Issue #888: route through sp_str_to_f_strict so unparseable
+ # input raises ArgumentError (catchable) instead of silently
+ # returning 0.0.
+            return "sp_str_to_f_strict(" + compile_expr(a0) + ")"
           end
           if at == "int"
             return "(mrb_float)(" + compile_expr(a0) + ")"
