@@ -22,13 +22,20 @@ typedef struct {
   int closed;       /* 1 if closed */
 } sp_StringIO;
 
-/* Internal: ensure buffer has room for `need` more bytes */
+/* Internal: ensure buffer has room for `need` more bytes.
+   Issue #818: capture realloc into a temp and only commit on success
+   so an OOM failure doesn't NULL out sio->buf (leaking the old buf
+   and crashing subsequent reads). On failure leave the buffer alone
+   and let the caller's bounds check truncate the write. */
 static void sio_grow(sp_StringIO *sio, int64_t need) {
+  if (!sio) return;
   int64_t required = sio->pos + need;
   if (required <= sio->cap) return;
   int64_t new_cap = sio->cap ? sio->cap : 64;
   while (new_cap < required) new_cap *= 2;
-  sio->buf = (char *)realloc(sio->buf, new_cap + 1);
+  char *nb = (char *)realloc(sio->buf, new_cap + 1);
+  if (!nb) return;
+  sio->buf = nb;
   sio->cap = new_cap;
 }
 
@@ -282,10 +289,13 @@ int64_t sp_StringIO_printf(sp_StringIO *sio, const char *fmt, ...) {
 
 /* string= — replace buffer contents */
 void sp_StringIO_set_string(sp_StringIO *sio, const char *str) {
+  if (!sio || !str) return;
   int64_t len = (int64_t)strlen(str);
   if (len > sio->cap) {
+    char *nb = (char *)realloc(sio->buf, len + 1);
+    if (!nb) return;
+    sio->buf = nb;
     sio->cap = len;
-    sio->buf = (char *)realloc(sio->buf, sio->cap + 1);
   }
   memcpy(sio->buf, str, len);
   sio->buf[len] = '\0';
