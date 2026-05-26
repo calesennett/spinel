@@ -2141,6 +2141,20 @@ static sp_StrArray *sp_re_split(mrb_regexp_pattern *pat, const char *str) {
     }
     int len = caps[0] - pos; char *m = sp_str_alloc_raw(len+1);
     memcpy(m, str+pos, len); m[len] = 0; sp_StrArray_push(arr, m);
+    /* Issue #856: when the splitter regex has capture groups,
+       Ruby splices each captured substring into the result
+       between the surrounding segments (caps[2..n-1] hold groups
+       1..(n/2-1); group 0 is the whole match). */
+    for (int gi = 1; gi * 2 + 1 < n; gi++) {
+      if (caps[gi*2] >= 0 && caps[gi*2+1] >= 0) {
+        int glen = caps[gi*2+1] - caps[gi*2];
+        char *gm = sp_str_alloc_raw(glen+1);
+        memcpy(gm, str + caps[gi*2], glen); gm[glen] = 0;
+        sp_StrArray_push(arr, gm);
+      } else {
+        sp_StrArray_push(arr, sp_str_empty);
+      }
+    }
     pos = caps[1]; if (caps[0] == caps[1]) pos++;
   }
   return arr;
