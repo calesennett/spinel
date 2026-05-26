@@ -4876,6 +4876,48 @@ class Compiler
     "gv_" + name
   end
 
+ # Issue #910: build a str_str_hash inline from a HashNode or
+ # KeywordHashNode arg whose keys are all string literals and
+ # whose values are all string literals. Returns the emitted
+ # temp var name, or "" when the arg doesn't match the shape.
+  def sub_hash_arg_str_str(arg_nid)
+    return "" if arg_nid < 0
+    at = @nd_type[arg_nid]
+    if at == "KeywordHashNode"
+      elems_sh = parse_id_list(@nd_elements[arg_nid])
+    elsif at == "HashNode"
+      elems_sh = parse_id_list(@nd_elements[arg_nid])
+    else
+      return ""
+    end
+    return "" if elems_sh.length == 0
+ # All keys+values must be string literals (StringNode) for the
+ # str_str_hash representation. Mixed-type would need str_poly_hash.
+    i_sh = 0
+    while i_sh < elems_sh.length
+      e_sh = elems_sh[i_sh]
+      return "" if @nd_type[e_sh] != "AssocNode"
+      k_sh = @nd_key[e_sh]
+      v_sh = @nd_expression[e_sh]
+      return "" if k_sh < 0 || v_sh < 0
+      return "" if @nd_type[k_sh] != "StringNode"
+      return "" if @nd_type[v_sh] != "StringNode"
+      i_sh = i_sh + 1
+    end
+    @needs_str_str_hash = 1
+    tmp_sh = new_temp
+    emit("  sp_StrStrHash *" + tmp_sh + " = sp_StrStrHash_new();")
+    j_sh = 0
+    while j_sh < elems_sh.length
+      e_sh2 = elems_sh[j_sh]
+      k_sh2 = @nd_key[e_sh2]
+      v_sh2 = @nd_expression[e_sh2]
+      emit("  sp_StrStrHash_set(" + tmp_sh + ", " + compile_expr(k_sh2) + ", " + compile_expr(v_sh2) + ");")
+      j_sh = j_sh + 1
+    end
+    tmp_sh
+  end
+
   def gvar_punct_word(c)
     return "bang" if c == "!"
     return "semi" if c == ";"
@@ -19642,10 +19684,15 @@ class Compiler
  # str_str_hash second arg and route to the hash-aware
  # runtime helper. The generic sp_re_gsub expects a const
  # char * for `rep` and would otherwise smuggle the hash
- # pointer through, producing garbage output.
+ # pointer through, producing garbage output. KeywordHashNode
+ # (bare `key => val` arg) is built inline -- see Issue #910.
             rep_t = infer_type(a[1])
             if rep_t == "str_str_hash"
               return "sp_re_gsub_str_str_hash(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+            end
+            kh_gsub = sub_hash_arg_str_str(a[1])
+            if kh_gsub != ""
+              return "sp_re_gsub_str_str_hash(" + rpat + ", " + rc + ", " + kh_gsub + ")"
             end
             return "sp_re_gsub(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
           end
@@ -19661,7 +19708,30 @@ class Compiler
         if a.length >= 2
           rpat = regex_pat_c_expr(a[0])
           if rpat != ""
+ # Issue #910: sub(regex, hash) — same hash-lookup form
+ # as gsub but only replaces the first match. Bare
+ # `key => val` is parsed as KeywordHashNode; build a
+ # str_str_hash inline so the runtime helper sees a
+ # real hash pointer (compile_expr on KeywordHashNode
+ # returns 0 / NULL → SEGV in the runtime helper).
+            rep_t_sub = infer_type(a[1])
+            if rep_t_sub == "str_str_hash"
+              return "sp_re_sub_str_str_hash(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+            end
+            kh_h_sub = sub_hash_arg_str_str(a[1])
+            if kh_h_sub != ""
+              return "sp_re_sub_str_str_hash(" + rpat + ", " + rc + ", " + kh_h_sub + ")"
+            end
             return "sp_re_sub(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+          end
+ # sub(string, hash) — literal-pattern + hash replacement.
+          rep_t_sub2 = infer_type(a[1])
+          if rep_t_sub2 == "str_str_hash"
+            return "sp_str_sub_str_str_hash(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
+          end
+          kh_str_h_sub = sub_hash_arg_str_str(a[1])
+          if kh_str_h_sub != ""
+            return "sp_str_sub_str_str_hash(" + rc + ", " + compile_expr(a[0]) + ", " + kh_str_h_sub + ")"
           end
           return "sp_str_sub(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
         end

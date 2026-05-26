@@ -2111,6 +2111,51 @@ static const char *sp_re_gsub_str_str_hash(mrb_regexp_pattern *pat, const char *
   out[olen] = 0; return out;
 }
 
+/* Issue #910: sub(regex, hash) — same lookup semantics as
+   sp_re_gsub_str_str_hash but only the first match. */
+static const char *sp_re_sub_str_str_hash(mrb_regexp_pattern *pat, const char *str, sp_StrStrHash *h) {
+  int64_t slen = (int64_t)strlen(str);
+  int caps[64];
+  int n = re_exec(pat, str, slen, 0, caps, 64);
+  if (n <= 0 || caps[0] < 0) return str;
+  int mlen = caps[1] - caps[0];
+  char keybuf[64];
+  char *key = mlen < (int)sizeof(keybuf) ? keybuf : (char *)malloc(mlen + 1);
+  memcpy(key, str + caps[0], mlen);
+  key[mlen] = 0;
+  const char *rep = (h && sp_StrStrHash_has_key(h, key)) ? sp_StrStrHash_get(h, key) : "";
+  size_t rlen = strlen(rep);
+  size_t rest = slen - caps[1];
+  size_t total = caps[0] + rlen + rest;
+  char *out = sp_str_alloc_raw(total + 1);
+  memcpy(out, str, caps[0]);
+  memcpy(out + caps[0], rep, rlen);
+  memcpy(out + caps[0] + rlen, str + caps[1], rest);
+  out[total] = 0;
+  if (key != keybuf) free(key);
+  return out;
+}
+
+/* Issue #910: sub(string, hash) — literal-substring pattern
+   with a hash replacement. Replaces only the first match. */
+static const char *sp_str_sub_str_str_hash(const char *str, const char *pat, sp_StrStrHash *h) {
+  if (!str || !pat) return str;
+  const char *found = strstr(str, pat);
+  if (!found) return str;
+  size_t before = (size_t)(found - str);
+  size_t plen = strlen(pat);
+  const char *rep = (h && sp_StrStrHash_has_key(h, pat)) ? sp_StrStrHash_get(h, pat) : "";
+  size_t rlen = strlen(rep);
+  size_t rest = strlen(str) - before - plen;
+  size_t total = before + rlen + rest;
+  char *out = sp_str_alloc_raw(total + 1);
+  memcpy(out, str, before);
+  memcpy(out + before, rep, rlen);
+  memcpy(out + before + rlen, found + plen, rest);
+  out[total] = 0;
+  return out;
+}
+
 static const char *sp_re_sub(mrb_regexp_pattern *pat, const char *str, const char *rep) {
   int64_t slen = (int64_t)strlen(str); size_t rlen = strlen(rep);
   int caps[64];
