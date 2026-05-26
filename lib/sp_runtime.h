@@ -335,6 +335,51 @@ static mrb_int sp_str_to_i_strict(const char *s) {
   return (mrb_int)v;
 }
 
+/* `Integer(s, base)` with explicit base. Bases 2..36, MRI-compatible
+   prefix recognition (0x / 0b / 0o when the base matches). Raises
+   ArgumentError on invalid input or unsupported base. Issue #887. */
+static mrb_int sp_str_to_i_strict_base(const char *s, mrb_int base) {
+  if (!s) sp_raise_cls("ArgumentError", "invalid value for Integer(): nil");
+  if (base < 2 || base > 36) sp_raise_cls("ArgumentError", sp_sprintf("invalid radix %lld", (long long)base));
+  const char *p = s;
+  while (isspace((unsigned char)*p)) p++;
+  int neg = 0;
+  if (*p == '+') p++;
+  else if (*p == '-') { neg = 1; p++; }
+  if (*p == '0' && p[1] != 0) {
+    if ((base == 16) && (p[1] == 'x' || p[1] == 'X')) p += 2;
+    else if ((base == 2) && (p[1] == 'b' || p[1] == 'B')) p += 2;
+    else if ((base == 8) && (p[1] == 'o' || p[1] == 'O')) p += 2;
+  }
+  if (*p == '\0') sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Integer(): \"%s\"", s));
+  mrb_int v = 0;
+  int any = 0;
+  while (*p) {
+    int d = -1;
+    if (*p >= '0' && *p <= '9') d = *p - '0';
+    else if (*p >= 'a' && *p <= 'z') d = *p - 'a' + 10;
+    else if (*p >= 'A' && *p <= 'Z') d = *p - 'A' + 10;
+    if (d < 0 || d >= (int)base) {
+      if (*p == '_' && any) {
+        int n = -1;
+        char c = p[1];
+        if (c >= '0' && c <= '9') n = c - '0';
+        else if (c >= 'a' && c <= 'z') n = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'Z') n = c - 'A' + 10;
+        if (n >= 0 && n < (int)base) { p++; continue; }
+      }
+      break;
+    }
+    v = v * base + d;
+    any = 1;
+    p++;
+  }
+  if (!any) sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Integer(): \"%s\"", s));
+  while (isspace((unsigned char)*p)) p++;
+  if (*p != '\0') sp_raise_cls("ArgumentError", sp_sprintf("invalid value for Integer(): \"%s\"", s));
+  return neg ? -v : v;
+}
+
 /* Kernel#Float() raises ArgumentError on unparseable input. strtod
    on its own would silently return 0.0 for "abc" or empty input;
    match MRI semantics by validating at-least-one-digit + no-trailing-

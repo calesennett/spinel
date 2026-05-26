@@ -16533,6 +16533,12 @@ class Compiler
             end
           end
           at = infer_type(a0)
+ # Issue #887: `Integer(s, base)` -- route through the base-aware
+ # strict parser so non-decimal inputs parse correctly and
+ # invalid input still raises a catchable ArgumentError.
+          if arg_ids.length >= 2 && (at == "string" || at == "argv")
+            return "sp_str_to_i_strict_base(" + compile_expr(a0) + ", " + compile_expr_as_int(arg_ids[1]) + ")"
+          end
           if at == "string"
             return "sp_str_to_i_strict(" + compile_expr(a0) + ")"
           end
