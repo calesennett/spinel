@@ -35768,8 +35768,12 @@ class Compiler
     if at == "int?"
  # `puts nil` outputs an empty line in Ruby. The int? slot uses
  # SP_INT_NIL as the nil inhabitant; raw printf would emit
- # INT64_MIN's decimal instead.
-      emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
+ # INT64_MIN's decimal instead. Bind val to a temp first so
+ # the is_nil check and printf don't re-evaluate (#832: pop /
+ # shift mutate the receiver -- double-eval ate the wrong slot).
+      tmp_puts_int_opt = new_temp
+      emit("  mrb_int " + tmp_puts_int_opt + " = " + val + ";")
+      emit("  if (sp_int_is_nil(" + tmp_puts_int_opt + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + tmp_puts_int_opt + "); }")
       return
     end
     if at == "float"
@@ -35923,8 +35927,11 @@ class Compiler
       elsif at == "int?"
  # `puts nil` outputs an empty line in Ruby. The int? slot uses
  # SP_INT_NIL as the nil inhabitant; raw printf would emit
- # INT64_MIN's decimal instead.
-        emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
+ # INT64_MIN's decimal instead. Bind to a temp so side-effecting
+ # exprs (e.g. a.pop on int_array) don't double-eval (#832).
+        tmp_pmsg_io = new_temp
+        emit("  mrb_int " + tmp_pmsg_io + " = " + val + ";")
+        emit("  if (sp_int_is_nil(" + tmp_pmsg_io + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + tmp_pmsg_io + "); }")
       else
         if at == "float"
           emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")

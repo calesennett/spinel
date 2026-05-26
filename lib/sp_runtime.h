@@ -1029,8 +1029,10 @@ static inline void sp_IntArray_push(sp_IntArray*a,mrb_int v){if(a->start+a->len>
 /* Issue #826: guard empty arrays. CRuby returns nil; spinel's int slot
    collapses nil to 0. Without the guard, `--a->len` wraps to -1 and
    reads past the buffer start. */
-static inline mrb_int sp_IntArray_pop(sp_IntArray*a){if(!a||a->len<=0)return 0;return a->data[a->start+--a->len];}
-static inline mrb_int sp_IntArray_shift(sp_IntArray*a){if(!a||a->len<=0)return 0;mrb_int v=a->data[a->start];a->start++;a->len--;return v;}
+/* Issue #832: empty pop/shift return SP_INT_NIL (nullable int sentinel)
+   to match MRI's nil semantics; callers must treat as int? */
+static inline mrb_int sp_IntArray_pop(sp_IntArray*a){if(!a||a->len<=0)return SP_INT_NIL;return a->data[a->start+--a->len];}
+static inline mrb_int sp_IntArray_shift(sp_IntArray*a){if(!a||a->len<=0)return SP_INT_NIL;mrb_int v=a->data[a->start];a->start++;a->len--;return v;}
 static inline mrb_int sp_IntArray_length(sp_IntArray*a){return a->len;}
 static inline mrb_bool sp_IntArray_empty(sp_IntArray*a){return a->len==0;}
 static inline mrb_int sp_IntArray_get(sp_IntArray*a,mrb_int i){if(i<0)i+=a->len;return a->data[a->start+i];}
@@ -1056,8 +1058,9 @@ static mrb_int sp_IntArray_sample(sp_IntArray*a){if(a->len<=0)return 0;return a-
 /* Issue #745: guard the initial read on empty arrays. CRuby's [].min /
    .max return nil; spinel's int-typed slot collapses nil to 0. Without
    the guard, the first read is uninitialized memory. */
-static mrb_int sp_IntArray_min(sp_IntArray*a){if(!a||a->len<=0)return 0;mrb_int m=a->data[a->start];for(mrb_int i=1;i<a->len;i++)if(a->data[a->start+i]<m)m=a->data[a->start+i];return m;}
-static mrb_int sp_IntArray_max(sp_IntArray*a){if(!a||a->len<=0)return 0;mrb_int m=a->data[a->start];for(mrb_int i=1;i<a->len;i++)if(a->data[a->start+i]>m)m=a->data[a->start+i];return m;}
+/* Issue #832: empty min/max return SP_INT_NIL (caller treats as int?). */
+static mrb_int sp_IntArray_min(sp_IntArray*a){if(!a||a->len<=0)return SP_INT_NIL;mrb_int m=a->data[a->start];for(mrb_int i=1;i<a->len;i++)if(a->data[a->start+i]<m)m=a->data[a->start+i];return m;}
+static mrb_int sp_IntArray_max(sp_IntArray*a){if(!a||a->len<=0)return SP_INT_NIL;mrb_int m=a->data[a->start];for(mrb_int i=1;i<a->len;i++)if(a->data[a->start+i]>m)m=a->data[a->start+i];return m;}
 static mrb_int sp_IntArray_sum(sp_IntArray*a,mrb_int init){mrb_int s=init;for(mrb_int i=0;i<a->len;i++)s+=a->data[a->start+i];return s;}
 static mrb_bool sp_IntArray_include(sp_IntArray*a,mrb_int v){for(mrb_int i=0;i<a->len;i++)if(a->data[a->start+i]==v)return TRUE;return FALSE;}
 static mrb_int sp_IntArray_index(sp_IntArray*a,mrb_int v){for(mrb_int i=0;i<a->len;i++)if(a->data[a->start+i]==v)return i;return -1;}

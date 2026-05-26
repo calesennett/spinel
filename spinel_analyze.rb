@@ -4917,6 +4917,10 @@ class Compiler
         if rt == "sym_array"
           return "symbol"
         end
+ # Issue #832: int_array pop returns int? (SP_INT_NIL on empty).
+        if rt == "int_array"
+          return "int?"
+        end
       end
       return "int"
     end
@@ -4931,6 +4935,10 @@ class Compiler
         end
         if rt == "float_array"
           return "float"
+        end
+ # Issue #832: int_array shift returns int? on empty.
+        if rt == "int_array"
+          return "int?"
         end
       end
       return "int"
@@ -5052,6 +5060,10 @@ class Compiler
         end
         if rt == "float_array"
           return "float"
+        end
+ # Issue #832: int_array min/max return int? on empty.
+        if rt == "int_array"
+          return "int?"
         end
  # ptr_array of arrays: `.max` / `.min` returns one of the
  # inner arrays per Array#<=> ordering. Element type tracks
