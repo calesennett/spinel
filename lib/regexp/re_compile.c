@@ -356,6 +356,10 @@ parse_quantifier(re_compiler *c, int *min_out, int *max_out)
     return FALSE;
   }
   next_char(c);  /* skip '}' */
+  /* Issue #822: min > max is invalid. CRuby raises RegexpError. */
+  if (max >= 0 && min > max) {
+    compile_error(c, "invalid repeat count");
+  }
   *min_out = min;
   *max_out = max;
   return TRUE;
