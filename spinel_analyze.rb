@@ -5571,6 +5571,16 @@ class Compiler
       end
       return "str_int_hash"
     end
+    if mname == "group_by"
+      if recv >= 0
+        rt_gb = infer_type(recv)
+        if is_array_type(rt_gb) == 1
+          @needs_rb_value = 1
+          @needs_gc = 1
+          return "poly_poly_hash"
+        end
+      end
+    end
     if mname == "transform_keys"
       if recv >= 0
         rt_tk = infer_type(recv)

@@ -22061,6 +22061,15 @@ class Compiler
     if (mname == "min" || mname == "max") && @nd_block[nid] >= 0
       return compile_array_min_max_block(nid, rc, recv_type, mname)
     end
+ # Standalone group_by — builds a poly_poly_hash keyed by the
+ # block result with boxed-poly_array values (per-key buckets
+ # holding the matching elements). The fused group_by.each path
+ # (compile_group_by_each_fused) is preferred when an .each
+ # immediately consumes the result; this arm fires when the result
+ # is observed directly (assigned, inspected, etc.).
+    if mname == "group_by" && @nd_block[nid] >= 0
+      return compile_array_group_by(nid, rc, recv_type)
+    end
  # Array methods
     if recv_type == "int_array" || recv_type == "sym_array"
       if mname == "length" || mname == "size"
@@ -40538,6 +40547,58 @@ class Compiler
     pop_scope
     emit("  }")
     tmp_cnt
+  end
+
+  def compile_array_group_by(nid, rc, recv_type)
+    @needs_gc = 1
+    @needs_rb_value = 1
+    elem_type = elem_type_of_array(recv_type)
+    arr_pfx = array_c_prefix(recv_type)
+    bp_g = get_block_param(nid, 0)
+    bp_g = "_x" if bp_g == ""
+    tmp_h = new_temp
+    tmp_o = new_temp
+    tmp_i = new_temp
+    tmp_k = new_temp
+    tmp_a = new_temp
+    emit("  sp_PolyPolyHash *" + tmp_h + " = sp_PolyPolyHash_new();")
+    emit("  SP_GC_ROOT(" + tmp_h + ");")
+    emit("  sp_PolyArray *" + tmp_o + " = sp_PolyArray_new();")
+    emit("  SP_GC_ROOT(" + tmp_o + ");")
+    emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " < sp_" + arr_pfx + "_length(" + rc + "); " + tmp_i + "++) {")
+    push_scope
+    declare_var(bp_g, elem_type)
+    emit("    " + c_type(elem_type) + " lv_" + bp_g + " = sp_" + arr_pfx + "_get(" + rc + ", " + tmp_i + ");")
+    blk_g = @nd_block[nid]
+    body_g = @nd_body[blk_g]
+    key_expr = "0"
+    key_type = "int"
+    if body_g >= 0
+      stmts_g = get_stmts(body_g)
+      if stmts_g.length > 0
+        k = 0
+        while k < stmts_g.length - 1
+          compile_stmt(stmts_g[k])
+          k = k + 1
+        end
+        key_expr = compile_expr(stmts_g.last)
+        key_type = infer_type(stmts_g.last)
+      end
+    end
+    key_boxed = box_value_to_poly(key_type, key_expr)
+    pop_scope
+    emit("    sp_RbVal " + tmp_k + " = " + key_boxed + ";")
+    emit("    sp_PolyArray *" + tmp_a + ";")
+    emit("    if (sp_PolyPolyHash_has_key(" + tmp_h + ", " + tmp_k + ")) {")
+    emit("      " + tmp_a + " = (sp_PolyArray *)sp_PolyPolyHash_get(" + tmp_h + ", " + tmp_k + ").v.p;")
+    emit("    } else {")
+    emit("      " + tmp_a + " = sp_PolyArray_new();")
+    emit("      sp_PolyPolyHash_set(" + tmp_h + ", " + tmp_k + ", sp_box_obj((void *)" + tmp_a + ", SP_BUILTIN_POLY_ARRAY));")
+    emit("      sp_PolyArray_push(" + tmp_o + ", " + tmp_k + ");")
+    emit("    }")
+    emit("    sp_PolyArray_push(" + tmp_a + ", " + box_value_to_poly(elem_type, "lv_" + bp_g) + ");")
+    emit("  }")
+    tmp_h
   end
 
   def compile_array_min_max_block(nid, rc, recv_type, mname)
