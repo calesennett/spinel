@@ -21057,6 +21057,35 @@ class Compiler
       end
       return rc
     end
+ # Integer#coerce(other): CRuby returns [other, self] with both
+ # widened to float when either side is Float, else both Integer.
+    if mname == "coerce"
+      args_id_ic = @nd_arguments[nid]
+      if args_id_ic >= 0
+        aargs_ic = get_args(args_id_ic)
+        if aargs_ic.length > 0
+          arg_t_ic = infer_type(aargs_ic[0])
+          if arg_t_ic == "float"
+            @needs_float_array = 1
+            @needs_gc = 1
+            tmp_ic = new_temp
+            emit("  sp_FloatArray *" + tmp_ic + " = sp_FloatArray_new();")
+            emit("  sp_FloatArray_push(" + tmp_ic + ", (mrb_float)(" + compile_expr(aargs_ic[0]) + "));")
+            emit("  sp_FloatArray_push(" + tmp_ic + ", (mrb_float)(" + rc + "));")
+            return tmp_ic
+          end
+          if arg_t_ic == "int"
+            @needs_int_array = 1
+            @needs_gc = 1
+            tmp_ic2 = new_temp
+            emit("  sp_IntArray *" + tmp_ic2 + " = sp_IntArray_new();")
+            emit("  sp_IntArray_push(" + tmp_ic2 + ", " + compile_expr(aargs_ic[0]) + ");")
+            emit("  sp_IntArray_push(" + tmp_ic2 + ", " + rc + ");")
+            return tmp_ic2
+          end
+        end
+      end
+    end
  # Integer#step without a block materialises an IntArray (or
  # FloatArray when any operand is float). Block form is handled
  # in compile_block_iteration_stmt.
@@ -21216,6 +21245,24 @@ class Compiler
       emit("  " + tmp + "->_0 = (mrb_int)floor(" + recv_tmp + " / " + arg_tmp + ");")
       emit("  " + tmp + "->_1 = " + recv_tmp + " - " + tmp + "->_0 * " + arg_tmp + ";")
       return tmp
+    end
+ # Float#coerce(other): CRuby returns [other.to_f, self]. Always
+ # promotes to FloatArray regardless of arg type.
+    if mname == "coerce"
+      args_id_co = @nd_arguments[nid]
+      if args_id_co >= 0
+        aargs_co = get_args(args_id_co)
+        if aargs_co.length > 0
+          @needs_float_array = 1
+          @needs_gc = 1
+          arg_f = "(mrb_float)(" + compile_expr(aargs_co[0]) + ")"
+          tmp_co = new_temp
+          emit("  sp_FloatArray *" + tmp_co + " = sp_FloatArray_new();")
+          emit("  sp_FloatArray_push(" + tmp_co + ", " + arg_f + ");")
+          emit("  sp_FloatArray_push(" + tmp_co + ", (mrb_float)(" + rc + "));")
+          return tmp_co
+        end
+      end
     end
  # Float#step without a block materialises a FloatArray of
  # s, s+k, ..., bounded by the limit. Block form is handled in

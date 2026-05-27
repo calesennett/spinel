@@ -6259,6 +6259,27 @@ class Compiler
     end
  # `(a..b).step(n)` (no block) -- returns an int_array of stepped
  # values. Issue #731.
+    if mname == "coerce"
+      if recv >= 0
+        rt_co = infer_type(recv)
+        if rt_co == "int" || rt_co == "float"
+          arg_t_co = ""
+          args_id_co = @nd_arguments[nid]
+          if args_id_co >= 0
+            aa_co = get_args(args_id_co)
+            if aa_co.length > 0
+              arg_t_co = infer_type(aa_co[0])
+            end
+          end
+          if rt_co == "float" || arg_t_co == "float"
+            return "float_array"
+          end
+          if arg_t_co == "int"
+            return "int_array"
+          end
+        end
+      end
+    end
     if mname == "step"
       if recv >= 0
         rt_step = infer_type(recv)
