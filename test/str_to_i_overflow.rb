@@ -1,17 +1,32 @@
-# Issue #743. `"<huge>".to_i` used to overflow int64 with undefined
-# behavior and produce a garbage value. Now overflow is detected and
-# saturates at INT64_MAX (closest int approximation; CRuby returns
-# a bignum but spinel's int model is int64-only).
+# String#to_i overflow handling. Pre-fix: undefined behavior on
+# int64 wrap (#743) — addressed by overflow-detected saturation.
+# Per #842 the saturate path is gone; overflow now raises
+# RangeError so a `rescue` can react instead of silently
+# returning INT64_MAX/MIN.
 
 # Below int64 limit: unchanged.
 puts "12345".to_i
 puts "-67890".to_i
 
-# At/over int64 max: saturates to INT64_MAX (positive) or INT64_MIN
-# (negative).
-puts "99999999999999999999999999999".to_i
-puts "-99999999999999999999999999999".to_i
+# At/over int64 max: raises RangeError.
+begin
+  puts "99999999999999999999999999999".to_i
+rescue RangeError
+  puts "raised"
+end
 
-# With underscores between digits: still works, still saturates.
-puts "9_223_372_036_854_775_807".to_i        # exactly INT64_MAX
-puts "9_223_372_036_854_775_808".to_i        # one past, saturates
+begin
+  puts "-99999999999999999999999999999".to_i
+rescue RangeError
+  puts "raised"
+end
+
+# Exactly INT64_MAX: parses fine, no raise.
+puts "9_223_372_036_854_775_807".to_i
+
+# One past INT64_MAX: raises.
+begin
+  puts "9_223_372_036_854_775_808".to_i
+rescue RangeError
+  puts "raised"
+end

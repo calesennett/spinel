@@ -37,7 +37,7 @@ class Compiler
   end
 
   def initialize
-    @out_lines = "".split(",")
+    @out_lines = "".split(",", -1)
     @out = ""
     @deferred_tuple = ""
     @deferred_lambda = ""
@@ -54,16 +54,16 @@ class Compiler
     @int_overflow_mode = ENV["SPINEL_INT_OVERFLOW"] || "raise"
 
  # ---- AST node storage (parallel arrays by node ID) ----
- # Use "".split(",") for StrArray init (v1 infers StrArray from split)
-    @nd_type = "".split(",")
-    @nd_name = "".split(",")
+ # Use "".split(",", -1) for StrArray init (v1 infers StrArray from split)
+    @nd_type = "".split(",", -1)
+    @nd_name = "".split(",", -1)
     @nd_value = []
-    @nd_content = "".split(",")
+    @nd_content = "".split(",", -1)
     @nd_flags = []
-    @nd_operator = "".split(",")
-    @nd_binop = "".split(",")
-    @nd_callop = "".split(",")
-    @nd_unescaped = "".split(",")
+    @nd_operator = "".split(",", -1)
+    @nd_binop = "".split(",", -1)
+    @nd_callop = "".split(",", -1)
+    @nd_unescaped = "".split(",", -1)
 
  # Node references (integer node IDs, -1 = nil)
     @nd_receiver = []
@@ -92,29 +92,29 @@ class Compiler
     @nd_collection = []
 
  # Node array fields: stored as comma-separated ID strings
-    @nd_stmts = "".split(",")
-    @nd_args = "".split(",")
-    @nd_requireds = "".split(",")
-    @nd_optionals = "".split(",")
-    @nd_keywords = "".split(",")
-    @nd_elements = "".split(",")
-    @nd_parts = "".split(",")
-    @nd_conditions = "".split(",")
-    @nd_exceptions = "".split(",")
-    @nd_targets = "".split(",")
-    @nd_rights = "".split(",")
+    @nd_stmts = "".split(",", -1)
+    @nd_args = "".split(",", -1)
+    @nd_requireds = "".split(",", -1)
+    @nd_optionals = "".split(",", -1)
+    @nd_keywords = "".split(",", -1)
+    @nd_elements = "".split(",", -1)
+    @nd_parts = "".split(",", -1)
+    @nd_conditions = "".split(",", -1)
+    @nd_exceptions = "".split(",", -1)
+    @nd_targets = "".split(",", -1)
+    @nd_rights = "".split(",", -1)
  # ParametersNode#posts -- required params after the splat
  # (def f(*r, x, y) → posts = [x, y]). Currently unused by codegen
  # (post-rest parameters aren't observed in test/), but the parser
  # emits the field so future tests get a proper AST.
-    @nd_posts = "".split(",")
+    @nd_posts = "".split(",", -1)
  # AliasMethodNode / AliasGlobalVariableNode -- parallel ref slots
  # for the new and old names (SymbolNode for methods, GlobalVariableReadNode
  # for globals).
     @nd_new_name = []
     @nd_old_name = []
  # UndefNode -- comma-separated child ids for the SymbolNode names.
-    @nd_names = "".split(",")
+    @nd_names = "".split(",", -1)
 
  # Per-node inferred type, parallel to the other @nd_* arrays.
  # Empty string means "not yet annotated"; node_type falls back to
@@ -122,7 +122,7 @@ class Compiler
  # `freeze_analysis` runs, every reachable node gets a non-empty
  # entry so the codegen path becomes O(1) per node lookup instead
  # of recursively re-walking the subtree on every infer_type call.
-    @nd_inferred_type = "".split(",")
+    @nd_inferred_type = "".split(",", -1)
  # 1 once analysis has converged and freeze_analysis has filled
  # @nd_inferred_type. Switches infer_type to consult the cache
  # first; analysis iterations themselves keep recomputing because
@@ -132,46 +132,48 @@ class Compiler
  # Per-scope local-decls cache populated from IR (SN/ST records).
  # Indexed by body nid; codegen reads pipe-joined name/type lists
  # to declare locals without re-running scan_locals.
-    @nd_scope_names = "".split(",")
-    @nd_scope_types = "".split(",")
+    @nd_scope_names = "".split(",", -1)
+    @nd_scope_types = "".split(",", -1)
 
     @nd_count = 0
     @root_id = 0
 
  # Issue: unresolved-call warnings deduped by "<mname>:<recv_type>"
  # so a hot call site that fails to resolve emits one warning, not N.
-    @unresolved_call_warnings = "".split(",")
+    @unresolved_call_warnings = "".split(",", -1)
 
  # ---- Top-level methods (parallel arrays) ----
-    @meth_names = "".split(",")
-    @meth_param_names = "".split(",")
-    @meth_param_types = "".split(",")
+    @meth_names = "".split(",", -1)
+    @meth_param_names = "".split(",", -1)
+    @meth_param_types = "".split(",", -1)
  # Per-param "deferred element" flag: "1" means at least one caller
  # passed an empty `[]` literal (or a local that itself was assigned
  # an empty literal). Used by the param body-push promotion pass
  # to decide whether the param's int_array can be safely
  # promoted to a concrete typed-array based on body usage.
-    @meth_param_empty = "".split(",")
-    @meth_return_types = "".split(",")
+    @meth_param_empty = "".split(",", -1)
+    @meth_return_types = "".split(",", -1)
     @meth_body_ids = []
-    @meth_has_defaults = "".split(",")
+    @meth_has_defaults = "".split(",", -1)
     @meth_rest_index = []
     @meth_kwrest_index = []
 
  # ---- Classes (parallel arrays) ----
-    @cls_names = "".split(",")
-    @cls_parents = "".split(",")
+    @cls_names = "".split(",", -1)
+    @cls_parents = "".split(",", -1)
  # parallel to @cls_names. Semicolon-
  # separated list of included module names per class. Populated
  # by spinel_analyze and shipped through the IR; codegen
  # resolves the names to module indices for ancestors / parents.
-    @cls_includes = "".split(",")
+    @cls_includes = "".split(",", -1)
  # built-in class prefix. cls_ids
  # 0..20 are reserved for Ruby primitive classes / modules per
  # docs/CLASS-OBJECT.md (minus Method which the existing
  # register_builtin_classes pushes as a user-class entry).
- # User @cls_names entries shift to cls_id 21 + internal_ci;
- # modules shift to 21 + N + module_idx. Lets sp_class_for_poly
+ # Additional built-ins (exceptions, Encoding, etc.) follow that
+ # primitive prefix. User @cls_names entries shift by
+ # @builtin_class_count; modules shift after user classes. Lets
+ # sp_class_for_poly
  # map primitive tags to the built-in cls_id so
  # `5.is_a?(Integer)` against a dynamic klass resolves via
  # the same sp_class_le path as user-class checks.
@@ -197,7 +199,8 @@ class Compiler
                                "ScriptError", "NotImplementedError", "LoadError", "SyntaxError",
                                "StopIteration", "RegexpError",
                                "EncodingError", "SystemCallError",
-                               "LocalJumpError", "FiberError"]
+                               "LocalJumpError", "FiberError",
+                               "Encoding"]
  # -1 = no parent (root). Module entries (Kernel, Comparable,
  # Enumerable) intentionally have -1 since modules don't
  # have superclasses.
@@ -218,7 +221,8 @@ class Compiler
                                 21, 36, 36, 36,
                                 26, 22,
                                 22, 22,
-                                22, 22]
+                                22, 22,
+                                1]
  # Semicolon-separated module-name includes per built-in class.
     @builtin_class_includes = ["", "Kernel", "", "", "",
                                "", "", "",
@@ -237,7 +241,8 @@ class Compiler
                                "", "", "", "",
                                "", "",
                                "", "",
-                               "", ""]
+                               "", "",
+                               ""]
     @builtin_class_count = @builtin_class_names.length
  # emit-time toggle for the per-program
  # sp_class_names[] table + sp_class_to_s helper. compile_expr's
@@ -257,8 +262,8 @@ class Compiler
  # runtime. Gates sp_exc_parent_of + sp_exc_class_le emission.
  # Issue #627.
     @needs_exc_class_hierarchy = 0
-    @cls_ivar_names = "".split(",")
-    @cls_ivar_types = "".split(",")
+    @cls_ivar_names = "".split(",", -1)
+    @cls_ivar_types = "".split(",", -1)
  # Per-ivar flag: was the ivar's first scanned write a definite
  # literal (IntegerNode / FloatNode / StringNode / ...)? Used to
  # distinguish concrete-literal writes from best-guess inference
@@ -266,7 +271,7 @@ class Compiler
  # definite — non-recognized CallNodes default to "int" through
  # infer_ivar_init_type and a naive trust of that produces
  # spurious disagreement.
-    @cls_ivar_init_definite = "".split(",")
+    @cls_ivar_init_definite = "".split(",", -1)
  # Per-(class, ivar) accumulator of distinct concrete writer
  # types observed by scan_writer_calls. After all writer-scan
  # iterations finish, slots with 2+ distinct entries widen to
@@ -278,34 +283,40 @@ class Compiler
  # comma-separated list of distinct types per ivar; the outer
  # dimension is semicolon-separated and parallel to
  # `@cls_ivar_names[ci]`.
-    @cls_ivar_observed_types = "".split(",")
+    @cls_ivar_observed_types = "".split(",", -1)
  # Memoization for `find_lv_ivar_alias_in_ast`. Keyed by
  # `"<class_idx>:<lv_name>"`, value is the resolved ivar name (or
  # `""` when the LV has multiple sources / non-ivar writes).
     @lv_alias_cache = {}
  # Top-level (script-scope) ivars. Lowered to `static` file-scope
  # globals because `main()` / top-level `def` bodies have no `self`.
-    @toplevel_ivar_names = "".split(",")
-    @toplevel_ivar_types = "".split(",")
-    @cls_meth_names = "".split(",")
-    @cls_meth_params = "".split(",")
-    @cls_meth_ptypes = "".split(",")
-    @cls_meth_returns = "".split(",")
-    @cls_meth_bodies = "".split(",")
-    @cls_meth_defaults = "".split(",")
+    @toplevel_ivar_names = "".split(",", -1)
+    @toplevel_ivar_types = "".split(",", -1)
+    @cls_meth_names = "".split(",", -1)
+    @cls_meth_params = "".split(",", -1)
+    @cls_meth_ptypes = "".split(",", -1)
+    @cls_meth_returns = "".split(",", -1)
+    @cls_meth_bodies = "".split(",", -1)
+    @cls_meth_defaults = "".split(",", -1)
  # Mirror of @meth_param_empty for class methods. Pipe-separated by
  # method, comma-separated by param. .
-    @cls_meth_ptypes_empty = "".split(",")
-    @cls_attr_readers = "".split(",")
-    @cls_attr_writers = "".split(",")
-    @cls_cmeth_names = "".split(",")
-    @cls_cmeth_params = "".split(",")
-    @cls_cmeth_ptypes = "".split(",")
-    @cls_cmeth_returns = "".split(",")
-    @cls_cmeth_bodies = "".split(",")
-    @cls_cmeth_defaults = "".split(",")
-    @cls_cmeth_scope_names = "".split(",")
-    @cls_cmeth_scope_types = "".split(",")
+    @cls_meth_ptypes_empty = "".split(",", -1)
+ # Prepend chain (issue #720): per-class mapping from a Ruby
+ # method name to the ordered list of synthetic shadow names
+ # registered by analyze. compile_super_expr consults this to
+ # redirect super calls inside prepended methods to the next
+ # shadow in the chain. See spinel_analyze.rb prep_snapshot_active.
+    @cls_meth_prep_chain = "".split(",", -1)
+    @cls_attr_readers = "".split(",", -1)
+    @cls_attr_writers = "".split(",", -1)
+    @cls_cmeth_names = "".split(",", -1)
+    @cls_cmeth_params = "".split(",", -1)
+    @cls_cmeth_ptypes = "".split(",", -1)
+    @cls_cmeth_returns = "".split(",", -1)
+    @cls_cmeth_bodies = "".split(",", -1)
+    @cls_cmeth_defaults = "".split(",", -1)
+    @cls_cmeth_scope_names = "".split(",", -1)
+    @cls_cmeth_scope_types = "".split(",", -1)
     @cls_is_value_type = []
  # SRA (scalar replacement of aggregates) eligibility flag per class.
  # Classes marked here can have their non-escaping instances replaced
@@ -314,8 +325,8 @@ class Compiler
     @cls_is_sra = []
 
  # ---- Constants (parallel arrays) ----
-    @const_names = "".split(",")
-    @const_types = "".split(",")
+    @const_names = "".split(",", -1)
+    @const_types = "".split(",", -1)
 
  # ---- Class variables (@@var) ----
  # Per-(class,name) parallel arrays. Storage is a per-class C global
@@ -325,39 +336,39 @@ class Compiler
  # are a known footgun (mame, ko1, et al. publicly disrecommend
  # them); the simpler per-class semantics fit Spinel's compile-time
  # storage model better. Documented in the test fixtures.
-    @cvar_names = "".split(",")
-    @cvar_types = "".split(",")
+    @cvar_names = "".split(",", -1)
+    @cvar_types = "".split(",", -1)
  # Compile-time literal initializer per cvar, if the class-body
  # write was `@@x = <literal>`. "" means "use type-default". This
  # is necessary because Spinel doesn't run class-body statements
  # at startup, so any initializer that's not a fold-able literal
  # leaves the cvar at its type-default until first write.
-    @cvar_init_values = "".split(",")
+    @cvar_init_values = "".split(",", -1)
     @const_expr_ids = []
-    @const_scope_names = "".split(",")
+    @const_scope_names = "".split(",", -1)
  # See spinel_analyze.rb's @const_init_class for the schema.
  # Issue #646.
-    @const_init_class = "".split(",")
+    @const_init_class = "".split(",", -1)
 
  # `redo` -- labeled-goto target stack. Each loop emitter pushes
  # a fresh label name when entering an iteration body and pops on
  # exit; a `redo` jumps to the top of the innermost label.
-    @redo_label_stack = "".split(",")
+    @redo_label_stack = "".split(",", -1)
     @redo_label_counter = 0
 
  # `alias $copy $orig` -- maps new gvar name to its target.
  # Populated by collect_all from AliasGlobalVariableNode
  # statements; consulted by sanitize_gvar / scan_features /
  # infer_type so $copy and $orig share storage.
-    @galias_new = "".split(",")
-    @galias_old = "".split(",")
+    @galias_new = "".split(",", -1)
+    @galias_old = "".split(",", -1)
 
  # `undef foo` -- per-(class, method-name) registry of removed
  # methods. Recorded by collect_class_method_undef; compile-time
  # enforcement of "call after undef fails" is currently a
  # documented out-of-scope.
     @undef_class_idx = []
-    @undef_method = "".split(",")
+    @undef_method = "".split(",", -1)
 
  # `BEGIN { ... }` bodies, in source-encounter order. Hoisted to
  # the top of main() during emit_main.
@@ -370,15 +381,15 @@ class Compiler
     @post_execution_blocks = []
 
  # ---- Scope stack for local variables ----
-    @scope_names = "".split(",")
-    @scope_types = "".split(",")
+    @scope_names = "".split(",", -1)
+    @scope_types = "".split(",", -1)
  # Parallel to `@scope_names`: when a local was assigned directly
  # from an ivar read (`lv = @ivar`), record the ivar name here so
  # later sites that need ivar-side metadata (notably the
  # `<poly>[k]` narrowing in `compile_poly_method_call`) can
  # resolve through the alias. Empty string when the local has no
  # such alias (or had a non-ivar write since).
-    @scope_ivar_alias = "".split(",")
+    @scope_ivar_alias = "".split(",", -1)
 
  # Type-narrow stack for `is_a?`/`kind_of?` guards. While walking
  # the then-arm of `if v.is_a?(Hash)` or the truthy branch of
@@ -386,8 +397,8 @@ class Compiler
  # narrowed_type)` is pushed here; find_var_type's top-down
  # lookup picks it up so infer_type / scan / codegen see the
  # narrowed type without per-pass plumbing.
-    @type_narrow_names = "".split(",")
-    @type_narrow_types = "".split(",")
+    @type_narrow_names = "".split(",", -1)
+    @type_narrow_types = "".split(",", -1)
     @in_narrow_recompute = 0
 
     @current_class_idx = -1
@@ -431,7 +442,7 @@ class Compiler
 
  # Yield/block tracking (parallel with meth_names / cls_meth_names)
     @meth_has_yield = []
-    @cls_meth_has_yield = "".split(",")
+    @cls_meth_has_yield = "".split(",", -1)
 
  # Block function accumulator (emitted before forward decls)
     @block_funcs = ""
@@ -442,7 +453,7 @@ class Compiler
     @needs_system = 0
     @needs_int_array = 0
     @needs_float_array = 0
-    @tuple_types = "".split(",")
+    @tuple_types = "".split(",", -1)
     @needs_str_array = 0
     @needs_str_int_hash = 0
     @needs_str_str_hash = 0
@@ -455,15 +466,15 @@ class Compiler
  # emitted at the top of each rescue body. A bare `raise` inside a
  # rescue body re-raises with the snapshotted class+message rather
  # than fabricating a fresh RuntimeError. Empty outside any rescue.
-    @rescue_cls_stack = "".split(",")
-    @rescue_msg_stack = "".split(",")
+    @rescue_cls_stack = "".split(",", -1)
+    @rescue_msg_stack = "".split(",", -1)
     @rescue_depth = 0
  # Stack of ensure-clause node IDs (encoded as strings) currently in
  # scope. Each entry corresponds to an enclosing `begin..ensure..end`
  # whose body is being compiled. When `return` is emitted from inside
  # the body, each ensure body is replayed (innermost-first) before
  # the C `return`, so writebacks in `ensure` execute on early return.
-    @ensure_stack = "".split(",")
+    @ensure_stack = "".split(",", -1)
  # Number of `sp_exc_top++` pushes emitted along the static
  # fall-through path leading to the current emit point but not
  # yet matched by an emitted `sp_exc_top--`. An early `return`
@@ -504,22 +515,22 @@ class Compiler
  # `.sort!` CallNode appears so the helpers stay out of
  # programs that don't sort.
     @needs_sym_sort = 0
-    @regexp_patterns = "".split(",")
-    @regexp_flags = "".split(",")
+    @regexp_patterns = "".split(",", -1)
+    @regexp_flags = "".split(",", -1)
  # Dynamic-regex (InterpolatedRegularExpressionNode) call-site cache.
  # Each AST node gets a unique idx so the emitter can produce one
  # `sp_re_dyn_<idx>` helper per source location with its own
  # function-scope cache (string key + compiled pattern). Collected
  # in scan_features so indexes are stable across compile_expr visits.
     @dyn_regex_node_ids = []
-    @dyn_regex_flags = "".split(",")
+    @dyn_regex_flags = "".split(",", -1)
  # `var = /lit/` resolution. Parallel arrays: `@local_regex_names`
  # holds the local-variable name; `@local_regex_idx` holds the
  # corresponding `@regexp_patterns` index (-1 when ambig or dyn);
  # `@local_regex_call_nids` holds a single-write `Regexp.new(<dyn>)`
  # CallNode id (-1 otherwise) so regex_pat_c_expr can emit the
  # dyn-cache call from a read site.
-    @local_regex_names = "".split(",")
+    @local_regex_names = "".split(",", -1)
     @local_regex_idx = []
     @local_regex_call_nids = []
 
@@ -539,17 +550,17 @@ class Compiler
     @needs_lambda = 0
     @lambda_counter = 0
     @lambda_funcs = ""
-    @lambda_params = "".split(",")
-    @lambda_captures = "".split(",")
-    @lambda_capture_cell_types = "".split(",")
-    @lambda_var_ret_names = "".split(",")
-    @lambda_var_ret_types = "".split(",")
+    @lambda_params = "".split(",", -1)
+    @lambda_captures = "".split(",", -1)
+    @lambda_capture_cell_types = "".split(",", -1)
+    @lambda_var_ret_names = "".split(",", -1)
+    @lambda_var_ret_types = "".split(",", -1)
     @last_lambda_ret_type = ""
  # `Klass.method(:cls_meth)` generates an adapter trampoline so the
  # Method object's `(void *self, mrb_int...)` ABI fits a class
  # method's no-self C signature. Tracks emitted (Klass, method)
  # pairs to avoid duplicate definitions.
-    @cls_method_adapters = "".split(",")
+    @cls_method_adapters = "".split(",", -1)
 
  # Snapshot slot/expr pair for the kwargs-as-bundle path in
  # compile_typed_call_args.
@@ -558,8 +569,8 @@ class Compiler
 
  # Proc closure support (Phase 2)
     @in_proc_body = 0
-    @proc_captures = "".split(",")
-    @proc_capture_types = "".split(",")
+    @proc_captures = "".split(",", -1)
+    @proc_capture_types = "".split(",", -1)
 
  # Fiber support
     @needs_fiber = 0
@@ -567,29 +578,29 @@ class Compiler
     @fiber_counter = 0
     @fiber_funcs = ""
     @in_fiber_body = 0
-    @fiber_captures = "".split(",")
-    @fiber_capture_types = "".split(",")
-    @heap_promoted_names = "".split(",")
-    @heap_promoted_cells = "".split(",")
+    @fiber_captures = "".split(",", -1)
+    @fiber_capture_types = "".split(",", -1)
+    @heap_promoted_names = "".split(",", -1)
+    @heap_promoted_cells = "".split(",", -1)
 
  # Global variables ($x)
-    @gvar_names = "".split(",")
-    @gvar_types = "".split(",")
+    @gvar_names = "".split(",", -1)
+    @gvar_types = "".split(",", -1)
 
  # Poly tracking: functions with params called with different types
-    @poly_funcs = "".split(",")
-    @poly_param_types = "".split(",")
+    @poly_funcs = "".split(",", -1)
+    @poly_param_types = "".split(",", -1)
 
  # Method reference tracking: var_name -> method_name
-    @method_ref_vars = "".split(",")
-    @method_ref_names = "".split(",")
+    @method_ref_vars = "".split(",", -1)
+    @method_ref_names = "".split(",", -1)
 
  # Open class tracking for built-in types
-    @open_class_names = "".split(",")
+    @open_class_names = "".split(",", -1)
 
  # Module tracking: module_name -> body node id
-    @module_names = "".split(",")
-    @module_includes = "".split(",")
+    @module_names = "".split(",", -1)
+    @module_includes = "".split(",", -1)
     @module_body_ids = []
  # Module-level singleton accessors :
  # `class << self; attr_accessor :foo; end` inside `module M`.
@@ -598,38 +609,38 @@ class Compiler
  # inline; Stage 2: multiple names → runtime sentinel switch).
  # Empty string means at least one write was non-constant — the
  # slot falls through to the un-folded path.
-    @module_acc_keys = "".split(",")
-    @module_acc_consts = "".split(",")
+    @module_acc_keys = "".split(",", -1)
+    @module_acc_consts = "".split(",", -1)
 
  # ---- FFI state (parallel arrays, populated by scan_ffi_decl) ----
  # Per-module registry:
-    @ffi_modules = "".split(",")          # module names that declared FFI
-    @ffi_module_libs = "".split(",")      # ";"-joined -l names
-    @ffi_module_cflags = "".split(",")    # ";"-joined cc flag strings
+    @ffi_modules = "".split(",", -1)          # module names that declared FFI
+    @ffi_module_libs = "".split(",", -1)      # ";"-joined -l names
+    @ffi_module_cflags = "".split(",", -1)    # ";"-joined cc flag strings
  # Function registry (one entry per ffi_func decl):
-    @ffi_func_modules = "".split(",")     # owning module name
-    @ffi_func_names = "".split(",")       # C symbol name
-    @ffi_func_arg_types = "".split(",")   # ";"-joined Spinel type tokens
-    @ffi_func_ret_types = "".split(",")   # single Spinel type token
-    @ffi_func_arg_specs = "".split(",")   # ";"-joined original specs (uint32, str, …)
-    @ffi_func_ret_specs = "".split(",")   # original return spec
+    @ffi_func_modules = "".split(",", -1)     # owning module name
+    @ffi_func_names = "".split(",", -1)       # C symbol name
+    @ffi_func_arg_types = "".split(",", -1)   # ";"-joined Spinel type tokens
+    @ffi_func_ret_types = "".split(",", -1)   # single Spinel type token
+    @ffi_func_arg_specs = "".split(",", -1)   # ";"-joined original specs (uint32, str, …)
+    @ffi_func_ret_specs = "".split(",", -1)   # original return spec
  # Buffer registry (one entry per ffi_buffer decl):
-    @ffi_buf_modules = "".split(",")
-    @ffi_buf_names = "".split(",")
+    @ffi_buf_modules = "".split(",", -1)
+    @ffi_buf_names = "".split(",", -1)
     @ffi_buf_sizes = []                   # int sizes in bytes
  # Reader registry (one entry per ffi_read_* decl):
-    @ffi_reader_modules = "".split(",")
-    @ffi_reader_names = "".split(",")
-    @ffi_reader_kinds = "".split(",")     # "u32", "i32", "ptr"
+    @ffi_reader_modules = "".split(",", -1)
+    @ffi_reader_names = "".split(",", -1)
+    @ffi_reader_kinds = "".split(",", -1)     # "u32", "i32", "ptr"
     @ffi_reader_offsets = []              # int byte offsets
 
     @pending_method_ref = ""
     @lambda_counter = 0
     @lambda_funcs = ""
-    @lambda_params = "".split(",")
-    @lambda_captures = "".split(",")
+    @lambda_params = "".split(",", -1)
+    @lambda_captures = "".split(",", -1)
     @lambda_insert_pos = 0
-    @cls_method_adapters = "".split(",")
+    @cls_method_adapters = "".split(",", -1)
 
  # Snapshot slot/expr pair for the kwargs-as-bundle path in
  # compile_typed_call_args. Set per-invocation; copied into
@@ -640,8 +651,8 @@ class Compiler
 
  # Proc closure support (Phase 2)
     @in_proc_body = 0
-    @proc_captures = "".split(",")
-    @proc_capture_types = "".split(",")
+    @proc_captures = "".split(",", -1)
+    @proc_capture_types = "".split(",", -1)
 
  # Inline-rename map for compile_yield_method_call_stmt / _expr.
     @inline_rename_map_from = nil
@@ -656,7 +667,7 @@ class Compiler
     @inline_yield_bp_names = nil
 
  # Symbol type Phase 2 Step 1: intern table (infrastructure only; unused yet).
-    @sym_names = "".split(",")
+    @sym_names = "".split(",", -1)
 
  # instance_eval block hoisting: parallel arrays indexed by synthetic
  # function id N. Each lifted block becomes a file-scope static
@@ -668,12 +679,12 @@ class Compiler
     @ieval_counter = 0
     @ieval_class_idxs = []
     @ieval_body_ids = []
-    @ieval_return_types = "".split(",")
+    @ieval_return_types = "".split(",", -1)
  # Self-bound param per lift; emit_ieval_func seeds `lv_<name> = self;`.
-    @ieval_self_param_names = "".split(",")
+    @ieval_self_param_names = "".split(",", -1)
  # Extras already land in @nd_scope_names as nil-typed locals via
  # analyze's precompute_all_scope_decls.
-    @ieval_extra_param_names = "".split(",")
+    @ieval_extra_param_names = "".split(",", -1)
   end
 
  # Backslash-n for C string literals - bootstrap-safe (avoids escape level issues)
@@ -772,10 +783,10 @@ class Compiler
 
  # Returns the body node id for class ci's midx'th method, or -1
  # if midx is out of range or the body id is invalid. Centralises
- # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
+ # the @cls_meth_bodies[ci].split(";", -1)[midx].to_i parse so detectors
  # don't have to inline it.
   def cls_method_body_id(ci, midx)
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if midx >= bodies.length
       return -1
     end
@@ -911,7 +922,7 @@ class Compiler
     if name == "Math" || name == "File" || name == "Dir" || name == "Time" || name == "IO" || name == "Process" || name == "Kernel" || name == "Comparable" || name == "Enumerable" || name == "Complex"
       return 1
     end
-    if name == "Object" || name == "Integer" || name == "String" || name == "Float" || name == "Symbol" || name == "Array" || name == "Hash" || name == "Range" || name == "Numeric" || name == "TrueClass" || name == "FalseClass" || name == "NilClass" || name == "Proc" || name == "Lambda" || name == "Regexp" || name == "MatchData" || name == "StringIO" || name == "Fiber"
+    if name == "Object" || name == "Integer" || name == "String" || name == "Float" || name == "Symbol" || name == "Array" || name == "Hash" || name == "Range" || name == "Numeric" || name == "TrueClass" || name == "FalseClass" || name == "NilClass" || name == "Proc" || name == "Lambda" || name == "Regexp" || name == "MatchData" || name == "StringIO" || name == "Fiber" || name == "Encoding"
       return 1
     end
  # Common exception classes referenced by raise / rescue. We
@@ -1207,7 +1218,7 @@ class Compiler
     if incs_str == ""
       return ""
     end
-    incs = incs_str.split(";")
+    incs = incs_str.split(";", -1)
     ii = 0
     while ii < incs.length
       inc = incs[ii]
@@ -1598,6 +1609,12 @@ class Compiler
       end
       return is_a_static_negative(eb)
     end
+    if cname == "Encoding"
+      if eb == "encoding"
+        return "TRUE"
+      end
+      return is_a_static_negative(eb)
+    end
  # User-defined class
     if find_class_idx(cname) >= 0
       if is_obj_type(eb) == 1
@@ -1657,6 +1674,9 @@ class Compiler
     end
     if cname == "Range"
       return "range"
+    end
+    if cname == "Encoding"
+      return "encoding"
     end
     if find_class_idx(cname) >= 0
       return "obj_" + cname
@@ -2024,7 +2044,12 @@ class Compiler
   def regex_pat_c_expr(nid)
     ridx = find_regexp_index(nid)
     if ridx >= 0
-      return "sp_re_pat_" + ridx.to_s
+ # Issue #846: if the pre-compile failed (the literal came from
+ # `Regexp.new("[bad")` whose pattern is invalid), raise the
+ # captured error message now — from inside the user's begin/
+ # rescue scope where setjmp is active.
+      @needs_exc_class_hierarchy = 1
+      return "(sp_re_pat_err_" + ridx.to_s + " ? (sp_raise_cls(\"RegexpError\", sp_re_pat_err_" + ridx.to_s + "), (mrb_regexp_pattern *)NULL) : sp_re_pat_" + ridx.to_s + ")"
     end
     if @nd_type[nid] == "InterpolatedRegularExpressionNode"
       @needs_regexp = 1
@@ -2332,7 +2357,7 @@ class Compiler
 
  # Find method in class (search parent chain)
   def cls_find_method(ci, mname)
-    names = @cls_meth_names[ci].split(";")
+    names = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < names.length
       if names[j] == mname
@@ -2360,9 +2385,9 @@ class Compiler
       return -1
     end
     if kind == "cmeth"
-      mnames = @cls_cmeth_names[ci].split(";")
+      mnames = @cls_cmeth_names[ci].split(";", -1)
     else
-      mnames = @cls_meth_names[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
     end
     cj = 0
     while cj < mnames.length
@@ -2409,10 +2434,10 @@ class Compiler
  # an override declared with narrower param types than the base
  # would emit a C call site that doesn't match its signature.
   def cls_imeth_override_ptypes_match(pairs_str, mname, base_ptypes)
-    pairs = pairs_str.split(";")
+    pairs = pairs_str.split(";", -1)
     pi = 0
     while pi < pairs.length
-      p = pairs[pi].split(",")
+      p = pairs[pi].split(",", -1)
       cand_owner = p[1].to_i
       cand_midx = cls_find_method_direct(cand_owner, mname)
       cand_pt = cls_meth_ptypes_get(cand_owner, cand_midx)
@@ -2575,8 +2600,8 @@ class Compiler
     end
     @cls_method_adapters.push(key)
 
-    cmnames = @cls_cmeth_names[ci].split(";")
-    cm_returns = @cls_cmeth_returns[ci].split(";")
+    cmnames = @cls_cmeth_names[ci].split(";", -1)
+    cm_returns = @cls_cmeth_returns[ci].split(";", -1)
     j = 0
     while j < cmnames.length
       if cmnames[j] == mname
@@ -2685,11 +2710,11 @@ class Compiler
       return "int"
     end
     if kind == "cmeth"
-      names = @cls_cmeth_names[ci].split(";")
-      returns = @cls_cmeth_returns[ci].split(";")
+      names = @cls_cmeth_names[ci].split(";", -1)
+      returns = @cls_cmeth_returns[ci].split(";", -1)
     else
-      names = @cls_meth_names[ci].split(";")
-      returns = @cls_meth_returns[ci].split(";")
+      names = @cls_meth_names[ci].split(";", -1)
+      returns = @cls_meth_returns[ci].split(";", -1)
     end
     j = 0
     while j < names.length
@@ -2712,8 +2737,8 @@ class Compiler
 
  # Get ivar type from class
   def cls_ivar_type(ci, iname)
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     own_t = ""
     j = 0
     while j < names.length
@@ -2912,13 +2937,24 @@ class Compiler
  # returns. Walk to the parent's `find_method_owner`-resolved
  # method and read its return type.
       if @current_class_idx >= 0 && @current_method_name != ""
+ # Prepend chain redirect (issue #720): when inside a prepended
+ # method or a shadow, super dispatches to a synthetic on the
+ # same class. Mirror the spinel_analyze.rb arm.
+        prep_target_st = prep_super_target(@current_class_idx, @current_method_name)
+        if prep_target_st != ""
+          ret_pt = cls_method_return(@current_class_idx, prep_target_st)
+          if ret_pt != ""
+            return ret_pt
+          end
+        end
+        super_mname_st = prep_super_parent_mname(@current_class_idx, @current_method_name)
         parent_name_st = @cls_parents[@current_class_idx]
         if parent_name_st != ""
           parent_ci_st = find_class_idx(parent_name_st)
           if parent_ci_st >= 0
-            owner_st = find_method_owner(parent_ci_st, @current_method_name)
+            owner_st = find_method_owner(parent_ci_st, super_mname_st)
             if owner_st != ""
-              ret_st = cls_method_return(find_class_idx(owner_st), @current_method_name)
+              ret_st = cls_method_return(find_class_idx(owner_st), super_mname_st)
               if ret_st != ""
                 return ret_st
               end
@@ -2939,8 +2975,11 @@ class Compiler
     if t == "FloatNode"
       return "float"
     end
-    if t == "StringNode" || t == "SourceFileNode" || t == "SourceEncodingNode" || t == "NumberedReferenceReadNode" || t == "InterpolatedStringNode" || t == "InterpolatedSymbolNode" || t == "BackReferenceReadNode" || t == "XStringNode" || t == "InterpolatedXStringNode"
+    if t == "StringNode" || t == "SourceFileNode" || t == "NumberedReferenceReadNode" || t == "InterpolatedStringNode" || t == "InterpolatedSymbolNode" || t == "BackReferenceReadNode" || t == "XStringNode" || t == "InterpolatedXStringNode"
       return "string"
+    end
+    if t == "SourceEncodingNode"
+      return "encoding"
     end
     if t == "SymbolNode"
       return "symbol"
@@ -3009,7 +3048,7 @@ class Compiler
  # Without this arm spinel falls back to int (the default), and
  # string-returning rescue bodies fail C compilation when the
  # ret_tmp slot's type doesn't match the value being assigned.
-      types_b = "".split(",")
+      types_b = "".split(",", -1)
       bodies_b = begin_node_arm_bodies(nid)
       bi = 0
       while bi < bodies_b.length
@@ -3221,8 +3260,8 @@ class Compiler
  # cache-miss path picks up the subclass's override. Issue #523.
       if @nd_receiver[nid] < 0 && @current_class_idx >= 0 && @current_method_has_self == 0
         mn_cmeth = @nd_name[nid]
-        cmnames_cm_dispatch = @cls_cmeth_names[@current_class_idx].split(";")
-        cmreturns_cm_dispatch = @cls_cmeth_returns[@current_class_idx].split(";")
+        cmnames_cm_dispatch = @cls_cmeth_names[@current_class_idx].split(";", -1)
+        cmreturns_cm_dispatch = @cls_cmeth_returns[@current_class_idx].split(";", -1)
         kk_cm = 0
         while kk_cm < cmnames_cm_dispatch.length
           if cmnames_cm_dispatch[kk_cm] == mn_cmeth && kk_cm < cmreturns_cm_dispatch.length
@@ -3299,8 +3338,8 @@ class Compiler
           cmp_cn_obj = cmp_recv_t_obj[4, cmp_recv_t_obj.length - 4]
           cmp_ci_obj = find_class_idx(cmp_cn_obj)
           if cmp_ci_obj >= 0
-            cmp_names_obj = @cls_meth_names[cmp_ci_obj].split(";")
-            cmp_returns_obj = @cls_meth_returns[cmp_ci_obj].split(";")
+            cmp_names_obj = @cls_meth_names[cmp_ci_obj].split(";", -1)
+            cmp_returns_obj = @cls_meth_returns[cmp_ci_obj].split(";", -1)
             cmp_jj_obj = 0
             while cmp_jj_obj < cmp_names_obj.length
               if cmp_names_obj[cmp_jj_obj] == cmp_mname && cmp_jj_obj < cmp_returns_obj.length
@@ -3341,13 +3380,13 @@ class Compiler
           else_type = infer_type(sub)
         end
       end
-      types = "".split(",")
+      types = "".split(",", -1)
       types.push(then_type)
       types.push(else_type)
       return unify_return_type(types)
     end
     if t == "CaseMatchNode"
-      types = "".split(",")
+      types = "".split(",", -1)
       conds = parse_id_list(@nd_conditions[nid])
       k = 0
       while k < conds.length
@@ -3379,7 +3418,7 @@ class Compiler
       return "int"
     end
     if t == "CaseNode"
-      types = "".split(",")
+      types = "".split(",", -1)
       conds = parse_id_list(@nd_conditions[nid])
       k = 0
       while k < conds.length
@@ -3953,7 +3992,7 @@ class Compiler
   end
 
   def tuple_elem_type_at(t, idx)
-    parts = tuple_elem_types_str(t).split(",")
+    parts = tuple_elem_types_str(t).split(",", -1)
     if idx < parts.length
       return parts[idx]
     end
@@ -3961,12 +4000,74 @@ class Compiler
   end
 
   def tuple_arity(t)
-    tuple_elem_types_str(t).split(",").length
+    tuple_elem_types_str(t).split(",", -1).length
+  end
+
+ # Issue #878: dirname of the source file path baked into the
+ # AST. Memoized; the parser writes the same toplevel path into
+ # every SourceFileNode's content (require/require_relative are
+ # inlined at parse time so we lose per-site source mapping --
+ # same documented limitation as __FILE__). For files passed as
+ # a relative path, the result is also relative.
+  def source_file_dirname
+    if @source_file_dirname_cache != nil
+      return @source_file_dirname_cache
+    end
+ # Parser emits SOURCE_FILE near the top of the AST. Fall back
+ # to scanning for SourceFileNode (set by `__FILE__`) for older
+ # AST files that predate the SOURCE_FILE prelude.
+    path = ""
+    if @source_file_path != nil
+      path = @source_file_path
+    end
+    if path == ""
+      i = 0
+      while i < @nd_type.length
+        if @nd_type[i] == "SourceFileNode"
+          path = @nd_content[i]
+          i = @nd_type.length
+        else
+          i = i + 1
+        end
+      end
+    end
+    if path == ""
+      @source_file_dirname_cache = "."
+      return @source_file_dirname_cache
+    end
+    last_slash = -1
+    j = 0
+    while j < path.length
+      if path[j] == "/"
+        last_slash = j
+      end
+      j = j + 1
+    end
+    if last_slash < 0
+      @source_file_dirname_cache = "."
+    elsif last_slash == 0
+      @source_file_dirname_cache = "/"
+    else
+      @source_file_dirname_cache = path[0, last_slash]
+    end
+    @source_file_dirname_cache
   end
 
   def tuple_c_name(t)
- # "tuple:int,string" → "sp_Tuple_int_string"
-    "sp_Tuple_" + tuple_elem_types_str(t).split(",").join("_")
+ # "tuple:int,string" → "sp_Tuple_int_string". base_type strips
+ # nullable `?` suffixes: a tuple of int? has the same C storage
+ # as a tuple of int (mrb_int either way; the nil sentinel lives
+ # in-band as SP_INT_NIL). Without this an int_array#pop return
+ # widens the surrounding tuple type to `sp_Tuple_int?_...` whose
+ # `?` is an illegal C identifier char. #832 follow-up.
+    parts = tuple_elem_types_str(t).split(",", -1)
+    out = "".split(",", -1)
+    k = 0
+    while k < parts.length
+      out.push(base_type(parts[k]))
+      k = k + 1
+    end
+    "sp_Tuple_" + out.join("_")
   end
 
  # Whether a tuple element type must be traced by the GC scan function.
@@ -3983,7 +4084,7 @@ class Compiler
  # Returns the scan function name for the tuple, or "NULL" if no field
  # requires marking.
   def tuple_scan_name(t)
-    parts = tuple_elem_types_str(t).split(",")
+    parts = tuple_elem_types_str(t).split(",", -1)
     fi = 0
     while fi < parts.length
       if tuple_field_needs_mark(parts[fi]) == 1
@@ -4012,7 +4113,7 @@ class Compiler
 
  # Build "tuple:T0,T1,..." from a list of element node ids and register it.
   def tuple_type_from_elems(elems)
-    parts = "".split(",")
+    parts = "".split(",", -1)
     k = 0
     while k < elems.length
       parts.push(infer_type(elems[k]))
@@ -4082,6 +4183,9 @@ class Compiler
     if t == "int_str_hash"
       return 1
     end
+    if t == "int_int_hash"
+      return 1
+    end
     if t == "sym_int_hash"
       return 1
     end
@@ -4119,6 +4223,9 @@ class Compiler
       return 1
     end
     if t == "exception"
+      return 1
+    end
+    if t == "stringscanner"
       return 1
     end
     if is_obj_type(t) == 1
@@ -4336,7 +4443,7 @@ class Compiler
     if ci < 0
       return 0
     end
-    writers = @cls_attr_writers[ci].split(";")
+    writers = @cls_attr_writers[ci].split(";", -1)
     wi = 0
     while wi < writers.length
       if writers[wi] == bname
@@ -4378,6 +4485,9 @@ class Compiler
     if t == "complex"
       return "sp_Complex"
     end
+    if t == "rational"
+      return "sp_Rational"
+    end
     if t == "int"
       return "mrb_int"
     end
@@ -4388,6 +4498,12 @@ class Compiler
  # can only carry a single static or dyn-cache index).
     if t == "regexp"
       return "mrb_regexp_pattern *"
+    end
+ # StringScanner is a builtin reference type whose impl lives
+ # in lib/sp_strscan.c — the C type is just a pointer to the
+ # opaque sp_StringScanner struct declared in sp_runtime.h.
+    if t == "stringscanner"
+      return "sp_StringScanner *"
     end
  # FFI raw C pointer (void *). See type_is_pointer for GC rules.
     if t == "ptr"
@@ -4443,6 +4559,9 @@ class Compiler
     if t == "int_str_hash"
       return "sp_IntStrHash *"
     end
+    if t == "int_int_hash"
+      return "sp_IntIntHash *"
+    end
     if t == "sym_int_hash"
       return "sp_SymIntHash *"
     end
@@ -4478,6 +4597,9 @@ class Compiler
  # id so `c.to_s` can index sp_class_names[].
       @needs_class_table = 1
       return "sp_Class"
+    end
+    if t == "encoding"
+      return "sp_Encoding"
     end
     if t == "proc"
       return "sp_Proc *"
@@ -4516,6 +4638,12 @@ class Compiler
       bt_n = base_type(t)
       if is_value_type_obj(bt_n) == 1
         return "{0}"
+      end
+ # Issue #915: nullable poly / untyped lowers to sp_RbVal (a
+ # struct); the function-return-type fallback was emitting bare
+ # NULL which doesn't unify with sp_RbVal.
+      if bt_n == "poly" || bt_n == "untyped"
+        return "sp_box_nil()"
       end
       return "NULL"
     end
@@ -4573,6 +4701,9 @@ class Compiler
  # returns "" for it. Locals declared `sp_Class lv_x = ((sp_Class){-1})`
  # are equivalent to nil for to_s purposes.
       return "((sp_Class){-1LL})"
+    end
+    if t == "encoding"
+      return "((sp_Encoding){NULL})"
     end
     if t == "stringio"
       return "NULL"
@@ -4671,6 +4802,22 @@ class Compiler
       end
       i = i + 1
     end
+ # Issue #772: C keywords would produce illegal C function names if
+ # used as method names (e.g. `def for` -> `sp_X_for`, which is a
+ # C `for` keyword in the function-name position). Suffix `_kw` to
+ # disambiguate. Covers all C11 keywords commonly hit by
+ # define_method experiments.
+    if result == "for" || result == "while" || result == "do" || result == "return" ||
+       result == "if" || result == "else" || result == "switch" || result == "case" ||
+       result == "default" || result == "break" || result == "continue" ||
+       result == "goto" || result == "auto" || result == "register" || result == "static" ||
+       result == "extern" || result == "typedef" || result == "struct" || result == "union" ||
+       result == "enum" || result == "const" || result == "volatile" || result == "restrict" ||
+       result == "inline" || result == "void" || result == "char" || result == "short" ||
+       result == "int" || result == "long" || result == "float" || result == "double" ||
+       result == "signed" || result == "unsigned" || result == "sizeof"
+      result = result + "_kw"
+    end
     result
   end
 
@@ -4752,9 +4899,195 @@ class Compiler
     name = resolve_gvar_alias(name)
  # $last → gv_last, $1 → gv_1
     if name.length > 0 && name[0] == "$"
-      return "gv_" + name[1, name.length - 1]
+      suf = name[1, name.length - 1]
+ # Issue #831: punctuation globals like `$!`, `$;`, `$,`, `$/`,
+ # `$:`, `$\\`, `$<`, `$>` would emit `gv_!`, etc., which aren't
+ # valid C identifiers. Map each punctuation char to a stable
+ # word so the same Ruby global maps to one C name throughout.
+      mapped = ""
+      i_sg = 0
+      while i_sg < suf.length
+        c_sg = suf[i_sg]
+        if (c_sg >= "a" && c_sg <= "z") || (c_sg >= "A" && c_sg <= "Z") || (c_sg >= "0" && c_sg <= "9") || c_sg == "_"
+          mapped = mapped + c_sg
+        else
+          mapped = mapped + "_" + gvar_punct_word(c_sg)
+        end
+        i_sg = i_sg + 1
+      end
+      return "gv_" + mapped
     end
     "gv_" + name
+  end
+
+ # Issue #910: build a str_str_hash inline from a HashNode or
+ # KeywordHashNode arg whose keys are all string literals and
+ # whose values are all string literals. Returns the emitted
+ # temp var name, or "" when the arg doesn't match the shape.
+  def sub_hash_arg_str_str(arg_nid)
+    return "" if arg_nid < 0
+    at = @nd_type[arg_nid]
+    if at == "KeywordHashNode"
+      elems_sh = parse_id_list(@nd_elements[arg_nid])
+    elsif at == "HashNode"
+      elems_sh = parse_id_list(@nd_elements[arg_nid])
+    else
+      return ""
+    end
+    return "" if elems_sh.length == 0
+ # All keys+values must be string literals (StringNode) for the
+ # str_str_hash representation. Mixed-type would need str_poly_hash.
+    i_sh = 0
+    while i_sh < elems_sh.length
+      e_sh = elems_sh[i_sh]
+      return "" if @nd_type[e_sh] != "AssocNode"
+      k_sh = @nd_key[e_sh]
+      v_sh = @nd_expression[e_sh]
+      return "" if k_sh < 0 || v_sh < 0
+      return "" if @nd_type[k_sh] != "StringNode"
+      return "" if @nd_type[v_sh] != "StringNode"
+      i_sh = i_sh + 1
+    end
+    @needs_str_str_hash = 1
+    tmp_sh = new_temp
+    emit("  sp_StrStrHash *" + tmp_sh + " = sp_StrStrHash_new();")
+    j_sh = 0
+    while j_sh < elems_sh.length
+      e_sh2 = elems_sh[j_sh]
+      k_sh2 = @nd_key[e_sh2]
+      v_sh2 = @nd_expression[e_sh2]
+      emit("  sp_StrStrHash_set(" + tmp_sh + ", " + compile_expr(k_sh2) + ", " + compile_expr(v_sh2) + ");")
+      j_sh = j_sh + 1
+    end
+    tmp_sh
+  end
+
+ # Map an obj_StringScanner method call to the runtime helper
+ # in libspinel_rt.a. Returns the C expression, or "" for an
+ # unknown method (the caller then falls through to the standard
+ # user-class dispatch).
+  def strscan_runtime_call(mname, rc, nid)
+    if mname == "scan"
+      return "sp_StringScanner_scan(" + rc + ", " + strscan_pat_arg(nid) + ")"
+    end
+    if mname == "check"
+      return "sp_StringScanner_check(" + rc + ", " + strscan_pat_arg(nid) + ")"
+    end
+    if mname == "scan_until"
+      return "sp_StringScanner_scan_until(" + rc + ", " + strscan_pat_arg(nid) + ")"
+    end
+    if mname == "matched"
+      return "sp_StringScanner_matched(" + rc + ")"
+    end
+    if mname == "matched?"
+      return "sp_StringScanner_matched_p(" + rc + ")"
+    end
+    if mname == "pos"
+      return "sp_StringScanner_pos(" + rc + ")"
+    end
+    if mname == "pos="
+      return "sp_StringScanner_pos_set(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+    end
+    if mname == "eos?"
+      return "sp_StringScanner_eos_p(" + rc + ")"
+    end
+    if mname == "getch"
+      return "sp_StringScanner_getch(" + rc + ")"
+    end
+    if mname == "peek"
+      return "sp_StringScanner_peek(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+    end
+    if mname == "unscan"
+      return "sp_StringScanner_unscan(" + rc + ")"
+    end
+    if mname == "rest"
+      return "sp_StringScanner_rest(" + rc + ")"
+    end
+    if mname == "rest_size"
+      return "sp_StringScanner_rest_size(" + rc + ")"
+    end
+    if mname == "rest?"
+      return "sp_StringScanner_rest_p(" + rc + ")"
+    end
+    if mname == "terminate"
+      return "sp_StringScanner_terminate(" + rc + ")"
+    end
+    if mname == "string"
+      return "sp_StringScanner_string(" + rc + ")"
+    end
+    if mname == "pre_match"
+      return "sp_StringScanner_pre_match(" + rc + ")"
+    end
+    if mname == "post_match"
+      return "sp_StringScanner_post_match(" + rc + ")"
+    end
+    if mname == "reset"
+      return "sp_StringScanner_reset(" + rc + ")"
+    end
+    ""
+  end
+
+ # Resolve a regex arg to its compiled mrb_regexp_pattern * expr.
+ # scan / check / scan_until all take a single regex; route through
+ # the standard regex_pat_c_expr helper. Falls back to NULL for
+ # malformed calls so the runtime helpers see "no match".
+  def strscan_pat_arg(nid)
+    args_id_ss = @nd_arguments[nid]
+    return "NULL" if args_id_ss < 0
+    a_ss = get_args(args_id_ss)
+    return "NULL" if a_ss.length == 0
+    pat = regex_pat_c_expr(a_ss[0])
+    pat == "" ? compile_expr(a_ss[0]) : pat
+  end
+
+ # Check whether the format string uses only plain `%s`
+ # placeholders (and literals / `%%`). Used to short-circuit
+ # `"fmt" % str_array` to the simpler strarr helper instead of
+ # boxing through poly_array.
+  def str_format_only_simple_s_p(s)
+    i = 0
+    while i < s.length
+      if s[i] == "%"
+        i = i + 1
+        if i >= s.length
+          return 0
+        end
+        if s[i] == "%"
+          i = i + 1
+          next
+        end
+        if s[i] == "s"
+          i = i + 1
+          next
+        end
+        return 0
+      end
+      i = i + 1
+    end
+    1
+  end
+
+  def gvar_punct_word(c)
+    return "bang" if c == "!"
+    return "semi" if c == ";"
+    return "comma" if c == ","
+    return "slash" if c == "/"
+    return "colon" if c == ":"
+    return "bslash" if c == "\\"
+    return "lt" if c == "<"
+    return "gt" if c == ">"
+    return "eq" if c == "="
+    return "qmark" if c == "?"
+    return "amp" if c == "&"
+    return "quote" if c == "'"
+    return "btick" if c == "`"
+    return "tilde" if c == "~"
+    return "plus" if c == "+"
+    return "minus" if c == "-"
+    return "at" if c == "@"
+    return "star" if c == "*"
+    return "dollar" if c == "$"
+    "x"
   end
 
   def resolve_gvar_alias(name)
@@ -4834,7 +5167,7 @@ class Compiler
     if is_nullable_type(t) == 1
       t = base_type(t)
     end
-    if t == "str_int_hash" || t == "str_str_hash" || t == "int_str_hash"
+    if t == "str_int_hash" || t == "str_str_hash" || t == "int_str_hash" || t == "int_int_hash"
       return 1
     end
     if t == "sym_int_hash" || t == "sym_str_hash"
@@ -4889,6 +5222,43 @@ class Compiler
     end
     ""
   end
+
+ # Hash#clear: emit a GCC compound expression that wipes the
+ # open-addressing probe table back to its post-_new shape, sets
+ # len = 0, and yields the receiver (Hash#clear returns self).
+ # The per-variant empty-slot marker differs: sym-keyed and
+ # int-keyed variants store the key inline (-1 sentinel for sym,
+ # used[]/occ[] bitmap for int), str-keyed variants use NULL.
+  def hash_clear_c_expr(t, rc)
+    if t == "sym_int_hash" || t == "sym_str_hash" || t == "sym_poly_hash"
+      return "({ for (mrb_int _i = 0; _i < (" + rc + ")->cap; _i++) (" + rc + ")->keys[_i] = -1; (" + rc + ")->len = 0; (" + rc + "); })"
+    end
+    if t == "str_int_hash" || t == "str_str_hash" || t == "str_poly_hash"
+      return "({ for (mrb_int _i = 0; _i < (" + rc + ")->cap; _i++) (" + rc + ")->keys[_i] = NULL; (" + rc + ")->len = 0; (" + rc + "); })"
+    end
+    if t == "int_str_hash" || t == "int_int_hash" || t == "int_poly_hash"
+      return "({ memset((" + rc + ")->used, 0, (" + rc + ")->cap); (" + rc + ")->len = 0; (" + rc + "); })"
+    end
+    if t == "poly_poly_hash"
+      return "({ memset((" + rc + ")->occ, 0, (" + rc + ")->cap); (" + rc + ")->len = 0; (" + rc + "); })"
+    end
+    ""
+  end
+
+ # Per-variant info for the shared Hash#fetch(k) { block } arm.
+ # Returns a 4-tuple [value_type, value_c_type, has_key_fn,
+ # get_fn] or nil for unsupported variants. The block-form
+ # arm uses these to emit the runtime check + dispatch.
+  def hash_fetch_block_info(t)
+    if t == "sym_int_hash";  return ["int", "mrb_int", "sp_SymIntHash_has_key", "sp_SymIntHash_get"]; end
+    if t == "sym_str_hash";  return ["string", "const char *", "sp_SymStrHash_has_key", "sp_SymStrHash_get"]; end
+    if t == "sym_poly_hash"; return ["poly", "sp_RbVal", "sp_SymPolyHash_has_key", "sp_SymPolyHash_get"]; end
+    if t == "str_int_hash";  return ["int", "mrb_int", "sp_StrIntHash_has_key", "sp_StrIntHash_get"]; end
+    if t == "str_str_hash";  return ["string", "const char *", "sp_StrStrHash_has_key", "sp_StrStrHash_get"]; end
+    if t == "str_poly_hash"; return ["poly", "sp_RbVal", "sp_StrPolyHash_has_key", "sp_StrPolyHash_get"]; end
+    nil
+  end
+
 
  # CRuby returns nil for static mismatches (e.g. `{a: 1}.dig("a")`)
  # since no key compares equal — Hash#dig short-circuits to nil here.
@@ -5007,11 +5377,11 @@ class Compiler
     end
     cci = find_class_idx(cn)
     if cci >= 0
-      cmnames = @cls_cmeth_names[cci].split(";")
+      cmnames = @cls_cmeth_names[cci].split(";", -1)
       ki = 0
       while ki < cmnames.length
         if cmnames[ki] == mname
-          cmrets = @cls_cmeth_returns[cci].split(";")
+          cmrets = @cls_cmeth_returns[cci].split(";", -1)
           if ki < cmrets.length
             return cmrets[ki]
           end
@@ -5368,7 +5738,7 @@ class Compiler
 
     push_scope
     if bid >= 0
-      declare_method_locals(bid, "".split(","))
+      declare_method_locals(bid, "".split(",", -1))
  # Seed self-bound param (analyze declared it as obj_<C>).
       spn = ""
       if n < @ieval_self_param_names.length
@@ -5683,7 +6053,7 @@ class Compiler
     arg_specs_str = @ffi_func_arg_specs[fi]
     arg_specs = []
     if arg_specs_str != ""
-      arg_specs = arg_specs_str.split(";")
+      arg_specs = arg_specs_str.split(";", -1)
     end
     args_id = @nd_arguments[nid]
     call_args = []
@@ -5818,7 +6188,7 @@ class Compiler
     while mi < @ffi_modules.length
       libs_str = @ffi_module_libs[mi]
       if libs_str != ""
-        libs = libs_str.split(";")
+        libs = libs_str.split(";", -1)
         li = 0
         while li < libs.length
           emit_raw("/* SPINEL_LINK: -l" + libs[li] + " */")
@@ -5827,7 +6197,7 @@ class Compiler
       end
       cflags_str = @ffi_module_cflags[mi]
       if cflags_str != ""
-        cflags = cflags_str.split(";")
+        cflags = cflags_str.split(";", -1)
         ci = 0
         while ci < cflags.length
           emit_raw("/* SPINEL_CFLAGS: " + cflags[ci] + " */")
@@ -5846,7 +6216,7 @@ class Compiler
       if arg_spec_joined == ""
         arg_list = "void"
       else
-        specs = arg_spec_joined.split(";")
+        specs = arg_spec_joined.split(";", -1)
         k = 0
         while k < specs.length
           if k > 0
@@ -6657,8 +7027,8 @@ class Compiler
     while mi < @meth_names.length
       bid_h = @meth_body_ids[mi]
       if bid_h >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed = 0
         pk = 0
         while pk < pnames.length
@@ -6680,9 +7050,9 @@ class Compiler
  # Class instance methods.
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      bodies = @cls_meth_bodies[ci].split(";")
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < all_params.length
@@ -6691,10 +7061,10 @@ class Compiler
           bid_c = bodies[mj].to_i
         end
         if bid_c >= 0
-          cm_pnames = all_params[mj].split(",")
-          cm_ptypes = "".split(",")
+          cm_pnames = all_params[mj].split(",", -1)
+          cm_ptypes = "".split(",", -1)
           if mj < all_ptypes.length
-            cm_ptypes = all_ptypes[mj].split(",")
+            cm_ptypes = all_ptypes[mj].split(",", -1)
           end
           m_changed = 0
           pk2 = 0
@@ -6732,8 +7102,8 @@ class Compiler
       return ""
     end
  # Track all observed value types via a single string accumulator.
-    val_types = "".split(",")
-    key_types = "".split(",")
+    val_types = "".split(",", -1)
+    key_types = "".split(",", -1)
     collect_param_hash_writes(nid, pname, val_types, key_types)
  # also harvest signals from `pname.each do |k, v|`
  # block bodies. Programs that read-only-iterate the hash never
@@ -6904,7 +7274,7 @@ class Compiler
     if t == "sym_int_hash" || t == "sym_str_hash" || t == "sym_poly_hash"
       return "sym"
     end
-    if t == "int_str_hash"
+    if t == "int_str_hash" || t == "int_int_hash"
       return "int"
     end
     if t == "poly_poly_hash"
@@ -6914,7 +7284,7 @@ class Compiler
   end
 
   def hash_value_part(t)
-    if t == "str_int_hash" || t == "sym_int_hash"
+    if t == "str_int_hash" || t == "sym_int_hash" || t == "int_int_hash"
       return "int"
     end
     if t == "str_str_hash" || t == "sym_str_hash" || t == "int_str_hash"
@@ -7075,18 +7445,18 @@ class Compiler
  # Does class `ci` define `mname` directly — instance method, attr
  # reader, or attr writer — without walking the parent chain?
   def class_has_method_local(ci, mname)
-    readers = @cls_attr_readers[ci].split(";")
+    readers = @cls_attr_readers[ci].split(";", -1)
     if not_in(mname, readers) == 0
       return 1
     end
     if mname.length > 1 && mname[mname.length - 1] == "="
       bname = mname[0, mname.length - 1]
-      writers = @cls_attr_writers[ci].split(";")
+      writers = @cls_attr_writers[ci].split(";", -1)
       if not_in(bname, writers) == 0
         return 1
       end
     end
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     if not_in(mname, mnames) == 0
       return 1
     end
@@ -7131,7 +7501,7 @@ class Compiler
  # Cheap guard: the user must define a class with this method.
     ci2 = 0
     while ci2 < @cls_names.length
-      mns = @cls_meth_names[ci2].split(";")
+      mns = @cls_meth_names[ci2].split(";", -1)
       jj = 0
       while jj < mns.length
         if mns[jj] == mname
@@ -7271,7 +7641,7 @@ class Compiler
       if recv < 0
         fmi = find_method_idx(mname)
         if fmi >= 0
-          fptypes = @meth_param_types[fmi].split(",")
+          fptypes = @meth_param_types[fmi].split(",", -1)
           args_id = @nd_arguments[nid]
           if args_id >= 0
             aargs = get_args(args_id)
@@ -7381,7 +7751,7 @@ class Compiler
  # begin body followed by each rescue clause's body in chain order),
  # filtering out missing bodies (negative IDs). Used by the
  # `infer_type` BeginNode arm for last-stmt type unification.
- # `[]` (not `"".split(",")`) is the int_array init idiom in this
+ # `[]` (not `"".split(",", -1)`) is the int_array init idiom in this
  # codebase — see the @nd_* parallel arrays in `initialize`.
   def begin_node_arm_bodies(nid)
     out = []
@@ -7416,6 +7786,8 @@ class Compiler
           if is_nullable_type(t) == 1
             result = t
           end
+        elsif (result == "encoding" && t == "int") || (result == "int" && t == "encoding")
+          return "poly"
         elsif result == "int"
  # int is default/unresolved — real type takes priority
           result = t
@@ -7615,6 +7987,14 @@ class Compiler
   def generate_code
     stmts = get_body_stmts(@root_id)
 
+ # Issue #727: warn when the program defines `method_missing`.
+ # Spinel can't statically resolve method_missing dispatch, so any
+ # call that would otherwise hit the user's hook gets emitted as 0
+ # (with the standard "cannot resolve call to ..." line). The hook
+ # definition itself looks legitimate at parse time and the user
+ # has no signal that it won't fire -- this pre-pass surfaces that.
+    scan_for_method_missing(@root_id)
+
     emit_raw("/* Generated by Spinel AOT compiler */")
     emit_raw("#include \"sp_runtime.h\"")
  # Pre-scan for Method usage so emit_class_structs /
@@ -7737,7 +8117,7 @@ class Compiler
       while k < @tuple_types.length
         t = @tuple_types[k]
         name = tuple_c_name(t)
-        parts = tuple_elem_types_str(t).split(",")
+        parts = tuple_elem_types_str(t).split(",", -1)
         fields = ""
         fi = 0
         while fi < parts.length
@@ -7850,11 +8230,17 @@ class Compiler
     emit_raw("static mrb_int sp_SymIntHash_get(sp_SymIntHash*h,sp_sym k){if(!h)return 0;mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k)return h->vals[idx];idx=(idx+1)&h->mask;}return h->default_v;}")
     emit_raw("static void sp_SymIntHash_set(sp_SymIntHash*h,sp_sym k,mrb_int v){if(h->len*2>=h->cap)sp_SymIntHash_grow(h);mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k){h->vals[idx]=v;return;}idx=(idx+1)&h->mask;}h->keys[idx]=k;h->vals[idx]=v;h->order[h->len]=k;h->len++;}")
     emit_raw("static mrb_bool sp_SymIntHash_has_key(sp_SymIntHash*h,sp_sym k){mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k)return TRUE;idx=(idx+1)&h->mask;}return FALSE;}")
+ # Hash#value? -- scan stored values for v. O(n) per CRuby. Issue #738.
+    emit_raw("static mrb_bool sp_SymIntHash_has_value(sp_SymIntHash*h,mrb_int v){for(mrb_int i=0;i<h->len;i++)if(sp_SymIntHash_get(h,h->order[i])==v)return TRUE;return FALSE;}")
     emit_raw("static mrb_int sp_SymIntHash_length(sp_SymIntHash*h){return h->len;}")
     emit_raw("static void sp_SymIntHash_delete(sp_SymIntHash*h,sp_sym k){mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k){h->keys[idx]=-1;h->vals[idx]=0;h->len--;mrb_int j=(idx+1)&h->mask;while(h->keys[j]>=0){mrb_int nj=(mrb_int)(((mrb_int)h->keys[j])&h->mask);if((j>idx&&(nj<=idx||nj>j))||(j<idx&&nj<=idx&&nj>j)){h->keys[idx]=h->keys[j];h->vals[idx]=h->vals[j];h->keys[j]=-1;h->vals[j]=0;idx=j;}j=(j+1)&h->mask;}{mrb_int oi=0;while(oi<=h->len){if(h->order[oi]==k){while(oi<h->len){h->order[oi]=h->order[oi+1];oi++;}break;}oi++;}}return;}idx=(idx+1)&h->mask;}}")
     emit_raw("static sp_IntArray*sp_SymIntHash_keys(sp_SymIntHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,(mrb_int)h->order[i]);return a;}")
     emit_raw("static sp_IntArray*sp_SymIntHash_values(sp_SymIntHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,sp_SymIntHash_get(h,h->order[i]));return a;}")
     emit_raw("static sp_SymIntHash*sp_SymIntHash_dup(sp_SymIntHash*h){sp_SymIntHash*r=sp_SymIntHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_SymIntHash_set(r,h->order[i],sp_SymIntHash_get(h,h->order[i]));return r;}")
+ # Issue #738: Hash#to_a as poly_array of poly_array pairs.
+ # Each inner pair is [sym, int] boxed via sp_box_*.
+    emit_raw("static sp_PolyArray*sp_SymIntHash_to_a(sp_SymIntHash*h){sp_PolyArray*r=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++){sp_PolyArray*p=sp_PolyArray_new();sp_PolyArray_push(p,sp_box_sym(h->order[i]));sp_PolyArray_push(p,sp_box_int(sp_SymIntHash_get(h,h->order[i])));sp_PolyArray_push(r,sp_box_poly_array(p));}return r;}")
+    emit_raw("static sp_PolyPolyHash*sp_SymIntHash_invert(sp_SymIntHash*h){sp_PolyPolyHash*r=sp_PolyPolyHash_new();for(mrb_int i=0;i<h->len;i++)sp_PolyPolyHash_set(r,sp_box_int(sp_SymIntHash_get(h,h->order[i])),sp_box_sym(h->order[i]));return r;}")
     emit_raw("static sp_SymIntHash*sp_SymIntHash_merge(sp_SymIntHash*a,sp_SymIntHash*b){sp_SymIntHash*r=sp_SymIntHash_new();r->default_v=a->default_v;for(mrb_int i=0;i<a->len;i++)sp_SymIntHash_set(r,a->order[i],sp_SymIntHash_get(a,a->order[i]));if(b){for(mrb_int i=0;i<b->len;i++)sp_SymIntHash_set(r,b->order[i],sp_SymIntHash_get(b,b->order[i]));}return r;}")
     emit_raw("static mrb_bool sp_SymIntHash_eq(sp_SymIntHash*a,sp_SymIntHash*b){if(!a||!b)return a==b;if(a->len!=b->len)return FALSE;for(mrb_int i=0;i<a->len;i++){sp_sym k=a->order[i];if(!sp_SymIntHash_has_key(b,k))return FALSE;if(sp_SymIntHash_get(a,k)!=sp_SymIntHash_get(b,k))return FALSE;}return TRUE;}")
  # Hash inspect — Ruby's modern shorthand `{k: v, ...}`. All keys
@@ -7888,16 +8274,22 @@ class Compiler
     emit_raw("static sp_SymStrHash*sp_SymStrHash_new(void){sp_SymStrHash*h=(sp_SymStrHash*)sp_gc_alloc(sizeof(sp_SymStrHash),sp_SymStrHash_fin,NULL);h->cap=16;h->mask=15;h->keys=(sp_sym*)malloc(sizeof(sp_sym)*h->cap);for(mrb_int i=0;i<h->cap;i++)h->keys[i]=-1;h->vals=(const char**)calloc(h->cap,sizeof(const char*));h->order=(sp_sym*)malloc(sizeof(sp_sym)*h->cap);h->len=0;h->default_v=NULL;return h;}")
     emit_raw("static sp_SymStrHash*sp_SymStrHash_new_with_default(const char*d){sp_SymStrHash*h=sp_SymStrHash_new();h->default_v=d;return h;}")
     emit_raw("static void sp_SymStrHash_grow(sp_SymStrHash*h){mrb_int oc=h->cap;sp_sym*ok=h->keys;const char**ov=h->vals;h->cap*=2;h->mask=h->cap-1;h->keys=(sp_sym*)malloc(sizeof(sp_sym)*h->cap);for(mrb_int i=0;i<h->cap;i++)h->keys[i]=-1;h->vals=(const char**)calloc(h->cap,sizeof(const char*));h->order=(sp_sym*)realloc(h->order,sizeof(sp_sym)*h->cap);h->len=0;for(mrb_int i=0;i<oc;i++){if(ok[i]>=0){mrb_int idx=(mrb_int)(((mrb_int)ok[i])&h->mask);while(h->keys[idx]>=0)idx=(idx+1)&h->mask;h->keys[idx]=ok[i];h->vals[idx]=ov[i];h->len++;}}free(ok);free(ov);}")
-    emit_raw("static const char*sp_SymStrHash_get(sp_SymStrHash*h,sp_sym k){if(!h)return sp_str_empty;mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k)return h->vals[idx];idx=(idx+1)&h->mask;}return h->default_v?h->default_v:sp_str_empty;}")
+    emit_raw("static const char*sp_SymStrHash_get(sp_SymStrHash*h,sp_sym k){if(!h)return NULL;mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k)return h->vals[idx];idx=(idx+1)&h->mask;}return h->default_v;}")
     emit_raw("static void sp_SymStrHash_set(sp_SymStrHash*h,sp_sym k,const char*v){if(h->len*2>=h->cap)sp_SymStrHash_grow(h);mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k){h->vals[idx]=v;return;}idx=(idx+1)&h->mask;}h->keys[idx]=k;h->vals[idx]=v;h->order[h->len]=k;h->len++;}")
     emit_raw("static mrb_bool sp_SymStrHash_has_key(sp_SymStrHash*h,sp_sym k){mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k)return TRUE;idx=(idx+1)&h->mask;}return FALSE;}")
     emit_raw("static mrb_int sp_SymStrHash_length(sp_SymStrHash*h){return h->len;}")
     emit_raw("static void sp_SymStrHash_delete(sp_SymStrHash*h,sp_sym k){mrb_int idx=(mrb_int)(((mrb_int)k)&h->mask);while(h->keys[idx]>=0){if(h->keys[idx]==k){h->keys[idx]=-1;h->vals[idx]=NULL;h->len--;mrb_int j=(idx+1)&h->mask;while(h->keys[j]>=0){mrb_int nj=(mrb_int)(((mrb_int)h->keys[j])&h->mask);if((j>idx&&(nj<=idx||nj>j))||(j<idx&&nj<=idx&&nj>j)){h->keys[idx]=h->keys[j];h->vals[idx]=h->vals[j];h->keys[j]=-1;h->vals[j]=NULL;idx=j;}j=(j+1)&h->mask;}{mrb_int oi=0;while(oi<=h->len){if(h->order[oi]==k){while(oi<h->len){h->order[oi]=h->order[oi+1];oi++;}break;}oi++;}}return;}idx=(idx+1)&h->mask;}}")
     emit_raw("static sp_IntArray*sp_SymStrHash_keys(sp_SymStrHash*h){sp_IntArray*a=sp_IntArray_new();for(mrb_int i=0;i<h->len;i++)sp_IntArray_push(a,(mrb_int)h->order[i]);return a;}")
     emit_raw("static sp_StrArray*sp_SymStrHash_values(sp_SymStrHash*h){sp_StrArray*a=sp_StrArray_new();for(mrb_int i=0;i<h->len;i++)sp_StrArray_push(a,sp_SymStrHash_get(h,h->order[i]));return a;}")
+    emit_raw("static mrb_bool sp_SymStrHash_has_value(sp_SymStrHash*h,const char*v){if(!h||!v)return FALSE;for(mrb_int i=0;i<h->len;i++){const char*x=sp_SymStrHash_get(h,h->order[i]);if(x&&strcmp(x,v)==0)return TRUE;}return FALSE;}")
     emit_raw("static sp_SymStrHash*sp_SymStrHash_dup(sp_SymStrHash*h){sp_SymStrHash*r=sp_SymStrHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_SymStrHash_set(r,h->order[i],sp_SymStrHash_get(h,h->order[i]));return r;}")
+    emit_raw("static sp_PolyArray*sp_SymStrHash_to_a(sp_SymStrHash*h){sp_PolyArray*r=sp_PolyArray_new();for(mrb_int i=0;i<h->len;i++){sp_PolyArray*p=sp_PolyArray_new();sp_PolyArray_push(p,sp_box_sym(h->order[i]));sp_PolyArray_push(p,sp_box_str(sp_SymStrHash_get(h,h->order[i])));sp_PolyArray_push(r,sp_box_poly_array(p));}return r;}")
+    emit_raw("static sp_PolyPolyHash*sp_SymStrHash_invert(sp_SymStrHash*h){sp_PolyPolyHash*r=sp_PolyPolyHash_new();for(mrb_int i=0;i<h->len;i++)sp_PolyPolyHash_set(r,sp_box_str(sp_SymStrHash_get(h,h->order[i])),sp_box_sym(h->order[i]));return r;}")
     emit_raw("static sp_SymStrHash*sp_SymStrHash_merge(sp_SymStrHash*a,sp_SymStrHash*b){sp_SymStrHash*r=sp_SymStrHash_new();r->default_v=a->default_v;for(mrb_int i=0;i<a->len;i++)sp_SymStrHash_set(r,a->order[i],sp_SymStrHash_get(a,a->order[i]));for(mrb_int i=0;i<b->len;i++)sp_SymStrHash_set(r,b->order[i],sp_SymStrHash_get(b,b->order[i]));return r;}")
     emit_raw("static mrb_bool sp_SymStrHash_eq(sp_SymStrHash*a,sp_SymStrHash*b){if(!a||!b)return a==b;if(a->len!=b->len)return FALSE;for(mrb_int i=0;i<a->len;i++){sp_sym k=a->order[i];if(!sp_SymStrHash_has_key(b,k))return FALSE;if(!sp_str_eq(sp_SymStrHash_get(a,k),sp_SymStrHash_get(b,k)))return FALSE;}return TRUE;}")
+ # Issue #851: inspect for sym_str_hash, rendered with Ruby's
+ # `{:k=>"v", ...}` shorthand (sym keys, str values).
+    emit_raw("static const char*sp_SymStrHash_inspect(sp_SymStrHash*h){sp_String*s=sp_String_new(\"{\");if(h){for(mrb_int i=0;i<h->len;i++){if(i>0)sp_String_append(s,\", \");sp_String_append(s,sp_sym_to_s(h->order[i]));sp_String_append(s,\": \");sp_String_append(s,sp_str_inspect(sp_SymStrHash_get(h,h->order[i])));}}sp_String_append(s,\"}\");return s->data;}")
  # Cross-variant merge: when a `sym_str_hash` and a `sym_poly_hash`
  # are merged in either direction, both result paths return a
  # fresh sym_poly_hash with the str entries boxed via sp_box_str.
@@ -8120,8 +8512,9 @@ class Compiler
  # maps to Array / Hash / Range / Time / Proc. SP_TAG_CLASS
  # returns itself; SP_TAG_OBJ with non-negative cls_id is a
  # user-class instance.
+      enc_cls_id = builtin_class_id_for_name("Encoding")
       emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v) __attribute__((unused));")
-      emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v){switch(v.tag){case SP_TAG_NIL:return (sp_Class){5};case SP_TAG_BOOL:return (sp_Class){v.v.b?6:7};case SP_TAG_INT:return (sp_Class){9};case SP_TAG_FLT:return (sp_Class){10};case SP_TAG_STR:return (sp_Class){11};case SP_TAG_SYM:return (sp_Class){12};case SP_TAG_CLASS:return (sp_Class){(mrb_int)v.cls_id};case SP_TAG_OBJ:if(v.cls_id>=0)return (sp_Class){(mrb_int)v.cls_id};switch(v.cls_id){case SP_BUILTIN_INT_ARRAY:case SP_BUILTIN_STR_ARRAY:case SP_BUILTIN_FLT_ARRAY:case SP_BUILTIN_SYM_ARRAY:case SP_BUILTIN_PTR_ARRAY:case SP_BUILTIN_POLY_ARRAY:return (sp_Class){13};case SP_BUILTIN_STR_INT_HASH:case SP_BUILTIN_STR_STR_HASH:case SP_BUILTIN_INT_STR_HASH:case SP_BUILTIN_SYM_INT_HASH:case SP_BUILTIN_SYM_STR_HASH:case SP_BUILTIN_STR_POLY_HASH:case SP_BUILTIN_SYM_POLY_HASH:case SP_BUILTIN_POLY_POLY_HASH:return (sp_Class){14};case SP_BUILTIN_RANGE:return (sp_Class){15};case SP_BUILTIN_TIME:return (sp_Class){16};case SP_BUILTIN_PROC:return (sp_Class){20};default:return (sp_Class){-1};}}return (sp_Class){-1};}")
+      emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v){switch(v.tag){case SP_TAG_NIL:return (sp_Class){5};case SP_TAG_BOOL:return (sp_Class){v.v.b?6:7};case SP_TAG_INT:return (sp_Class){9};case SP_TAG_FLT:return (sp_Class){10};case SP_TAG_STR:return (sp_Class){11};case SP_TAG_SYM:return (sp_Class){12};case SP_TAG_CLASS:return (sp_Class){(mrb_int)v.cls_id};case SP_TAG_ENCODING:return (sp_Class){" + enc_cls_id.to_s + "};case SP_TAG_OBJ:if(v.cls_id>=0)return (sp_Class){(mrb_int)v.cls_id};switch(v.cls_id){case SP_BUILTIN_INT_ARRAY:case SP_BUILTIN_STR_ARRAY:case SP_BUILTIN_FLT_ARRAY:case SP_BUILTIN_SYM_ARRAY:case SP_BUILTIN_PTR_ARRAY:case SP_BUILTIN_POLY_ARRAY:return (sp_Class){13};case SP_BUILTIN_STR_INT_HASH:case SP_BUILTIN_STR_STR_HASH:case SP_BUILTIN_INT_STR_HASH:case SP_BUILTIN_SYM_INT_HASH:case SP_BUILTIN_SYM_STR_HASH:case SP_BUILTIN_STR_POLY_HASH:case SP_BUILTIN_SYM_POLY_HASH:case SP_BUILTIN_POLY_POLY_HASH:return (sp_Class){14};case SP_BUILTIN_RANGE:return (sp_Class){15};case SP_BUILTIN_TIME:return (sp_Class){16};case SP_BUILTIN_PROC:return (sp_Class){20};default:return (sp_Class){-1};}}return (sp_Class){-1};}")
     end
     emit_raw("")
   end
@@ -8301,7 +8694,7 @@ class Compiler
       cur = uid
       acc.push(cur)
       incs_str = @builtin_class_includes[cur]
-      incs = incs_str.split(";")
+      incs = incs_str.split(";", -1)
       j = incs.length - 1
       while j >= 0
         if incs[j] != ""
@@ -8346,7 +8739,7 @@ class Compiler
     if cur_internal < @cls_includes.length
       incs_str = @cls_includes[cur_internal]
     end
-    incs = incs_str.split(";")
+    incs = incs_str.split(";", -1)
     j = incs.length - 1
     while j >= 0
       if incs[j] != ""
@@ -8366,9 +8759,19 @@ class Compiler
     end
     pname = @cls_parents[cur_internal]
     if pname != ""
+      pp_uid = -1
       pp_internal = find_class_idx(pname)
       if pp_internal >= 0
-        psub = compute_ancestors_for_unified(cls_id_for_user_internal(pp_internal))
+        pp_uid = cls_id_for_user_internal(pp_internal)
+      else
+ # Parent is a built-in class (StandardError / Object /
+ # Numeric / etc.). find_class_idx only walks the user
+ # table — fall through to the unified name table so the
+ # MRO picks up the built-in ancestor chain.
+        pp_uid = unified_cls_id_for_name(pname)
+      end
+      if pp_uid >= 0
+        psub = compute_ancestors_for_unified(pp_uid)
         pj = 0
         while pj < psub.length
           if acc_includes(acc, psub[pj]) == 0
@@ -8488,6 +8891,9 @@ class Compiler
     if t == "symbol"
       return "sp_sym_to_s(" + s + ")"
     end
+    if t == "encoding"
+      return "sp_encoding_name(" + s + ")"
+    end
  # Issue #651: a poly-typed value (commonly an ivar inferred as
  # poly because a `kwarg: nil`-defaulted param writes it) flowing
  # into a setter that expects `const char *` (sp_StrStrHash_set,
@@ -8555,10 +8961,18 @@ class Compiler
       pat = @regexp_patterns[i]
       flags = @regexp_flags[i]
       emit_raw("static mrb_regexp_pattern *sp_re_pat_" + i.to_s + ";")
+ # Issue #846: per-slot startup error message. If the pattern
+ # came from `Regexp.new("literal")` and failed to compile,
+ # the message is stashed here for a deferred raise from the
+ # first use site (where the user's begin/rescue is active).
+      emit_raw("static const char *sp_re_pat_err_" + i.to_s + " = NULL;")
       i = i + 1
     end
     emit_raw("")
     emit_raw("static void sp_re_init(void) {")
+ # Use the quiet startup handler so a bad pattern doesn't
+ # terminate sp_re_init (which runs before main()'s setjmp).
+    emit_raw("  sp_re_set_error_handler(sp_re_startup_error_handler);")
     i = 0
     while i < @regexp_patterns.length
       pat = @regexp_patterns[i]
@@ -8590,9 +9004,19 @@ class Compiler
  # `pat.length < pat.bytesize`. Truncating to char count cuts
  # off a multi-byte char mid-sequence and the engine reports
  # "unterminated character class". .
-      emit_raw("  sp_re_pat_" + i.to_s + " = re_compile(\"" + cpat + "\", " + pat.bytesize.to_s + ", " + flags + ");")
+      emit_raw("  sp_re_startup_err = NULL;")
+      emit_raw("  if (setjmp(sp_re_startup_jmp) == 0) {")
+      emit_raw("    sp_re_pat_" + i.to_s + " = re_compile(\"" + cpat + "\", " + pat.bytesize.to_s + ", " + flags + ");")
+      emit_raw("  } else {")
+      emit_raw("    sp_re_pat_" + i.to_s + " = NULL;")
+      emit_raw("    sp_re_pat_err_" + i.to_s + " = sp_re_startup_err;")
+      emit_raw("  }")
       i = i + 1
     end
+ # Restore the default handler now that pre-compile is done; from
+ # this point on a compile failure (per-call-site sp_re_dyn_<N>)
+ # raises a catchable RegexpError via sp_raise_cls.
+    emit_raw("  sp_re_set_error_handler(sp_re_default_error_handler);")
     emit_raw("}")
     emit_raw("")
   end
@@ -8924,7 +9348,7 @@ class Compiler
   end
 
   def emit_value_type_field_deps(orig_ci, ai)
-    types = @cls_ivar_types[ai].split(";")
+    types = @cls_ivar_types[ai].split(";", -1)
     j = 0
     while j < types.length
       emit_value_type_field_dep(orig_ci, types[j])
@@ -8979,8 +9403,8 @@ class Compiler
       end
     end
  # Own fields (skip those inherited from parent)
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     while j < names.length
       iname = names[j]
@@ -9017,8 +9441,8 @@ class Compiler
     if @cls_is_value_type[ci] == 0 && is_layout_root(ci) == 1
       emit_raw("  mrb_int cls_id;")
     end
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     while j < names.length
       iname = names[j]
@@ -9042,7 +9466,7 @@ class Compiler
   end
 
   def ivar_in_chain(ci, iname)
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -9134,8 +9558,8 @@ class Compiler
     if ci < 0
       return
     end
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     while j < names.length
       if j < types.length
@@ -9196,8 +9620,8 @@ class Compiler
   end
 
   def class_has_ptr_ivars(ci)
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     while j < names.length
       if j < types.length
@@ -9233,8 +9657,8 @@ class Compiler
         emit_clear_ptr_ivars_chain(pi)
       end
     end
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     while j < names.length
       if j < types.length
@@ -9300,8 +9724,8 @@ class Compiler
         cname = @cls_names[i]
         emit_raw("static void sp_" + cname + "_gc_scan(void *p) {")
         emit_raw("  sp_" + cname + " *self = (sp_" + cname + " *)p;")
-        names = @cls_ivar_names[i].split(";")
-        types = @cls_ivar_types[i].split(";")
+        names = @cls_ivar_names[i].split(";", -1)
+        types = @cls_ivar_types[i].split(";", -1)
         j = 0
         while j < names.length
           if j < types.length
@@ -9331,8 +9755,8 @@ class Compiler
         if @cls_parents[i] != ""
           pi = find_class_idx(@cls_parents[i])
           if pi >= 0
-            pnames = @cls_ivar_names[pi].split(";")
-            ptypes = @cls_ivar_types[pi].split(";")
+            pnames = @cls_ivar_names[pi].split(";", -1)
+            ptypes = @cls_ivar_types[pi].split(";", -1)
             pj = 0
             while pj < pnames.length
               if pj < ptypes.length
@@ -9400,9 +9824,9 @@ class Compiler
         emit_raw("static inline void sp_" + cname + "_initialize(sp_" + cname + " *self" + init_params_decl(i) + ");")
       end
  # Instance methods
-      mnames = @cls_meth_names[i].split(";")
-      returns = @cls_meth_returns[i].split(";")
-      bids = @cls_meth_bodies[i].split(";")
+      mnames = @cls_meth_names[i].split(";", -1)
+      returns = @cls_meth_returns[i].split(";", -1)
+      bids = @cls_meth_bodies[i].split(";", -1)
       j = 0
       while j < mnames.length
         if mnames[j] != "initialize"
@@ -9424,8 +9848,8 @@ class Compiler
         j = j + 1
       end
  # Class methods
-      cmnames = @cls_cmeth_names[i].split(";")
-      cm_returns = @cls_cmeth_returns[i].split(";")
+      cmnames = @cls_cmeth_names[i].split(";", -1)
+      cm_returns = @cls_cmeth_returns[i].split(";", -1)
       j = 0
       while j < cmnames.length
  # Skip forward decls for dead cls methods so the linker
@@ -9487,7 +9911,7 @@ class Compiler
  # For class instance methods (always have self first)
     bid = -1
     if ci >= 0 && ci < @cls_meth_bodies.length
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       if midx >= 0 && midx < bodies.length
         bid = bodies[midx].to_i
       end
@@ -9536,7 +9960,7 @@ class Compiler
       flat_idx_cm = 0
       ci_cm = 0
       while ci_cm < @cls_names.length
-        cm_bodies_b = ci_cm < @cls_cmeth_bodies.length ? @cls_cmeth_bodies[ci_cm].split(";") : "".split(",")
+        cm_bodies_b = ci_cm < @cls_cmeth_bodies.length ? @cls_cmeth_bodies[ci_cm].split(";", -1) : "".split(",", -1)
         midx_cm_b = 0
         while midx_cm_b < cm_bodies_b.length
           if cm_bodies_b[midx_cm_b].to_i == bid
@@ -9567,8 +9991,8 @@ class Compiler
  # Issue #664 promote-mode tail.
     pre = blk_param_types_for_body(bid)
     if pre != ""
-      pre_parts = pre.split("|")
-      parts_pre = "".split(",")
+      pre_parts = pre.split("|", -1)
+      parts_pre = "".split(",", -1)
       k_pre = 0
       while k_pre < arity
         t_pre = k_pre < pre_parts.length ? pre_parts[k_pre] : "int"
@@ -9583,19 +10007,19 @@ class Compiler
       end
       return parts_pre.join(", ")
     end
-    types = "".split(",")
+    types = "".split(",", -1)
     k = 0
     while k < arity
       types.push("")
       k = k + 1
     end
     push_scope
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     sn_b = @nd_scope_names[bid]
     if sn_b != ""
-      lnames = sn_b.split("|")
-      ltypes = @nd_scope_types[bid].split("|")
+      lnames = sn_b.split("|", -1)
+      ltypes = @nd_scope_types[bid].split("|", -1)
     end
     j = 0
     while j < lnames.length
@@ -9611,8 +10035,8 @@ class Compiler
     pi_byc = 0
     while pi_byc < @meth_body_ids.length
       if @meth_body_ids[pi_byc] == bid
-        pnames_byc = @meth_param_names[pi_byc].split(",")
-        ptypes_byc = @meth_param_types[pi_byc].split(",")
+        pnames_byc = @meth_param_names[pi_byc].split(",", -1)
+        ptypes_byc = @meth_param_types[pi_byc].split(",", -1)
         pp_byc = 0
         while pp_byc < pnames_byc.length
           if pp_byc < ptypes_byc.length && pnames_byc[pp_byc] != ""
@@ -9628,14 +10052,14 @@ class Compiler
  # Class instance methods: same lookup via the per-class tables.
     ci_byc2 = 0
     while ci_byc2 < @cls_meth_bodies.length
-      bodies_byc2 = @cls_meth_bodies[ci_byc2].split(";")
+      bodies_byc2 = @cls_meth_bodies[ci_byc2].split(";", -1)
       midx_byc2 = 0
       while midx_byc2 < bodies_byc2.length
         if bodies_byc2[midx_byc2].to_i == bid
           pt_byc2 = cls_meth_ptypes_get(ci_byc2, midx_byc2)
           all_params_byc2 = @cls_meth_params[ci_byc2].split("|", -1)
           if midx_byc2 < all_params_byc2.length
-            pnames_byc2 = all_params_byc2[midx_byc2].split(",")
+            pnames_byc2 = all_params_byc2[midx_byc2].split(",", -1)
             pp_byc2 = 0
             while pp_byc2 < pnames_byc2.length
               if pp_byc2 < pt_byc2.length && pnames_byc2[pp_byc2] != ""
@@ -9654,7 +10078,7 @@ class Compiler
     end
     body_yield_arg_types(bid, types)
     pop_scope
-    parts = "".split(",")
+    parts = "".split(",", -1)
     k = 0
     while k < arity
       t = types[k]
@@ -9745,7 +10169,7 @@ class Compiler
   end
 
   def cls_method_has_yield(ci, midx)
-    ystr = @cls_meth_has_yield[ci].split(";")
+    ystr = @cls_meth_has_yield[ci].split(";", -1)
     if midx < ystr.length
       if ystr[midx] == "1"
         return 1
@@ -9770,7 +10194,7 @@ class Compiler
     if ci < 0 || midx < 0
       return 1
     end
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if midx >= bodies.length
       return 1
     end
@@ -9816,7 +10240,7 @@ class Compiler
   end
 
   def cls_find_method_direct(ci, mname)
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < mnames.length
       if mnames[j] == mname
@@ -9836,48 +10260,48 @@ class Compiler
  # site closes with two join() calls.
   def cls_meth_ptypes_get(ci, midx)
     if ci < 0 || ci >= @cls_meth_ptypes.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all = @cls_meth_ptypes[ci].split("|")
+    all = @cls_meth_ptypes[ci].split("|", -1)
     if midx >= all.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all[midx].split(",")
+    all[midx].split(",", -1)
   end
 
 
   def cls_meth_pnames_get(ci, midx)
     if ci < 0 || ci >= @cls_meth_params.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all = @cls_meth_params[ci].split("|")
+    all = @cls_meth_params[ci].split("|", -1)
     if midx >= all.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all[midx].split(",")
+    all[midx].split(",", -1)
   end
 
   def cls_cmeth_ptypes_get(ci, midx)
     if ci < 0 || ci >= @cls_cmeth_ptypes.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all = @cls_cmeth_ptypes[ci].split("|")
+    all = @cls_cmeth_ptypes[ci].split("|", -1)
     if midx >= all.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all[midx].split(",")
+    all[midx].split(",", -1)
   end
 
 
   def cls_cmeth_pnames_get(ci, midx)
     if ci < 0 || ci >= @cls_cmeth_params.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all = @cls_cmeth_params[ci].split("|")
+    all = @cls_cmeth_params[ci].split("|", -1)
     if midx >= all.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    all[midx].split(",")
+    all[midx].split(",", -1)
   end
 
  # Walk the inheritance chain starting at class `ci` looking for the
@@ -9905,8 +10329,8 @@ class Compiler
 
   def method_params_decl(mi)
     mfullname = @meth_names[mi]
-    pnames = @meth_param_names[mi].split(",")
-    ptypes = @meth_param_types[mi].split(",")
+    pnames = @meth_param_names[mi].split(",", -1)
+    ptypes = @meth_param_types[mi].split(",", -1)
  # Check for open class method
     oc_self = ""
     if mfullname.start_with?("__oc_Integer_")
@@ -10196,11 +10620,11 @@ class Compiler
         next
       end
       emit_constructor(i)
-      mnames = @cls_meth_names[i].split(";")
-      returns = @cls_meth_returns[i].split(";")
-      all_params = @cls_meth_params[i].split("|")
-      all_ptypes = @cls_meth_ptypes[i].split("|")
-      bodies = @cls_meth_bodies[i].split(";")
+      mnames = @cls_meth_names[i].split(";", -1)
+      returns = @cls_meth_returns[i].split(";", -1)
+      all_params = @cls_meth_params[i].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[i].split("|", -1)
+      bodies = @cls_meth_bodies[i].split(";", -1)
       j = 0
       while j < mnames.length
         if mnames[j] != "initialize"
@@ -10212,24 +10636,24 @@ class Compiler
           if j < bodies.length
             bid = bodies[j].to_i
           end
-          pnames = "".split(",")
-          ptypes = "".split(",")
+          pnames = "".split(",", -1)
+          ptypes = "".split(",", -1)
           if j < all_params.length
-            pnames = all_params[j].split(",")
+            pnames = all_params[j].split(",", -1)
           end
           if j < all_ptypes.length
-            ptypes = all_ptypes[j].split(",")
+            ptypes = all_ptypes[j].split(",", -1)
           end
           emit_instance_method(i, mnames[j], pnames, ptypes, rt, bid)
         end
         j = j + 1
       end
  # Class methods
-      cmnames = @cls_cmeth_names[i].split(";")
-      cm_returns = @cls_cmeth_returns[i].split(";")
-      cm_params = @cls_cmeth_params[i].split("|")
-      cm_ptypes = @cls_cmeth_ptypes[i].split("|")
-      cm_bodies = @cls_cmeth_bodies[i].split(";")
+      cmnames = @cls_cmeth_names[i].split(";", -1)
+      cm_returns = @cls_cmeth_returns[i].split(";", -1)
+      cm_params = @cls_cmeth_params[i].split("|", -1)
+      cm_ptypes = @cls_cmeth_ptypes[i].split("|", -1)
+      cm_bodies = @cls_cmeth_bodies[i].split(";", -1)
  # Per-(class, cmj) scope tables for inherited bodies — see the
  # analyze-side comment on @cls_cmeth_scope_names. Empty fallback
  # when analyze hasn't populated it (legacy compatibility).
@@ -10245,14 +10669,14 @@ class Compiler
         if j < cm_bodies.length
           bid = cm_bodies[j].to_i
         end
-        pnames = "".split(",")
-        ptypes = "".split(",")
+        pnames = "".split(",", -1)
+        ptypes = "".split(",", -1)
 
         if j < cm_params.length
-          pnames = cm_params[j].split(",")
+          pnames = cm_params[j].split(",", -1)
         end
         if j < cm_ptypes.length
-          ptypes = cm_ptypes[j].split(",")
+          ptypes = cm_ptypes[j].split(",", -1)
         end
         scope_n_j = ""
         scope_t_j = ""
@@ -10349,15 +10773,15 @@ class Compiler
     if init_idx < 0
       return
     end
-    all_params_str = @cls_meth_params[ci].split("|")
-    all_ptypes_str = @cls_meth_ptypes[ci].split("|")
+    all_params_str = @cls_meth_params[ci].split("|", -1)
+    all_ptypes_str = @cls_meth_ptypes[ci].split("|", -1)
     if init_idx >= all_params_str.length
       return
     end
-    cp_names = all_params_str[init_idx].split(",")
-    cp_types = "".split(",")
+    cp_names = all_params_str[init_idx].split(",", -1)
+    cp_types = "".split(",", -1)
     if init_idx < all_ptypes_str.length
-      cp_types = all_ptypes_str[init_idx].split(",")
+      cp_types = all_ptypes_str[init_idx].split(",", -1)
     end
     cpi = 0
     while cpi < cp_names.length
@@ -10416,17 +10840,17 @@ class Compiler
     init_ci = find_init_class(ci)
 
     if init_idx >= 0
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       bid = -1
       if init_idx < bodies.length
         bid = bodies[init_idx].to_i
       end
       if bid == -2
  # Synthetic struct constructor
-        all_params = @cls_meth_params[ci].split("|")
-        pnames2 = "".split(",")
+        all_params = @cls_meth_params[ci].split("|", -1)
+        pnames2 = "".split(",", -1)
         if init_idx < all_params.length
-          pnames2 = all_params[init_idx].split(",")
+          pnames2 = all_params[init_idx].split(",", -1)
         end
         sk = 0
         while sk < pnames2.length
@@ -10501,17 +10925,17 @@ class Compiler
  # each forwarded arg to the parent's declared type
  # when it differs (parent's param-type inference may
  # not see this child's type narrowing).
-                p_pnames = "".split(",")
-                p_ptypes = "".split(",")
+                p_pnames = "".split(",", -1)
+                p_ptypes = "".split(",", -1)
                 p_init_idx = cls_find_method_direct(pi, "initialize")
                 if p_init_idx >= 0
-                  p_all_params = @cls_meth_params[pi].split("|")
-                  p_all_ptypes = @cls_meth_ptypes[pi].split("|")
+                  p_all_params = @cls_meth_params[pi].split("|", -1)
+                  p_all_ptypes = @cls_meth_ptypes[pi].split("|", -1)
                   if p_init_idx < p_all_params.length
-                    p_pnames = p_all_params[p_init_idx].split(",")
+                    p_pnames = p_all_params[p_init_idx].split(",", -1)
                   end
                   if p_init_idx < p_all_ptypes.length
-                    p_ptypes = p_all_ptypes[p_init_idx].split(",")
+                    p_ptypes = p_all_ptypes[p_init_idx].split(",", -1)
                   end
                 end
                 super_args = ""
@@ -10742,12 +11166,12 @@ class Compiler
         if init_ci != ci
           parent_name = @cls_names[init_ci]
  # Build param forwarding: forward all constructor params to parent init
-          pi_params = @cls_meth_params[init_ci].split("|")
+          pi_params = @cls_meth_params[init_ci].split("|", -1)
           pi_idx = cls_find_method_direct(init_ci, "initialize")
-          pnames = "".split(",")
+          pnames = "".split(",", -1)
           if pi_idx >= 0
             if pi_idx < pi_params.length
-              pnames = pi_params[pi_idx].split(",")
+              pnames = pi_params[pi_idx].split(",", -1)
             end
           end
           fwd = ""
@@ -10777,7 +11201,7 @@ class Compiler
       saved_vt = @cls_is_value_type[ci]
       @cls_is_value_type[ci] = 0
       emit_raw("static inline void sp_" + cname + "_initialize(sp_" + cname + " *self" + init_params_decl(ci) + ") {")
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       bid = -1
       if init_idx < bodies.length
         bid = bodies[init_idx].to_i
@@ -10853,7 +11277,7 @@ class Compiler
       if cls_method_has_yield(ci, midx) == 1
         @in_yield_method = 1
         @current_method_yield_arity = cls_method_yield_arity(ci, midx)
-        cm_bodies_cur = @cls_meth_bodies[ci].split(";")
+        cm_bodies_cur = @cls_meth_bodies[ci].split(";", -1)
         bid_cur = midx < cm_bodies_cur.length ? cm_bodies_cur[midx].to_i : -1
         @current_method_blk_param_types = blk_param_types_for_body(bid_cur)
       else
@@ -11016,11 +11440,11 @@ class Compiler
  # @nd_scope_names) instead of looking them up by bid. Used by
  # the cmeth emit path to plumb per-(ci, cmj) tables through.
   def declare_method_locals_from(sn, st, params)
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     if sn != ""
-      lnames = sn.split("|")
-      ltypes = st.split("|")
+      lnames = sn.split("|", -1)
+      ltypes = st.split("|", -1)
     end
     j = 0
     while j < lnames.length
@@ -11191,8 +11615,8 @@ class Compiler
       @current_method_blk_param_types = ""
     end
 
-    pnames = @meth_param_names[mi].split(",")
-    ptypes = @meth_param_types[mi].split(",")
+    pnames = @meth_param_names[mi].split(",", -1)
+    ptypes = @meth_param_types[mi].split(",", -1)
     @current_method_block_param = find_block_param_name(pnames, ptypes)
 
     yp = ""
@@ -11285,11 +11709,11 @@ class Compiler
  # the resulting (lnames, ltypes) pair.
     sn = @nd_scope_names[bid]
     st = @nd_scope_types[bid]
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     if sn != ""
-      lnames = sn.split("|")
-      ltypes = st.split("|")
+      lnames = sn.split("|", -1)
+      ltypes = st.split("|", -1)
     end
     j = 0
     while j < lnames.length
@@ -11519,6 +11943,30 @@ class Compiler
  # named "ARGV"). Flips @needs_argv so emit_main's init gate
  # has the right value before it runs. Single global name, so
  # the scan is a flat tree walk -- linear in AST size.
+ # Issue #727: pre-scan for `def method_missing` definitions and
+ # warn that they won't fire at runtime. Spinel resolves call
+ # targets statically; an unresolved call emits 0 and prints
+ # "cannot resolve ..." rather than dispatching through
+ # method_missing. The user's hook never runs, but the def itself
+ # compiles silently, so without this pre-pass there's no signal
+ # that the contract is broken until a confused 0 surfaces.
+  def scan_for_method_missing(nid)
+    if nid < 0
+      return
+    end
+    if @nd_type[nid] == "DefNode" && @nd_name[nid] == "method_missing"
+      $stderr.puts "warning: `def method_missing' is not dispatched in spinel; unresolved calls still emit 0 and print a 'cannot resolve' warning"
+      return
+    end
+    cs = []
+    push_child_ids(nid, cs)
+    k = 0
+    while k < cs.length
+      scan_for_method_missing(cs[k])
+      k = k + 1
+    end
+  end
+
   def scan_for_argv(nid)
     if nid < 0
       return
@@ -11923,6 +12371,9 @@ class Compiler
     if @needs_rand == 1
       emit_raw("  srand((unsigned)time(NULL));")
     end
+ # Issue #781 / #846: sp_re_init swaps in a quiet startup handler
+ # for the pre-compile pass and restores sp_re_default_error_handler
+ # before returning. No separate install step needed here.
     if @needs_regexp == 1
       emit_raw("  sp_re_init();")
     end
@@ -11960,11 +12411,11 @@ class Compiler
  # declares the resulting (lnames, ltypes) pair.
     sn = @nd_scope_names[@root_id]
     st = @nd_scope_types[@root_id]
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     if sn != ""
-      lnames = sn.split("|")
-      ltypes = st.split("|")
+      lnames = sn.split("|", -1)
+      ltypes = st.split("|", -1)
     end
     j = 0
     while j < lnames.length
@@ -12004,7 +12455,7 @@ class Compiler
  # multi-write fix): there the push was skipped entirely; here the
  # const must still be declared but the init emit moves to source
  # order, handled in the body-stmt loop below.
-    defer_const_init = "".split(",")
+    defer_const_init = "".split(",", -1)
     dci = 0
     while dci < @const_names.length
       defer_const_init.push("0")
@@ -12117,7 +12568,7 @@ class Compiler
     if @multi_const_inits != nil
       mci = 0
       while mci < @multi_const_inits.length
-        parts = @multi_const_inits[mci].split("|")
+        parts = @multi_const_inits[mci].split("|", -1)
         scope_n = parts[0]
         mw_id = parts[1].to_i
         targets = parse_id_list(@nd_targets[mw_id])
@@ -12444,24 +12895,16 @@ class Compiler
  # The @inline_yield_blk guard restricts this expansion to the
  # inlining window; outside of it, YieldNode in expression context
  # is meaningless and falls through to the default int-0.
-      empty_map = "".split(",")
+      empty_map = "".split(",", -1)
       return compile_yield_inline_expr(nid, @inline_yield_blk, @inline_yield_bp_names, empty_map, empty_map)
     end
     if t == "UnsupportedNode"
  # The parser emitted this sentinel because it hit a Prism node
- # type it doesn't know how to serialize. RationalNode /
- # ComplexNode appear in literal positions where a hard exit
- # would prevent the rest of the file from compiling at all; warn
- # and emit 0 so the program runs (with wrong arithmetic for that
- # literal). Everything else still hard-errors. Issue #728.
+ # type it doesn't know how to serialize. ImaginaryNode and
+ # RationalNode are now supported as proper nodes (#840 #841),
+ # so anything that hits this arm is a genuine unsupported Ruby
+ # construct; hard-error so the user gets a precise location.
       kind_us = @nd_content[nid]
-      if kind_us == "RationalNode" || kind_us == "ComplexNode" || kind_us == "ImaginaryNode"
- # Emit `1` (not `0`) so the common `N / Mr` shape doesn't turn
- # into a runtime divide-by-zero. The result is still wrong, but
- # the program continues. Issue #728.
-        $stderr.puts "warning: spinel does not support " + kind_us + " at line " + @nd_value[nid].to_s + " (emitting 1)"
-        return "1"
-      end
       $stderr.puts "Spinel: cannot compile " + kind_us + " at line " + @nd_value[nid].to_s + " (unsupported Ruby syntax)"
       exit(1)
     end
@@ -12479,6 +12922,27 @@ class Compiler
     end
     if t == "FloatNode"
       return @nd_content[nid]
+    end
+ # Issue #840: ImaginaryNode `Ni` -- sp_Complex literal (re=0, im=N).
+ # The wrapped numeric is the imaginary coefficient.
+    if t == "ImaginaryNode"
+      inner_im = @nd_expression[nid]
+      if inner_im < 0
+ # `numeric` parser field maps onto @nd_expression via the same
+ # set_ref_field used for AssocNode/CapturePattern. If unset,
+ # default to 1i.
+        return "((sp_Complex){0.0, 1.0})"
+      end
+      inner_t = @nd_type[inner_im]
+      if inner_t == "FloatNode"
+        return "((sp_Complex){0.0, " + @nd_content[inner_im] + "})"
+      end
+ # IntegerNode coefficient -- cast to mrb_float for the im slot.
+      return "((sp_Complex){0.0, (mrb_float)" + @nd_value[inner_im].to_s + "LL})"
+    end
+ # Issue #841: RationalNode `N/Mr` -- sp_Rational literal.
+    if t == "RationalNode"
+      return "((sp_Rational){" + @nd_rat_num[nid] + "LL, " + @nd_rat_den[nid] + "LL})"
     end
     if t == "StringNode"
       return c_string_literal(@nd_content[nid])
@@ -12537,11 +13001,16 @@ class Compiler
       return "sp_re_dyn_" + idx.to_s + "(" + pat_c + ")"
     end
     if t == "NumberedReferenceReadNode"
+ # Issue #848: an out-of-range or unmatched capture should be
+ # nil (NULL on the C side), not "". Return the raw slot so
+ # downstream NULL-safe paths (.inspect, puts, ||) treat it as
+ # nil. sp_re_captures[N] is NULL when the group didn't match
+ # OR when N exceeds the pattern's capture count.
       num = @nd_value[nid]
       if num >= 1 && num <= 9
-        return "(sp_re_captures[" + num.to_s + "] ? sp_re_captures[" + num.to_s + "] : \"\")"
+        return "sp_re_captures[" + num.to_s + "]"
       end
-      return "\"\""
+      return "NULL"
     end
     if t == "MatchWriteNode"
  # $1 = ... pattern match
@@ -12706,8 +13175,8 @@ class Compiler
           end
           kmw = kmw + 1
         end
-        rhs_tmps = "".split(",")
-        rhs_ts = "".split(",")
+        rhs_tmps = "".split(",", -1)
+        rhs_ts = "".split(",", -1)
         kmw = 0
         while kmw < elems_mw.length
           et_mw = infer_type(elems_mw[kmw])
@@ -12939,12 +13408,26 @@ class Compiler
  # only on a falsy current value.
       vref = fiber_var_ref(@nd_name[nid])
       val = compile_expr(@nd_expression[nid])
+      lvw_t_or = find_var_declared_type(@nd_name[nid])
+      rhs_t_or = infer_type(@nd_expression[nid])
+      if lvw_t_or == "poly" || is_scalar_nullable_type(lvw_t_or) == 1
+        cond_or = truthy_c_expr(lvw_t_or, vref)
+        val_or = (lvw_t_or == "poly" && rhs_t_or != "" && rhs_t_or != "poly") ? box_value_to_poly(rhs_t_or, val) : val
+        return "(" + vref + " = " + cond_or + " ? " + vref + " : (" + val_or + "))"
+      end
       return "(" + vref + " = " + vref + " ? " + vref + " : (" + val + "))"
     end
     if t == "LocalVariableAndWriteNode"
  # `local &&= expr` in expression context.
       vref = fiber_var_ref(@nd_name[nid])
       val = compile_expr(@nd_expression[nid])
+      lvw_t_an = find_var_declared_type(@nd_name[nid])
+      rhs_t_an = infer_type(@nd_expression[nid])
+      if lvw_t_an == "poly" || is_scalar_nullable_type(lvw_t_an) == 1
+        cond_an = truthy_c_expr(lvw_t_an, vref)
+        val_an = (lvw_t_an == "poly" && rhs_t_an != "" && rhs_t_an != "poly") ? box_value_to_poly(rhs_t_an, val) : val
+        return "(" + vref + " = " + cond_an + " ? (" + val_an + ") : " + vref + ")"
+      end
       return "(" + vref + " = " + vref + " ? (" + val + ") : " + vref + ")"
     end
     if t == "IndexOrWriteNode"
@@ -13066,9 +13549,27 @@ class Compiler
  # to wrong-but-running C. Warn keeps the diagnostic surface
  # consistent: every unresolved name produces one stderr line
  # plus a `0` placeholder, leaving the user a clear punch list.
+ # Built-in Ruby pseudo-constants spinel-the-runtime can answer
+ # without a per-host build step. spinel uses the host platform
+ # detected by the C preprocessor at build time. Issue #890.
+      if rname == "RUBY_VERSION"
+        return "(&(\"\\xff\" \"4.0.0\")[1])"
+      end
+      if rname == "RUBY_ENGINE"
+        return "(&(\"\\xff\" \"spinel\")[1])"
+      end
+      if rname == "RUBY_PLATFORM"
+        return "sp_ruby_platform_str()"
+      end
       if is_known_constant_name(rname) == 0
-        warn_unresolved_const(rname)
-        return "0"
+ # Uninitialised constant — raise NameError at runtime (CRuby
+ # behaviour). Stmt-expression so the call site still gets an
+ # expression value of the inferred type (the cast is reached
+ # only after sp_raise_cls's longjmp, so it's dead code that
+ # has to type-check).
+        @needs_setjmp = 1
+        rt_uc = infer_type(nid)
+        return "({ sp_raise_cls(\"NameError\", \"uninitialized constant " + rname + "\"); " + c_default_val(rt_uc) + "; })"
       end
       return rname
     end
@@ -13124,6 +13625,18 @@ class Compiler
             return "2.71828182845904523536"
           end
         end
+ # File::SEPARATOR / ALT_SEPARATOR / PATH_SEPARATOR. Issue #891.
+        if rname == "File"
+          if nname == "SEPARATOR"
+            return "(&(\"\\xff\" \"/\")[1])"
+          end
+          if nname == "ALT_SEPARATOR"
+            return "sp_str_empty"
+          end
+          if nname == "PATH_SEPARATOR"
+            return "(&(\"\\xff\" \":\")[1])"
+          end
+        end
         if cpname != ""
           return cpname
         end
@@ -13174,7 +13687,7 @@ class Compiler
       if hash_or != ""
         recv_nid_or = @nd_receiver[left_nid]
         rc_or = compile_expr(recv_nid_or)
-        parts_or = hash_or.split("|")
+        parts_or = hash_or.split("|", -1)
         cls_or = parts_or[0]
         val_t_or = parts_or[1]
         key_kind_or = parts_or[2]
@@ -13419,6 +13932,23 @@ class Compiler
       if gname == "$+"
         return "(sp_re_last_paren_match() ? sp_re_last_paren_match() : \"\")"
       end
+ # Issue #831: `$!` is the currently-rescued exception. Return
+ # its message string when in a rescue (depth > 0) else NULL,
+ # so `$!.inspect` reads as "nil" outside rescue and round-trips
+ # the message inside one.
+      if gname == "$!"
+        return "(sp_exc_top > 0 ? sp_exc_msg[sp_exc_top-1] : (const char *)0)"
+      end
+ # Punctuation globals beyond $! / $/ etc. that spinel doesn't
+ # have a runtime view for: read as NULL string (Ruby's nil) so
+ # compilation succeeds and `.inspect` round-trips through
+ # sp_str_inspect's NULL handler to "nil".
+      if gname == "$;" || gname == "$,"
+        return "(const char *)0"
+      end
+      if gname == "$/"
+        return "\"\\n\""
+      end
  # General global variable
       return sanitize_gvar(gname)
     end
@@ -13432,9 +13962,9 @@ class Compiler
       return c_string_literal(@nd_content[nid])
     end
     if t == "SourceEncodingNode"
- # __ENCODING__ — Spinel has no Encoding runtime; we return
- # the canonical "UTF-8" string. Documented in test/source_encoding.rb.
-      return c_string_literal("UTF-8")
+ # __ENCODING__ — Spinel sources are UTF-8, represented as a
+ # small Encoding value so `.class` and `.name` match Ruby.
+      return "sp_encoding_utf8()"
     end
     if t == "ArgumentsNode"
       arg_ids = parse_id_list(@nd_args[nid])
@@ -13657,6 +14187,23 @@ class Compiler
     if @current_class_idx < 0 || @current_method_name == ""
       return "0"
     end
+    mname_su = @current_method_name
+ # Prepend chain redirect (issue #720). When inside an active
+ # prepended method or a shadow, super dispatches to a synthetic
+ # method on the same class instead of walking the parent chain.
+    prep_target_name = prep_super_target(@current_class_idx, mname_su)
+    if prep_target_name != ""
+      blk_pr = @nd_block[nid]
+      if blk_pr >= 0 && @nd_type[blk_pr] == "BlockNode"
+        $stderr.puts "warning: super { block } from a prepended method is not yet supported (issue #720 v1); falling back to bare super"
+      end
+      return compile_super_prep_call(nid, t, @current_class_idx, prep_target_name, mname_su)
+    end
+ # When the current method is a shadow at chain index 0 (no more
+ # on-class shadows), super falls through to the parent class,
+ # but the parent-side lookup must use the original user mname,
+ # not the synthetic name. For non-shadows this is a no-op.
+    parent_lookup_mname = prep_super_parent_mname(@current_class_idx, mname_su)
     parent_name = @cls_parents[@current_class_idx]
     if parent_name == ""
       return "0"
@@ -13665,8 +14212,7 @@ class Compiler
     if parent_ci < 0
       return "0"
     end
-    mname_su = @current_method_name
-    owner_su = find_method_owner(parent_ci, mname_su)
+    owner_su = find_method_owner(parent_ci, parent_lookup_mname)
     if owner_su == ""
       return "0"
     end
@@ -13680,7 +14226,7 @@ class Compiler
     if blk_su >= 0 && @nd_type[blk_su] == "BlockNode"
       owner_ci_su = find_class_idx(owner_su)
       if owner_ci_su >= 0
-        midx_su = cls_find_method_direct(owner_ci_su, mname_su)
+        midx_su = cls_find_method_direct(owner_ci_su, parent_lookup_mname)
         if midx_su >= 0
           return compile_super_with_block_inline(nid, t, owner_ci_su, midx_su, blk_su)
         end
@@ -13690,10 +14236,10 @@ class Compiler
     args_c = ""
     if t == "ForwardingSuperNode"
  # Forward every formal param of the current method by name.
-      cur_params = @cls_meth_params[@current_class_idx].split("|")
+      cur_params = @cls_meth_params[@current_class_idx].split("|", -1)
       midx_cur = cls_find_method_direct(@current_class_idx, mname_su)
       if midx_cur >= 0 && midx_cur < cur_params.length
-        pn_list = cur_params[midx_cur].split(",")
+        pn_list = cur_params[midx_cur].split(",", -1)
         pi_su = 0
         while pi_su < pn_list.length
           if pn_list[pi_su] != ""
@@ -13720,10 +14266,54 @@ class Compiler
     yargs_su = ""
     owner_ci_su2 = find_class_idx(owner_su)
     if owner_ci_su2 >= 0
-      midx_su2 = cls_find_method_direct(owner_ci_su2, mname_su)
+      midx_su2 = cls_find_method_direct(owner_ci_su2, parent_lookup_mname)
       yargs_su = cls_call_yargs(owner_ci_su2, midx_su2)
     end
-    "sp_" + owner_su + "_" + sanitize_name(mname_su) + "(" + cast_self + args_c + yargs_su + ")"
+    "sp_" + owner_su + "_" + sanitize_name(parent_lookup_mname) + "(" + cast_self + args_c + yargs_su + ")"
+  end
+
+ # Emit a super call routed through the prepend chain. target_name
+ # is a synthetic shadow on the current class ci. Same-class call
+ # so the self cast is `(sp_<ci> *)self`. Args are forwarded the
+ # same way as a regular super.
+  def compile_super_prep_call(nid, t, ci, target_name, cur_mname)
+    cname = @cls_names[ci]
+    if @cls_is_value_type[ci] == 1
+      cast_self = "self"
+    else
+      cast_self = "self"
+    end
+    args_c = ""
+    if t == "ForwardingSuperNode"
+      cur_params = @cls_meth_params[ci].split("|", -1)
+      midx_cur = cls_find_method_direct(ci, cur_mname)
+      if midx_cur >= 0 && midx_cur < cur_params.length
+        pn_list = cur_params[midx_cur].split(",", -1)
+        pi_pr = 0
+        while pi_pr < pn_list.length
+          if pn_list[pi_pr] != ""
+            args_c = args_c + ", lv_" + pn_list[pi_pr]
+          end
+          pi_pr = pi_pr + 1
+        end
+      end
+    else
+      args_id_pr = @nd_arguments[nid]
+      if args_id_pr >= 0
+        a_ids_pr = get_args(args_id_pr)
+        ai_pr = 0
+        while ai_pr < a_ids_pr.length
+          args_c = args_c + ", " + compile_expr(a_ids_pr[ai_pr])
+          ai_pr = ai_pr + 1
+        end
+      end
+    end
+    yargs_pr = ""
+    midx_target = cls_find_method_direct(ci, target_name)
+    if midx_target >= 0
+      yargs_pr = cls_call_yargs(ci, midx_target)
+    end
+    "sp_" + cname + "_" + target_name + "(" + cast_self + args_c + yargs_pr + ")"
   end
 
  # `super { ... }` lowering. Mirrors compile_yield_call_expr but reads
@@ -13734,7 +14324,7 @@ class Compiler
  # the parent body's last expression so super's value can be
  # propagated through enclosing expressions. Issue #665.
   def compile_super_with_block_inline(nid, t, owner_ci, midx, blk)
-    bp_names = "".split(",")
+    bp_names = "".split(",", -1)
     bp_id = @nd_parameters[blk]
     if bp_id >= 0
       inner_bp = @nd_parameters[bp_id]
@@ -13758,14 +14348,14 @@ class Compiler
     ptypes = cls_meth_ptypes_get(owner_ci, midx)
     @block_counter = @block_counter + 1
     suffix_sw = "_s" + @block_counter.to_s
-    map_from_sw = "".split(",")
-    map_to_sw = "".split(",")
-    cur_params_for_fwd = "".split(",")
+    map_from_sw = "".split(",", -1)
+    map_to_sw = "".split(",", -1)
+    cur_params_for_fwd = "".split(",", -1)
     if t == "ForwardingSuperNode"
-      cur_params_all = @cls_meth_params[@current_class_idx].split("|")
+      cur_params_all = @cls_meth_params[@current_class_idx].split("|", -1)
       midx_cur_sw2 = cls_find_method_direct(@current_class_idx, @current_method_name)
       if midx_cur_sw2 >= 0 && midx_cur_sw2 < cur_params_all.length
-        cur_params_for_fwd = cur_params_all[midx_cur_sw2].split(",")
+        cur_params_for_fwd = cur_params_all[midx_cur_sw2].split(",", -1)
       end
     end
     kp_sw = 0
@@ -13800,31 +14390,39 @@ class Compiler
       kp_sw = kp_sw + 1
     end
     bid_sw = -1
-    bodies_sw = @cls_meth_bodies[owner_ci].split(";")
+    bodies_sw = @cls_meth_bodies[owner_ci].split(";", -1)
     if midx < bodies_sw.length
       bid_sw = bodies_sw[midx].to_i
     end
     if bid_sw >= 0
-      flocals_n_sw = "".split(",")
-      flocals_t_sw = "".split(",")
+      flocals_n_sw = "".split(",", -1)
+      flocals_t_sw = "".split(",", -1)
       sn_sw = @nd_scope_names[bid_sw]
       if sn_sw != ""
-        flocals_n_sw = sn_sw.split("|")
-        flocals_t_sw = @nd_scope_types[bid_sw].split("|")
+        flocals_n_sw = sn_sw.split("|", -1)
+        flocals_t_sw = @nd_scope_types[bid_sw].split("|", -1)
       end
       kf_sw = 0
       while kf_sw < flocals_n_sw.length
+ # Issue #810: bound the type lookup. If the scope name list is
+ # longer than the type list (mismatched serialization), fall back
+ # to "int" so we don't pass nil through c_type / c_default_val
+ # and crash.
+        t_sw = "int"
+        if kf_sw < flocals_t_sw.length
+          t_sw = flocals_t_sw[kf_sw]
+        end
         tname_lv = flocals_n_sw[kf_sw] + suffix_sw
-        emit("  " + c_type(flocals_t_sw[kf_sw]) + " lv_" + tname_lv + " = " + c_default_val(flocals_t_sw[kf_sw]) + ";")
+        emit("  " + c_type(t_sw) + " lv_" + tname_lv + " = " + c_default_val(t_sw) + ";")
         map_from_sw.push(flocals_n_sw[kf_sw])
         map_to_sw.push(tname_lv)
-        declare_var(tname_lv, flocals_t_sw[kf_sw])
-        declare_var(flocals_n_sw[kf_sw], flocals_t_sw[kf_sw])
+        declare_var(tname_lv, t_sw)
+        declare_var(flocals_n_sw[kf_sw], t_sw)
         kf_sw = kf_sw + 1
       end
     end
     rt_sw = "int"
-    returns_sw = @cls_meth_returns[owner_ci].split(";")
+    returns_sw = @cls_meth_returns[owner_ci].split(";", -1)
     if midx < returns_sw.length
       rt_sw = returns_sw[midx]
     end
@@ -13870,14 +14468,72 @@ class Compiler
   end
 
   def c_string_literal(s)
+ # Issue #722: NUL-containing literals can't ride the static
+ # `(&("\xff" "...")[1])` form: sp_str_byte_len falls back to
+ # strlen for that marker and stops at the embedded NUL, so
+ # downstream `.length` / `.bytes` would report a short length.
+ # Emit a heap-allocated copy with sp_str_set_len recording the
+ # full byte length. NUL inside literals is rare; the per-call
+ # alloc is acceptable.
+    has_nul = 0
+    nul_check_i = 0
+    while nul_check_i < s.length
+      if s[nul_check_i] == 0.chr
+        has_nul = 1
+        nul_check_i = s.length
+      end
+      nul_check_i = nul_check_i + 1
+    end
+    if has_nul == 1
+ # Build the C string literal with `\000` escapes, then wrap
+ # in a stmt-expression that allocates a GC string and copies.
+ # High bytes (>= 0x80) escape via `\xHH` for the same
+ # source-encoding reason as the static path below.
+      inner = ""
+      ii = 0
+      while ii < s.length
+        ch = s[ii]
+        if ch == bsl
+          inner = inner + bsl + bsl
+        elsif ch == "\""
+          inner = inner + bsl + "\""
+        elsif ch == 10.chr
+          inner = inner + bsl_n
+        elsif ch == 13.chr
+          inner = inner + bsl + "r"
+        elsif ch == 9.chr
+          inner = inner + bsl + "t"
+        elsif ch == 0.chr
+          inner = inner + bsl + "000"
+        elsif ch.ord >= 0x80
+          hex = "0123456789ABCDEF"
+          cb2 = 0
+          while cb2 < ch.bytesize
+            bb2 = ch.getbyte(cb2)
+            inner = inner + bsl + "x" + hex[(bb2 >> 4) & 0xF] + hex[bb2 & 0xF]
+            cb2 = cb2 + 1
+          end
+          if ii + 1 < s.length
+            nb = s[ii + 1].getbyte(0)
+            if (nb >= 48 && nb <= 57) || (nb >= 65 && nb <= 70) || (nb >= 97 && nb <= 102)
+              inner = inner + "\" \""
+            end
+          end
+        else
+          inner = inner + ch
+        end
+        ii = ii + 1
+      end
+      n = s.length.to_s
+      return "({ char *_s = sp_str_alloc(" + n + "); memcpy(_s, \"" + inner + "\", " + n + "); _s[" + n + "] = 0; sp_str_set_len(_s, " + n + "); (const char *)_s; })"
+    end
  # Input `s` is the runtime Ruby string content (already-cooked: any
  # backslash in `s` is a literal backslash, NOT an escape introducer).
  # We C-escape the small set that needs it: backslash, double-quote,
- # newline, carriage return, tab. Everything else copies through.
- # The previous version treated `s` as if it still carried Ruby
- # escapes, so a 2-char input "\\n" (backslash + n) wrongly collapsed
- # to a C newline; that bug is what made `"hello\\nworld\\n".lines`
- # emit invalid C with a literal newline inside a string literal.
+ # newline, carriage return, tab. Bytes >= 0x80 are escaped as
+ # `\xHH` (and string-concat-broken so subsequent hex digits don't
+ # extend the escape) — clang's -Winvalid-source-encoding rejects
+ # raw high bytes in source files.
     result = "\""
     i = 0
     while i < s.length
@@ -13897,7 +14553,40 @@ class Compiler
               if ch == 9.chr
                 result = result + bsl + "t"
               else
-                result = result + ch
+                if ch == 0.chr
+ # NUL byte inside the literal. Octal `\000` always
+ # consumes exactly 3 digits so a following digit char doesn't
+ # extend the escape. sp_str_byte_len falls back to strlen for
+ # static literals so the in-string-NUL length still reports
+ # short; full length-preserving static literals would need a
+ # new marker -- deferred.
+                  result = result + bsl + "000"
+                else
+                  bv = ch.ord
+                  if bv >= 0x80
+ # Multi-byte / high-byte: emit one `\xHH` per UTF-8 byte so
+ # the source-encoding warning doesn't fire and the output
+ # round-trips byte-for-byte.
+                    hex = "0123456789ABCDEF"
+                    cb = 0
+                    while cb < ch.bytesize
+                      bb = ch.getbyte(cb)
+                      result = result + bsl + "x" + hex[(bb >> 4) & 0xF] + hex[bb & 0xF]
+                      cb = cb + 1
+                    end
+ # Break out of the escape with a string concat so a
+ # following hex digit ('0'-'9' / 'a'-'f' / 'A'-'F')
+ # doesn't get absorbed into the \xHH sequence.
+                    if i + 1 < s.length
+                      nb = s[i + 1].getbyte(0)
+                      if (nb >= 48 && nb <= 57) || (nb >= 65 && nb <= 70) || (nb >= 97 && nb <= 102)
+                        result = result + "\" \""
+                      end
+                    end
+                  else
+                    result = result + ch
+                  end
+                end
               end
             end
           end
@@ -13918,7 +14607,7 @@ class Compiler
       return "(&(\"\\xff\")[1])"
     end
     fmt = ""
-    arg_exprs = "".split(",")
+    arg_exprs = "".split(",", -1)
     parts.each { |pid|
       if @nd_type[pid] == "StringNode"
         fmt = fmt + escape_c_format(@nd_content[pid])
@@ -13974,6 +14663,9 @@ class Compiler
                         @needs_class_table = 1
                         fmt = fmt + "%s"
                         arg_exprs.push("sp_class_to_s(" + compile_expr(inner) + ")")
+                      elsif it == "encoding"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_encoding_name(" + compile_expr(inner) + ")")
                       elsif it == "symbol"
  # Symbol values carry the sp_sym int id;
  # interpolation must render the registered
@@ -14665,25 +15357,25 @@ class Compiler
     body = @nd_body[blk]
  # Read precomputed body locals (analyze ran scan_locals with
  # exactly this exclusion: the block's syntactic required params).
-    all_names = "".split(",")
-    all_types = "".split(",")
-    all_plist = "".split(",")
+    all_names = "".split(",", -1)
+    all_types = "".split(",", -1)
+    all_plist = "".split(",", -1)
     if bp != ""
       all_plist.push(bp)
     end
     if body >= 0
       sn_b = @nd_scope_names[body]
       if sn_b != ""
-        all_names = sn_b.split("|")
-        all_types = @nd_scope_types[body].split("|")
+        all_names = sn_b.split("|", -1)
+        all_types = @nd_scope_types[body].split("|", -1)
       end
     end
 
  # Split into captures (exist in outer scope) vs true locals
-    free_vars = "".split(",")
-    free_var_types = "".split(",")
-    local_names = "".split(",")
-    local_types = "".split(",")
+    free_vars = "".split(",", -1)
+    free_var_types = "".split(",", -1)
+    local_names = "".split(",", -1)
+    local_types = "".split(",", -1)
     k = 0
     while k < all_names.length
       outer_type = find_var_type(all_names[k])
@@ -14756,7 +15448,7 @@ class Compiler
     saved_hp_names_len = @heap_promoted_names.length
     saved_hp_cells_len = @heap_promoted_cells.length
     saved_self_override = @self_override
-    @out_lines = "".split(",")
+    @out_lines = "".split(",", -1)
     @indent = 1
     @in_fiber_body = 1
     @fiber_captures = free_vars
@@ -14837,7 +15529,7 @@ class Compiler
  # `self` capture (different C function each time) doesn't accidentally
  # reuse a stale `_hcell_self_<n>` from a sibling fiber site that lives
  # in a different C scope.
-    local_cells = "".split(",")
+    local_cells = "".split(",", -1)
     k = 0
     while k < free_vars.length
       vn = free_vars[k]
@@ -15029,23 +15721,23 @@ class Compiler
           rconsts = module_acc_resolved(mod_name, inner_mname)
           if rconsts != "" && rconsts != "?"
             args_id = @nd_arguments[nid]
-            cands = rconsts.split(";")
+            cands = rconsts.split(";", -1)
  # scan_new_calls' module-dispatch widening has already
  # unified the candidates' per-arg ptypes, so any
  # candidate's ptypes table tells us the target types
  # here. Box each arg expression to match — an int arg
  # passed to a poly-widened param would otherwise emit
  # raw `mrb_int` into a `sp_RbVal` slot.
-            target_ptypes = "".split(",")
+            target_ptypes = "".split(",", -1)
             cands.each { |cn_t|
               cci_t = find_class_idx(cn_t)
               if cci_t >= 0
-                pall_t = @cls_cmeth_ptypes[cci_t].split("|")
-                cmnames_t = @cls_cmeth_names[cci_t].split(";")
+                pall_t = @cls_cmeth_ptypes[cci_t].split("|", -1)
+                cmnames_t = @cls_cmeth_names[cci_t].split(";", -1)
                 cmidx_t = 0
                 while cmidx_t < cmnames_t.length
                   if cmnames_t[cmidx_t] == mname && cmidx_t < pall_t.length
-                    target_ptypes = pall_t[cmidx_t].split(",")
+                    target_ptypes = pall_t[cmidx_t].split(",", -1)
                     cmidx_t = cmnames_t.length
                   end
                   cmidx_t = cmidx_t + 1
@@ -15055,7 +15747,7 @@ class Compiler
                 mfn_t = cn_t + "_cls_" + mname
                 mi_t = find_method_idx(mfn_t)
                 if mi_t >= 0
-                  target_ptypes = @meth_param_types[mi_t].split(",")
+                  target_ptypes = @meth_param_types[mi_t].split(",", -1)
                 end
               end
             }
@@ -15349,6 +16041,33 @@ class Compiler
       end
     end
 
+ # Issue #868: Regexp accessors -- only the literal recv form is
+ # supported at this stage (dynamic-pattern recvs would need a
+ # runtime Regexp struct that carries source/options). For now,
+ # literal /pat/.source returns the raw pattern string, .options
+ # returns the engine flags packed per CRuby.
+    if recv >= 0 && @nd_type[recv] == "RegularExpressionNode"
+      if mname == "source"
+        return c_string_literal(@nd_unescaped[recv])
+      end
+      if mname == "options"
+ # Translate prism's nd_flags bits (4=IGNORECASE, 8=EXTENDED,
+ # 16=MULTILINE) to CRuby's Regexp::* bit mask
+ # (1=IGNORECASE, 2=EXTENDED, 4=MULTILINE).
+        pf = @nd_flags[recv]
+        opts = 0
+        if (pf & 4) != 0
+          opts = opts | 1
+        end
+        if (pf & 8) != 0
+          opts = opts | 2
+        end
+        if (pf & 16) != 0
+          opts = opts | 4
+        end
+        return opts.to_s + "LL"
+      end
+    end
  # regex.match? / regex.match / regex =~ str — receiver is the regex
  # (typically a constant referring to a /…/ literal). Dispatched here
  # rather than compile_string_method_expr, which wants a string
@@ -15370,6 +16089,12 @@ class Compiler
           if arg_ids.length > 0
             sc = compile_expr(arg_ids[0])
             if mname == "match?"
+ # Issue #869: 2-arg form starts matching at the given byte
+ # offset (negative counts from the end). Without the _at
+ # helper the position was silently dropped.
+              if arg_ids.length >= 2
+                return "sp_re_match_p_at(" + rpat + ", " + sc + ", " + compile_expr_as_int(arg_ids[1]) + ")"
+              end
               return "sp_re_match_p(" + rpat + ", " + sc + ")"
             end
             if mname == "=~"
@@ -15575,7 +16300,7 @@ class Compiler
       if @nd_type[ec_check_recv] == "CallNode" && @nd_name[ec_check_recv] == "with_index" && @nd_block[ec_check_recv] < 0
         ec_check_recv = @nd_receiver[ec_check_recv]
       end
-      if ec_check_recv >= 0 && @nd_type[ec_check_recv] == "CallNode" && @nd_name[ec_check_recv] == "each_cons" && @nd_block[ec_check_recv] < 0
+      if ec_check_recv >= 0 && @nd_type[ec_check_recv] == "CallNode" && (@nd_name[ec_check_recv] == "each_cons" || @nd_name[ec_check_recv] == "each_slice") && @nd_block[ec_check_recv] < 0
         return compile_map_expr(nid, "")
       end
     end
@@ -15665,6 +16390,46 @@ class Compiler
       end
       if mname == "to_s"
         return rc + "->data"
+      end
+ # Issues #740, #741: mutating methods on mutable_str.
+      if mname == "prepend" || mname == "<<" || mname == "concat"
+        arg0_ms = compile_arg0(nid)
+        helper_ms = (mname == "prepend") ? "sp_String_prepend" : "sp_String_append"
+        return "(" + helper_ms + "(" + rc + ", " + arg0_ms + "), " + rc + ")"
+      end
+ # Issue #859: chomp! on mutable_str mutates in place and
+ # returns the receiver (CRuby returns nil if no change; spinel
+ # always returns self -- close-enough subset behaviour). Same
+ # shape for chop! / strip! / lstrip! / rstrip!.
+      if mname == "chomp!" || mname == "chop!" || mname == "strip!" || mname == "lstrip!" || mname == "rstrip!" || mname == "upcase!" || mname == "downcase!"
+        helper_bang = {
+          "chomp!" => "sp_str_chomp",
+          "chop!" => "sp_str_chop",
+          "strip!" => "sp_str_strip",
+          "lstrip!" => "sp_str_lstrip",
+          "rstrip!" => "sp_str_rstrip",
+          "upcase!" => "sp_str_upcase",
+          "downcase!" => "sp_str_downcase",
+        }[mname]
+        return "(sp_String_replace(" + rc + ", " + helper_bang + "(" + rc + "->data)), " + rc + ")"
+      end
+ # `delete_prefix!` / `delete_suffix!` — bang variants of the
+ # non-mutating counterparts. Mutates self in place.
+      if mname == "delete_prefix!" || mname == "delete_suffix!"
+        helper_dp = (mname == "delete_prefix!") ? "sp_str_delete_prefix" : "sp_str_delete_suffix"
+        return "(sp_String_replace(" + rc + ", " + helper_dp + "(" + rc + "->data, " + compile_arg0(nid) + ")), " + rc + ")"
+      end
+      if mname == "insert"
+        args_id_ms = @nd_arguments[nid]
+        if args_id_ms >= 0
+          aargs_ms = get_args(args_id_ms)
+          if aargs_ms.length >= 2
+            return "(sp_String_insert(" + rc + ", " + compile_expr(aargs_ms[0]) + ", " + compile_expr(aargs_ms[1]) + "), " + rc + ")"
+          end
+        end
+      end
+      if mname == "replace"
+        return "(sp_String_replace(" + rc + ", " + compile_arg0(nid) + "), " + rc + ")"
       end
  # For all other string methods, convert via ->data
       r = compile_string_method_expr(nid, mname, rc + "->data")
@@ -15773,6 +16538,21 @@ class Compiler
       if mname == "conjugate" || mname == "conj"
         return "sp_complex_conjugate(" + rc + ")"
       end
+      if mname == "inspect" || mname == "to_s"
+        return "sp_complex_inspect(" + rc + ")"
+      end
+    end
+ # Rational #840 #841: numerator / denominator / inspect.
+    if recv_type == "rational"
+      if mname == "numerator"
+        return "(" + rc + ").num"
+      end
+      if mname == "denominator"
+        return "(" + rc + ").den"
+      end
+      if mname == "inspect" || mname == "to_s"
+        return "sp_rational_inspect(" + rc + ")"
+      end
     end
 
  # Integer methods
@@ -15845,8 +16625,14 @@ class Compiler
         return "sp_sprintf(\"%s: %s\", sp_exc_class_name(" + rc + "), sp_exc_message(" + rc + "))"
       end
       if mname == "backtrace"
- # Spinel doesn't track per-exception backtraces; return nil.
-        return "0"
+ # Issue #895: spinel doesn't track per-exception frames (no
+ # call-stack management in the AOT model -- same rationale as
+ # the deferred `caller` portion of #878). Return an empty
+ # str_array instead of nil so callers' `.first` / `.length`
+ # don't crash.
+        @needs_str_array = 1
+        @needs_gc = 1
+        return "sp_StrArray_new()"
       end
       if mname == "is_a?" || mname == "kind_of?"
         @needs_exc_class_hierarchy = 1
@@ -15968,6 +16754,41 @@ class Compiler
       if mname == "to_s"
         return "\"\""
       end
+ # NilClass#to_i / to_f - constant zero coercions. Issue #871.
+      if mname == "to_i"
+        return "((mrb_int)0)"
+      end
+      if mname == "to_f"
+        return "((mrb_float)0.0)"
+      end
+ # NilClass#to_a returns an empty array. v1 uses int_array since
+ # that's the cheapest concrete type; downstream consumers should
+ # treat it as empty regardless of element type.
+      if mname == "to_a"
+        @needs_int_array = 1
+        @needs_gc = 1
+        return "sp_IntArray_new()"
+      end
+ # NilClass#& / NilClass#| / NilClass#^ — Ruby booleanizes the rhs.
+      if mname == "&"
+        return "FALSE"
+      end
+      if mname == "|" || mname == "^"
+ # arg truthy iff not nil/false in Ruby. compile_expr's int
+ # result is non-zero when truthy; surface the boolean.
+        if @nd_arguments[nid] >= 0
+          aa_or = get_args(@nd_arguments[nid])
+          if aa_or.length > 0
+            arg_e_or = compile_expr(aa_or[0])
+            arg_t_or = infer_type(aa_or[0])
+            if arg_t_or == "nil"
+              return "FALSE"
+            end
+            return "((" + arg_e_or + ") ? TRUE : FALSE)"
+          end
+        end
+        return "FALSE"
+      end
     end
 
  # Tuple methods
@@ -16077,15 +16898,29 @@ class Compiler
  # Unresolved method call on a known receiver. None of the dispatch
  # branches above claimed the shape — typical causes: typo in the
  # method name, missing def on the receiver class, or a Ruby idiom
- # Spinel doesn't support yet. Warn loud at codegen so the user
- # sees the problem instead of just getting a silently-zero-valued
- # binary; emit `0` as the C expression so existing call sites that
- # genuinely rely on the silent fallback (the instance_eval
- # trampoline body, partially-implemented features whose bench/test
- # outputs happen to coincide with `0`) keep compiling. Hard fail
- # would catch more typos but tear up those existing patterns.
+ # Spinel doesn't support yet. Warn loud at codegen and bake a
+ # runtime NoMethodError raise into the expression itself via a
+ # statement-expression. The raise only fires when the expression
+ # is actually evaluated -- so chain-recognition arms (e.g.
+ # `4.times.map { ... }` which generates its own for-loop and
+ # discards the times call) keep working, while genuine
+ # "x.unknown_method" sites surface the bug instead of returning
+ # a silent zero. Issue #727.
+ #
+ # Gate the raise on a *concrete* receiver type. "int" and "poly"
+ # often arise when an ivar / param's type couldn't be inferred
+ # (e.g. `@x = nil` later assigned an obj at runtime); raising
+ # would break the silent-fallback pattern optcarrot etc. depend
+ # on (`@hook && @hook.fire(...)` where @hook starts nil and is
+ # later assigned). Keep the warn for visibility, fall back to
+ # silent 0 on int/poly recvs.
     warn_unresolved_call(mname, base_type(recv_type))
-    "0"
+    rb_unr = base_type(recv_type)
+    if rb_unr == "int" || rb_unr == "poly" || rb_unr == "nil"
+      return "0"
+    end
+    @needs_exc_class_hierarchy = 1
+    "({ sp_raise_cls(\"NoMethodError\", \"undefined method '" + mname + "' for " + rb_unr + "\"); (mrb_int)0; })"
   end
 
   def compile_block_given_expr
@@ -16164,6 +16999,13 @@ class Compiler
     if mname == "__method__"
       return "\"" + @current_method_name + "\""
     end
+ # Issue #878: Kernel#__dir__ -- compile-time dirname of the
+ # source file path baked into every SourceFileNode. `caller`
+ # is intentionally not supported (requires per-call frame
+ # tracking which slows the dispatch hot path).
+    if mname == "__dir__"
+      return c_string_literal(source_file_dirname)
+    end
     if mname == "Integer"
       @needs_setjmp = 1
       args_id = @nd_arguments[nid]
@@ -16193,6 +17035,12 @@ class Compiler
             end
           end
           at = infer_type(a0)
+ # Issue #887: `Integer(s, base)` -- route through the base-aware
+ # strict parser so non-decimal inputs parse correctly and
+ # invalid input still raises a catchable ArgumentError.
+          if arg_ids.length >= 2 && (at == "string" || at == "argv")
+            return "sp_str_to_i_strict_base(" + compile_expr(a0) + ", " + compile_expr_as_int(arg_ids[1]) + ")"
+          end
           if at == "string"
             return "sp_str_to_i_strict(" + compile_expr(a0) + ")"
           end
@@ -16204,6 +17052,7 @@ class Compiler
       return "(mrb_int)(" + compile_arg0(nid) + ")"
     end
     if mname == "Float"
+      @needs_setjmp = 1
       args_id = @nd_arguments[nid]
       if args_id >= 0
         arg_ids = get_args(args_id)
@@ -16211,7 +17060,10 @@ class Compiler
           a0 = arg_ids[0]
           at = infer_type(a0)
           if at == "string" || at == "argv"
-            return "(mrb_float)strtod(" + compile_expr(a0) + ", NULL)"
+ # Issue #888: route through sp_str_to_f_strict so unparseable
+ # input raises ArgumentError (catchable) instead of silently
+ # returning 0.0.
+            return "sp_str_to_f_strict(" + compile_expr(a0) + ")"
           end
           if at == "int"
             return "(mrb_float)(" + compile_expr(a0) + ")"
@@ -16228,6 +17080,49 @@ class Compiler
         end
       end
       return "(mrb_float)(" + compile_arg0(nid) + ")"
+    end
+ # Kernel#String() — coerce via .to_s. nil -> "" per MRI.
+ # Issue #879.
+    if mname == "String"
+      args_id_S = @nd_arguments[nid]
+      if args_id_S >= 0
+        arg_ids_S = get_args(args_id_S)
+        if arg_ids_S.length > 0
+          a0_S = arg_ids_S[0]
+          at_S = infer_type(a0_S)
+          a_e_S = compile_expr(a0_S)
+          if at_S == "string" || at_S == "argv"
+            return a_e_S
+          end
+          if at_S == "int"
+            return "sp_int_to_s(" + a_e_S + ")"
+          end
+          if at_S == "float"
+            return "sp_float_inspect(" + a_e_S + ")"
+          end
+          if at_S == "bool"
+            return "((" + a_e_S + ") ? (&(\"\\xff\" \"true\")[1]) : (&(\"\\xff\" \"false\")[1]))"
+          end
+          if at_S == "nil"
+            return "sp_str_empty"
+          end
+          if at_S == "symbol"
+            return "sp_sym_to_s(" + a_e_S + ")"
+          end
+          if at_S == "bigint"
+            @needs_bigint = 1
+            return "sp_bigint_to_s((sp_Bigint *)" + a_e_S + ")"
+          end
+          if at_S == "mutable_str"
+            return "(" + a_e_S + ")->data"
+          end
+          if at_S == "poly"
+            @needs_rb_value = 1
+            return "sp_poly_to_s(" + a_e_S + ")"
+          end
+        end
+      end
+      return "sp_str_empty"
     end
     if mname == "proc"
       if @nd_block[nid] >= 0
@@ -16360,7 +17255,7 @@ class Compiler
  # Ruby syntax requires `&block` to be the trailing param — a proc-typed
  # slot in any other position is a positional proc argument, not a block
  # param. Mirrors cls_method_has_block_param.
-      ptypes = @meth_param_types[mi].split(",")
+      ptypes = @meth_param_types[mi].split(",", -1)
       has_block_param = (ptypes.length > 0 && ptypes.last == "proc") ? 1 : 0
       if has_block_param == 1
  # Forward the call site's literal block or `&proc_var` into the
@@ -16559,10 +17454,10 @@ class Compiler
             base_rt = cls_method_return(owner_ci, mname)
             base_rt_c = c_type(base_rt)
             rt_ok = 1
-            ovr_list = ovr_pairs.split(";")
+            ovr_list = ovr_pairs.split(";", -1)
             ol = 0
             while ol < ovr_list.length
-              p = ovr_list[ol].split(",")
+              p = ovr_list[ol].split(",", -1)
               cand_owner = p[1].to_i
               cand_rt = cls_method_return(cand_owner, mname)
               if c_type(cand_rt) != base_rt_c
@@ -16586,7 +17481,7 @@ class Compiler
               emit("  switch (" + self_expr + "->cls_id) {")
               ol2 = 0
               while ol2 < ovr_list.length
-                p2 = ovr_list[ol2].split(",")
+                p2 = ovr_list[ol2].split(",", -1)
                 cand_internal_ci = p2[0].to_i
                 cand_cid = cls_id_for_user_internal(cand_internal_ci)
                 cand_owner2 = p2[1].to_i
@@ -16634,7 +17529,7 @@ class Compiler
  # arm below).
         cci = find_class_idx(owning)
         if cci >= 0
-          cmnames = @cls_cmeth_names[cci].split(";")
+          cmnames = @cls_cmeth_names[cci].split(";", -1)
           cmidx = 0
           while cmidx < cmnames.length
             if cmnames[cmidx] == mname
@@ -16668,7 +17563,7 @@ class Compiler
  # instance methods (which set has_self = 1). Resolve sibling
  # cmeths against @cls_cmeth_names directly.
     if @current_class_idx >= 0 && @current_method_has_self == 0
-      cmnames_r = @cls_cmeth_names[@current_class_idx].split(";")
+      cmnames_r = @cls_cmeth_names[@current_class_idx].split(";", -1)
       cmidx_r = 0
       while cmidx_r < cmnames_r.length
         if cmnames_r[cmidx_r] == mname
@@ -16940,7 +17835,7 @@ class Compiler
  # Collect flattened parts of a string concat chain: a + b + c → [a, b, c]
  # Returns compiled expression strings. Only flattens up to 4 parts.
   def collect_concat_chain(nid)
-    parts = "".split(",")
+    parts = "".split(",", -1)
     collect_concat_parts(nid, parts)
     parts
   end
@@ -17192,7 +18087,7 @@ class Compiler
           if module_name_exists(mod_name_eb) == 1
             rconsts_eb = module_acc_resolved(mod_name_eb, inner_mname_eb)
             if rconsts_eb != "" && rconsts_eb != "?"
-              cands_eb = rconsts_eb.split(";")
+              cands_eb = rconsts_eb.split(";", -1)
               ki_eb = 0
               while ki_eb < cands_eb.length
                 cn_eb_ms = cands_eb[ki_eb]
@@ -17205,6 +18100,18 @@ class Compiler
             end
           end
         end
+      end
+    end
+ # Issue #746: `bigint.abs` / `bigint.succ` / `bigint.pred` /
+ # `bigint.divmod` return bigint when the recv is bigint. Without
+ # this arm, expr_emit_is_bigint returns 0 and the caller wraps
+ # the result with sp_bigint_new_int (treating the pointer as
+ # int) -- garbage output.
+    if mn_eb == "abs" || mn_eb == "succ" || mn_eb == "pred" || mn_eb == "next"
+      rcv_abs = @nd_receiver[nid]
+      if rcv_abs >= 0 && (base_type(infer_type(rcv_abs)) == "bigint" ||
+                          expr_emit_is_bigint(rcv_abs) == 1)
+        return 1
       end
     end
     if mn_eb != "+" && mn_eb != "-" && mn_eb != "*" && mn_eb != "/" && mn_eb != "%" && mn_eb != "**" &&
@@ -17460,7 +18367,7 @@ class Compiler
  # later parts evaluate (and may trigger sp_gc_collect).
  # @needs_gc is set in scan_features for any string `+`, ensuring
  # SP_GC_SAVE() is in the function header before we emit roots here.
-          tnames = "".split(",")
+          tnames = "".split(",", -1)
           k = 0
           while k < parts.length
             t = new_temp
@@ -17686,7 +18593,37 @@ class Compiler
               if lt == "mutable_str"
                 recv_c = recv_c + "->data"
               end
-              return "sp_str_format_strarr(" + recv_c + ", " + compile_expr(aargs[0]) + ")"
+ # The simple all-%s helper is fine when the format string
+ # uses only bare %s placeholders. For anything richer
+ # (`%-3s`, `%5s`, ...) box through the poly_array path.
+              if @nd_type[recv] == "StringNode"
+                lit_recv = @nd_unescaped[recv]
+                lit_recv = @nd_content[recv] if lit_recv == ""
+                if str_format_only_simple_s_p(lit_recv) == 1
+                  return "sp_str_format_strarr(" + recv_c + ", " + compile_expr(aargs[0]) + ")"
+                end
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_c + ", sp_StrArray_to_poly_fmt(" + compile_expr(aargs[0]) + "))"
+            end
+ # Heterogeneous / int: poly_array helper handles per-element
+ # type via the runtime box tag. int_array is boxed inline so
+ # the helper sees SP_TAG_INT slots.
+            if rt == "poly_array"
+              recv_pa = compile_expr(recv)
+              if lt == "mutable_str"
+                recv_pa = recv_pa + "->data"
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_pa + ", " + compile_expr(aargs[0]) + ")"
+            end
+            if rt == "int_array"
+              recv_ia = compile_expr(recv)
+              if lt == "mutable_str"
+                recv_ia = recv_ia + "->data"
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_ia + ", sp_IntArray_to_poly(" + compile_expr(aargs[0]) + "))"
             end
           end
         end
@@ -17725,8 +18662,14 @@ class Compiler
               end
               if fi < lit.length
                 c = lit[fi]
+ # Issue #752: every integer conversion specifier needs the `ll`
+ # length modifier so mrb_int (int64) isn't read as int. CRuby's
+ # `%x`, `%o`, `%u`, `%X`, `%b` all operate on Integer, so each
+ # gets the `ll` prefix in spinel's emit.
                 if c == "d" || c == "i"
                   rewritten = rewritten + "lld"
+                elsif c == "x" || c == "X" || c == "o" || c == "u"
+                  rewritten = rewritten + "ll" + c
                 else
                   rewritten = rewritten + c
                 end
@@ -17947,7 +18890,11 @@ class Compiler
         return "(sp_String_append(" + rc + ", " + val + "), " + rc + ")"
       end
       if lt == "string"
-        return "sp_str_concat(" + compile_expr(recv) + ", " + compile_arg0(nid) + ")"
+ # `s << x` on a frozen string literal raises FrozenError per MRI.
+ # spinel string literals are always frozen. The mutable_str arm
+ # above handles the legal case. Issue #886.
+        @needs_exc_class_hierarchy = 1
+        return "({ sp_raise_cls(\"FrozenError\", \"can't modify frozen String\"); " + compile_expr(recv) + "; })"
       end
  # Array `<<` is push, not bit-shift. The compile_call_expr path
  # also has a push branch for direct `arr.push(x)` style calls,
@@ -18113,7 +19060,7 @@ class Compiler
       return @current_method_name[0, cls_idx]
     end
     if @current_class_idx >= 0 && @current_class_idx < @cls_names.length
-      cm = @cls_cmeth_names[@current_class_idx].split(";")
+      cm = @cls_cmeth_names[@current_class_idx].split(";", -1)
       k = 0
       while k < cm.length
         if cm[k] == @current_method_name
@@ -18549,15 +19496,57 @@ class Compiler
   end
 
   def compile_string_method_expr(nid, mname, rc)
- # String#chomp! alias for chomp. Returns the chomped string;
- # the Ruby `nil if no change` mutator semantic isn't preserved
- # (a documented quirk -- spinel strings are immutable so there's
- # nothing to mutate in place). Recurse so the local `mname` isn't
- # reassigned (writing back to a parameter triggers a body-usage
- # widening pass that lands warn_unresolved_call's mname as poly
- # in the bootstrap build). Issue #619 puzzle 10.
-    if mname == "chomp!"
-      return compile_string_method_expr(nid, "chomp", rc)
+ # chomp! / chop! / etc. on a frozen string literal raise
+ # FrozenError below; the mutable_str arm in compile_call_expr
+ # handles the legal case before reaching here. Issues #859,
+ # #886.
+ # Comparable#clamp on string. Issue #899.
+    if mname == "clamp"
+      args_id_clp = @nd_arguments[nid]
+      if args_id_clp >= 0
+        a_clp = get_args(args_id_clp)
+        if a_clp.length >= 2
+          lo = compile_expr(a_clp[0])
+          hi = compile_expr(a_clp[1])
+          tmp_clp = new_temp
+ # Single-evaluate rc/lo/hi into temps so strcmp side effects
+ # don't fire twice when the clamp branches across the if/else.
+          return "({ const char *" + tmp_clp + " = " + rc + "; const char *_lo = " + lo + "; const char *_hi = " + hi + "; strcmp(" + tmp_clp + ", _lo) < 0 ? _lo : (strcmp(" + tmp_clp + ", _hi) > 0 ? _hi : " + tmp_clp + "); })"
+        end
+      end
+    end
+ # String mutating methods called on a frozen string literal (recv
+ # type "string", not "mutable_str"). MRI raises FrozenError;
+ # spinel string literals are always frozen. The mutable_str arm
+ # at compile_call_expr handles the legal case before reaching
+ # here. Issue #886. The expression still yields a value so
+ # downstream type inference doesn't break -- the raise is a
+ # non-returning C call inside a stmt-expression.
+    if mname == "insert" || mname == "prepend" || mname == "<<" || mname == "concat" || mname == "replace" || mname == "clear" ||
+       mname == "chomp!" || mname == "chop!" || mname == "upcase!" || mname == "downcase!" || mname == "swapcase!" || mname == "capitalize!" ||
+       mname == "sub!" || mname == "gsub!" || mname == "squeeze!" || mname == "strip!" || mname == "lstrip!" || mname == "rstrip!" ||
+       mname == "tr!" || mname == "tr_s!" || mname == "delete!" || mname == "reverse!" || mname == "succ!" || mname == "next!"
+      @needs_exc_class_hierarchy = 1
+      return "({ sp_raise_cls(\"FrozenError\", \"can't modify frozen String\"); " + rc + "; })"
+    end
+ # String#<=> dispatches to strcmp clamped to -1/0/1.
+ # Issue #900. Symmetric to the int / sym arms.
+    if mname == "<=>"
+      args_id_scmp = @nd_arguments[nid]
+      if args_id_scmp >= 0
+        a_scmp = get_args(args_id_scmp)
+        if a_scmp.length >= 1
+          arg_t_scmp = infer_type(a_scmp[0])
+          if arg_t_scmp == "string" || arg_t_scmp == "mutable_str"
+            arg_e_scmp = compile_expr(a_scmp[0])
+            if arg_t_scmp == "mutable_str"
+              arg_e_scmp = "(" + arg_e_scmp + ")->data"
+            end
+            cmp_scmp = "strcmp(" + rc + ", " + arg_e_scmp + ")"
+            return "((" + cmp_scmp + ") < 0 ? (mrb_int)-1 : ((" + cmp_scmp + ") > 0 ? (mrb_int)1 : (mrb_int)0))"
+          end
+        end
+      end
     end
  # is_a? / kind_of? / instance_of? for primitive String. Decide at
  # compile time based on Ruby's class hierarchy (String < Comparable
@@ -18590,6 +19579,35 @@ class Compiler
         end
       end
       return "FALSE"
+    end
+ # String#each_char returns the receiver. Issue #866. Mirrors the
+ # statement-level handler but emits a value (`rc`) so callers
+ # like `s = "hi".each_char { ... }` get the string back.
+    if mname == "each_char" && @nd_block[nid] >= 0
+      bp_ec = get_block_param(nid, 0)
+      if bp_ec == ""
+        bp_ec = "_c"
+      end
+      tmp_ec = new_temp
+      src_tmp_ec = new_temp
+      cn_tmp_ec = new_temp
+      char_buf_ec = new_temp
+      emit("  const char *" + src_tmp_ec + " = " + rc + ";")
+      emit("  for (mrb_int " + tmp_ec + " = 0; " + src_tmp_ec + "[" + tmp_ec + "]; ) {")
+      emit("    int " + cn_tmp_ec + " = sp_utf8_advance(" + src_tmp_ec + " + " + tmp_ec + ");")
+      emit("    char *" + char_buf_ec + " = sp_str_alloc_raw(" + cn_tmp_ec + " + 1);")
+      emit("    memcpy(" + char_buf_ec + ", " + src_tmp_ec + " + " + tmp_ec + ", " + cn_tmp_ec + ");")
+      emit("    " + char_buf_ec + "[" + cn_tmp_ec + "] = 0;")
+      emit("    const char *lv_" + bp_ec + " = " + char_buf_ec + ";")
+      @indent = @indent + 1
+      push_scope
+      declare_var(bp_ec, "string")
+      compile_stmts_body(@nd_body[@nd_block[nid]])
+      pop_scope
+      @indent = @indent - 1
+      emit("    " + tmp_ec + " += " + cn_tmp_ec + ";")
+      emit("  }")
+      return rc
     end
  # String#each_byte returns the receiver per CRuby. The statement-level
  # handler at compile_block_iteration_stmt emits the loop for `do …
@@ -18627,12 +19645,26 @@ class Compiler
       return "sp_str_length(" + rc + ")"
     end
     if mname == "to_i"
+ # `"ff".to_i(16)` -- base-aware parse via sp_str_to_i_base.
+ # Issue #883. The 0-arg form stays on sp_str_to_i_cruby (no
+ # base prefix recognition; CRuby's plain `to_i` ignores `0x`).
+      if @nd_arguments[nid] >= 0
+        a_ti = get_args(@nd_arguments[nid])
+        if a_ti.length > 0
+          return "sp_str_to_i_base(" + rc + ", " + compile_expr_as_int(a_ti[0]) + ")"
+        end
+      end
       return "sp_str_to_i_cruby(" + rc + ")"
     end
     if mname == "to_f"
       return "atof(" + rc + ")"
     end
-    if mname == "inspect"
+    if mname == "inspect" || mname == "dump"
+ # String#dump and #inspect render the same quoted form for the
+ # subset of characters sp_str_inspect already handles (basic
+ # backslash escapes + \xHH for non-printable). CRuby's dump
+ # adds a forced ASCII-7 fallback for high-byte sequences; that
+ # divergence is documented but rare in practice.
       return "sp_str_inspect(" + rc + ")"
     end
     if mname == "upcase"
@@ -18668,12 +19700,32 @@ class Compiler
       register_tuple_type(tt)
       @needs_gc = 1
       tname = tuple_c_name(tt)
-      sep = compile_arg0(nid)
       tmp = new_temp
       emit("  " + tname + " *" + tmp + " = (" + tname + " *)sp_gc_alloc(sizeof(" + tname + "), NULL, " + tuple_scan_name(tt) + ");")
-      emit("  { const char *_p = strstr(" + rc + ", " + sep + ");")
-      emit("    if (_p) { " + tmp + "->_0 = sp_str_substr(" + rc + ", 0, _p - " + rc + "); " + tmp + "->_1 = " + sep + "; " + tmp + "->_2 = sp_str_substr(" + rc + ", _p - " + rc + " + strlen(" + sep + "), strlen(_p) - strlen(" + sep + ")); }")
-      emit("    else { " + tmp + "->_0 = " + rc + "; " + tmp + "->_1 = \"\"; " + tmp + "->_2 = \"\"; } }")
+ # Issue #854: regex arg uses re_exec to locate the match;
+ # without this the string-only path passed a regex pattern
+ # pointer to strstr and segfaulted.
+      arg0_part = -1
+      if @nd_arguments[nid] >= 0
+        a_part = get_args(@nd_arguments[nid])
+        if a_part.length > 0
+          arg0_part = a_part[0]
+        end
+      end
+      rpat_part = arg0_part >= 0 ? regex_pat_c_expr(arg0_part) : ""
+      if rpat_part != ""
+        @needs_regexp = 1
+        emit("  { int _caps[2]; if (re_exec(" + rpat_part + ", " + rc + ", strlen(" + rc + "), 0, _caps, 2) > 0) {")
+        emit("    " + tmp + "->_0 = sp_str_substr(" + rc + ", 0, _caps[0]);")
+        emit("    " + tmp + "->_1 = sp_str_substr(" + rc + ", _caps[0], _caps[1] - _caps[0]);")
+        emit("    " + tmp + "->_2 = sp_str_substr(" + rc + ", _caps[1], strlen(" + rc + ") - _caps[1]);")
+        emit("  } else { " + tmp + "->_0 = " + rc + "; " + tmp + "->_1 = sp_str_empty; " + tmp + "->_2 = sp_str_empty; } }")
+      else
+        sep = compile_arg0(nid)
+        emit("  { const char *_p = strstr(" + rc + ", " + sep + ");")
+        emit("    if (_p) { " + tmp + "->_0 = sp_str_substr(" + rc + ", 0, _p - " + rc + "); " + tmp + "->_1 = " + sep + "; " + tmp + "->_2 = sp_str_substr(" + rc + ", _p - " + rc + " + strlen(" + sep + "), strlen(_p) - strlen(" + sep + ")); }")
+        emit("    else { " + tmp + "->_0 = " + rc + "; " + tmp + "->_1 = sp_str_empty; " + tmp + "->_2 = sp_str_empty; } }")
+      end
       return tmp
     end
     if mname == "rpartition"
@@ -18696,11 +19748,8 @@ class Compiler
     if mname == "encode" || mname == "force_encoding" || mname == "b"
       return rc
     end
- # `.encoding` -- spinel doesn't model Encoding objects; return a
- # plain string label so `puts s.encoding` prints "UTF-8". Issue
- # #723.
     if mname == "encoding"
-      return "((const char*)\"UTF-8\")"
+      return "sp_encoding_utf8()"
     end
     if mname == "strip"
       return "sp_str_strip(" + rc + ")"
@@ -18708,14 +19757,17 @@ class Compiler
     if mname == "chomp"
  # chomp(nil) is a no-op in CRuby (nil arg means "no
  # separator", returning the receiver unchanged). chomp("")
- # is paragraph mode (strip trailing newlines only); the
- # no-arg / non-nil arg path strips the default separator.
- # Issue #555 case 10.
+ # is paragraph mode (strip trailing newlines only); chomp("!")
+ # strips that explicit suffix. Default form (no arg) strips
+ # \n / \r\n / \r. Issue #555 case 10, #881.
       args_id_cm = @nd_arguments[nid]
       if args_id_cm >= 0
         a_cm = get_args(args_id_cm)
-        if a_cm.length > 0 && @nd_type[a_cm[0]] == "NilNode"
-          return rc
+        if a_cm.length > 0
+          if @nd_type[a_cm[0]] == "NilNode"
+            return rc
+          end
+          return "sp_str_chomp_sep(" + rc + ", " + compile_expr(a_cm[0]) + ")"
         end
       end
       return "sp_str_chomp(" + rc + ")"
@@ -18731,7 +19783,7 @@ class Compiler
       if args_id >= 0
         aargs = get_args(args_id)
         if aargs.length > 1
-          parts = "".split(",")
+          parts = "".split(",", -1)
           k = 0
           while k < aargs.length
             parts.push("sp_str_start_with(" + rc + ", " + compile_expr(aargs[k]) + ")")
@@ -18747,7 +19799,7 @@ class Compiler
       if args_id >= 0
         aargs = get_args(args_id)
         if aargs.length > 1
-          parts = "".split(",")
+          parts = "".split(",", -1)
           k = 0
           while k < aargs.length
             parts.push("sp_str_end_with(" + rc + ", " + compile_expr(aargs[k]) + ")")
@@ -18823,6 +19875,95 @@ class Compiler
       end
       return "sp_str_include(" + rc + ", " + compile_arg0(nid) + ")"
     end
+    if mname == "gsub" || mname == "sub"
+ # Issue #849: block form. The block receives each matched
+ # substring and returns its replacement. Inline the re_exec
+ # loop and splice the block's result into a growing buffer.
+      if @nd_block[nid] >= 0
+        args_id_gb = @nd_arguments[nid]
+        if args_id_gb >= 0
+          a_gb = get_args(args_id_gb)
+          if a_gb.length >= 1
+            rpat_gb = regex_pat_c_expr(a_gb[0])
+            if rpat_gb != ""
+              bp_gb = get_block_param(nid, 0)
+              if bp_gb == ""
+                bp_gb = "_m"
+              end
+              out_gb = new_temp
+              cap_gb = new_temp
+              olen_gb = new_temp
+              pos_gb = new_temp
+              caps_gb = new_temp
+              n_gb = new_temp
+              before_gb = new_temp
+              mlen_gb = new_temp
+              mbuf_gb = new_temp
+              rep_gb = new_temp
+              rlen_gb = new_temp
+              slen_gb = new_temp
+              did_gb = new_temp
+              rest_gb = new_temp
+              emit("  size_t " + cap_gb + " = strlen(" + rc + ") * 2 + 64;")
+              emit("  char *" + out_gb + " = sp_str_alloc_raw(" + cap_gb + ");")
+              emit("  size_t " + olen_gb + " = 0;")
+              emit("  int64_t " + pos_gb + " = 0;")
+              emit("  int64_t " + slen_gb + " = (int64_t)strlen(" + rc + ");")
+              emit("  int " + caps_gb + "[64];")
+              if mname == "sub"
+                emit("  int " + did_gb + " = 0;")
+              end
+              emit("  while (" + pos_gb + " <= " + slen_gb + ") {")
+              if mname == "sub"
+                emit("    if (" + did_gb + ") break;")
+              end
+              emit("    int " + n_gb + " = re_exec(" + rpat_gb + ", " + rc + ", " + slen_gb + ", " + pos_gb + ", " + caps_gb + ", 64);")
+              emit("    if (" + n_gb + " <= 0 || " + caps_gb + "[0] < 0) break;")
+              emit("    size_t " + before_gb + " = " + caps_gb + "[0] - " + pos_gb + ";")
+              emit("    int " + mlen_gb + " = " + caps_gb + "[1] - " + caps_gb + "[0];")
+              emit("    char *" + mbuf_gb + " = sp_str_alloc_raw(" + mlen_gb + " + 1);")
+              emit("    memcpy(" + mbuf_gb + ", " + rc + " + " + caps_gb + "[0], " + mlen_gb + ");")
+              emit("    " + mbuf_gb + "[" + mlen_gb + "] = 0;")
+              emit("    sp_re_set_captures(" + rc + ", " + caps_gb + ", " + n_gb + " / 2);")
+              emit("    const char *lv_" + bp_gb + " = " + mbuf_gb + ";")
+              @indent = @indent + 1
+              push_scope
+              declare_var(bp_gb, "string")
+              bbody_gb = @nd_body[@nd_block[nid]]
+              bexpr_gb = "\"\""
+              if bbody_gb >= 0
+                bs_gb = get_stmts(bbody_gb)
+                k_gb = 0
+                while k_gb < bs_gb.length - 1
+                  compile_stmt(bs_gb[k_gb])
+                  k_gb = k_gb + 1
+                end
+                if bs_gb.length > 0
+                  bexpr_gb = compile_expr(bs_gb.last)
+                end
+              end
+              emit("    const char *" + rep_gb + " = " + bexpr_gb + ";")
+              pop_scope
+              @indent = @indent - 1
+              emit("    size_t " + rlen_gb + " = strlen(" + rep_gb + ");")
+              emit("    if (" + olen_gb + " + " + before_gb + " + " + rlen_gb + " + 1 >= " + cap_gb + ") { " + cap_gb + " = (" + olen_gb + " + " + before_gb + " + " + rlen_gb + ") * 2 + 64; " + out_gb + " = (char*)realloc(" + out_gb + ", " + cap_gb + "); }")
+              emit("    memcpy(" + out_gb + " + " + olen_gb + ", " + rc + " + " + pos_gb + ", " + before_gb + "); " + olen_gb + " += " + before_gb + ";")
+              emit("    memcpy(" + out_gb + " + " + olen_gb + ", " + rep_gb + ", " + rlen_gb + "); " + olen_gb + " += " + rlen_gb + ";")
+              emit("    " + pos_gb + " = " + caps_gb + "[1]; if (" + caps_gb + "[0] == " + caps_gb + "[1]) " + pos_gb + "++;")
+              if mname == "sub"
+                emit("    " + did_gb + " = 1;")
+              end
+              emit("  }")
+              emit("  { size_t " + rest_gb + " = " + slen_gb + " - " + pos_gb + ";")
+              emit("    if (" + olen_gb + " + " + rest_gb + " + 1 >= " + cap_gb + ") { " + cap_gb + " = " + olen_gb + " + " + rest_gb + " + 64; " + out_gb + " = (char*)realloc(" + out_gb + ", " + cap_gb + "); }")
+              emit("    memcpy(" + out_gb + " + " + olen_gb + ", " + rc + " + " + pos_gb + ", " + rest_gb + "); " + olen_gb + " += " + rest_gb + ";")
+              emit("    " + out_gb + "[" + olen_gb + "] = 0; }")
+              return out_gb
+            end
+          end
+        end
+      end
+    end
     if mname == "gsub"
       args_id = @nd_arguments[nid]
       if args_id >= 0
@@ -18834,10 +19975,15 @@ class Compiler
  # str_str_hash second arg and route to the hash-aware
  # runtime helper. The generic sp_re_gsub expects a const
  # char * for `rep` and would otherwise smuggle the hash
- # pointer through, producing garbage output.
+ # pointer through, producing garbage output. KeywordHashNode
+ # (bare `key => val` arg) is built inline -- see Issue #910.
             rep_t = infer_type(a[1])
             if rep_t == "str_str_hash"
               return "sp_re_gsub_str_str_hash(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+            end
+            kh_gsub = sub_hash_arg_str_str(a[1])
+            if kh_gsub != ""
+              return "sp_re_gsub_str_str_hash(" + rpat + ", " + rc + ", " + kh_gsub + ")"
             end
             return "sp_re_gsub(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
           end
@@ -18853,7 +19999,30 @@ class Compiler
         if a.length >= 2
           rpat = regex_pat_c_expr(a[0])
           if rpat != ""
+ # Issue #910: sub(regex, hash) — same hash-lookup form
+ # as gsub but only replaces the first match. Bare
+ # `key => val` is parsed as KeywordHashNode; build a
+ # str_str_hash inline so the runtime helper sees a
+ # real hash pointer (compile_expr on KeywordHashNode
+ # returns 0 / NULL → SEGV in the runtime helper).
+            rep_t_sub = infer_type(a[1])
+            if rep_t_sub == "str_str_hash"
+              return "sp_re_sub_str_str_hash(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+            end
+            kh_h_sub = sub_hash_arg_str_str(a[1])
+            if kh_h_sub != ""
+              return "sp_re_sub_str_str_hash(" + rpat + ", " + rc + ", " + kh_h_sub + ")"
+            end
             return "sp_re_sub(" + rpat + ", " + rc + ", " + compile_expr(a[1]) + ")"
+          end
+ # sub(string, hash) — literal-pattern + hash replacement.
+          rep_t_sub2 = infer_type(a[1])
+          if rep_t_sub2 == "str_str_hash"
+            return "sp_str_sub_str_str_hash(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
+          end
+          kh_str_h_sub = sub_hash_arg_str_str(a[1])
+          if kh_str_h_sub != ""
+            return "sp_str_sub_str_str_hash(" + rc + ", " + compile_expr(a[0]) + ", " + kh_str_h_sub + ")"
           end
           return "sp_str_sub(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
         end
@@ -18903,12 +20072,13 @@ class Compiler
  # narrowing works the same as `s.index`. Issue #645.
       return "sp_str_rindex_opt(" + rc + ", " + compile_arg0(nid) + ")"
     end
-    if mname == "tr"
+    if mname == "tr" || mname == "tr_s"
       args_id = @nd_arguments[nid]
       if args_id >= 0
         a = get_args(args_id)
         if a.length >= 2
-          return "sp_str_tr(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
+          helper_tr = mname == "tr_s" ? "sp_str_tr_s" : "sp_str_tr"
+          return helper_tr + "(" + rc + ", " + compile_expr(a[0]) + ", " + compile_expr(a[1]) + ")"
         end
       end
       return rc
@@ -19041,6 +20211,12 @@ class Compiler
       @needs_gc = 1
       return "sp_str_split(" + rc + ", \"\")"
     end
+ # Issue #903: String#codepoints returns int_array of codepoints.
+    if mname == "codepoints"
+      @needs_int_array = 1
+      @needs_gc = 1
+      return "sp_str_codepoints(" + rc + ")"
+    end
     if mname == "bytes"
       @needs_int_array = 1
       @needs_gc = 1
@@ -19068,13 +20244,26 @@ class Compiler
       end
       return "sp_str_bytes(" + rc + ")"
     end
+ # String#unpack — returns a poly_array of boxed elements
+ # (ints for numeric specs, strings for a/A/Z). Dispatches to
+ # sp_str_unpack (lib/sp_pack.c, libspinel_rt.a).
+    if mname == "unpack"
+      args_id_up = @nd_arguments[nid]
+      if args_id_up >= 0
+        a_up = get_args(args_id_up)
+        if a_up.length >= 1
+          @needs_rb_value = 1
+          return "sp_str_unpack(" + rc + ", " + compile_expr(a_up[0]) + ")"
+        end
+      end
+    end
     if mname == "hex"
       return "((mrb_int)strtoll(" + rc + ", NULL, 16))"
     end
     if mname == "oct"
       return "((mrb_int)strtoll(" + rc + ", NULL, 8))"
     end
-    if mname == "tr"
+    if mname == "tr" || mname == "tr_s"
       args_id = @nd_arguments[nid]
       arg1 = "\"\""
       if args_id >= 0
@@ -19083,10 +20272,37 @@ class Compiler
           arg1 = compile_expr(a[1])
         end
       end
-      return "sp_str_tr(" + rc + ", " + compile_arg0(nid) + ", " + arg1 + ")"
+ # Issue #902: tr_s squeezes adjacent identical translated chars.
+      helper = mname == "tr_s" ? "sp_str_tr_s" : "sp_str_tr"
+      return helper + "(" + rc + ", " + compile_arg0(nid) + ", " + arg1 + ")"
     end
     if mname == "delete"
       return "sp_str_delete(" + rc + ", " + compile_arg0(nid) + ")"
+    end
+    if mname == "crypt"
+ # 1-arg form (salt). 0-arg falls through (CRuby raises but
+ # spinel keeps the contract permissive — empty salt = "..").
+      args_id_cr = @nd_arguments[nid]
+      salt_cr = "(&(\"\\xff\" \"..\")[1])"
+      if args_id_cr >= 0
+        a_cr = get_args(args_id_cr)
+        if a_cr.length > 0
+          salt_cr = compile_expr(a_cr[0])
+        end
+      end
+      return "sp_str_crypt(" + rc + ", " + salt_cr + ")"
+    end
+    if mname == "scrub"
+ # 1-arg: replacement string. 0-arg: NULL (helper falls back to U+FFFD).
+      args_id_sc = @nd_arguments[nid]
+      rep_sc = "NULL"
+      if args_id_sc >= 0
+        a_sc = get_args(args_id_sc)
+        if a_sc.length > 0
+          rep_sc = compile_expr(a_sc[0])
+        end
+      end
+      return "sp_str_scrub(" + rc + ", " + rep_sc + ")"
     end
     if mname == "squeeze"
       return "sp_str_squeeze(" + rc + ")"
@@ -19190,24 +20406,53 @@ class Compiler
   end
 
   def compile_range_method_expr(nid, mname, rc)
-    if mname == "first"
+    if mname == "first" || mname == "begin" || mname == "min"
       return rc + ".first"
     end
-    if mname == "last"
+    if mname == "last" || mname == "end" || mname == "max"
       return rc + ".last"
     end
- # include? / cover? on a numeric range reduce to first <= x <= last
- # (inclusive form). The two methods are identical for numeric ranges
- # so they share the same emission. Exclude_end isn't tracked in the
- # runtime sp_Range struct; non-literal receivers fall back to the
- # inclusive form (matches length/size).
+ # String-range form: `("a".."z").include?("m")`. sp_Range only
+ # holds int fields, so a string-typed RangeNode receiver can't
+ # round-trip through it. When the receiver is a literal
+ # RangeNode with String children, ignore `rc` and emit inline
+ # strcmp bounds. Non-literal string ranges fall through to the
+ # numeric path (which still mis-compiles for them — those are
+ # explicitly outside the supported subset for now).
     if mname == "include?" || mname == "cover?" || mname == "==="
- # Range#=== is the case-when membership operator and behaves like
- # cover? for numeric ranges (Ruby docs: "tests for membership").
+      lit_rg = resolve_literal_range_recv(nid)
+      if lit_rg >= 0
+        l_nid = @nd_left[lit_rg]
+        r_nid = @nd_right[lit_rg]
+        if l_nid >= 0 && r_nid >= 0 && infer_type(l_nid) == "string" && infer_type(r_nid) == "string"
+          arg_s = compile_arg0(nid)
+          left_s = compile_expr(l_nid)
+          right_s = compile_expr(r_nid)
+          op_rhs = (range_excl_end(lit_rg) == 1) ? "< 0" : "<= 0"
+          return "(strcmp(" + arg_s + ", " + left_s + ") >= 0 && strcmp(" + arg_s + ", " + right_s + ") " + op_rhs + ")"
+        end
+      end
       tmp = new_temp
       emit("  sp_Range " + tmp + " = " + rc + ";")
       arg = compile_arg0_as_int(nid)
       return "(" + arg + " >= " + tmp + ".first && " + arg + " <= " + tmp + ".last)"
+    end
+    if mname == "overlap?"
+ # `(a..b).overlap?(c..d)` for two numeric ranges reduces to
+ # `a <= d && c <= b`. The arg must itself be a range (literal
+ # or evaluated) — compile to an sp_Range struct.
+      args_id_ov = @nd_arguments[nid]
+      if args_id_ov >= 0
+        a_ov = get_args(args_id_ov)
+        if a_ov.length >= 1
+          self_tmp = new_temp
+          other_tmp = new_temp
+          emit("  sp_Range " + self_tmp + " = " + rc + ";")
+          emit("  sp_Range " + other_tmp + " = " + compile_expr(a_ov[0]) + ";")
+          return "(" + self_tmp + ".first <= " + other_tmp + ".last && " + other_tmp + ".first <= " + self_tmp + ".last)"
+        end
+      end
+      return "FALSE"
     end
     if mname == "to_a"
       @needs_int_array = 1
@@ -19256,6 +20501,23 @@ class Compiler
  # unresolved-call warning and emits literal 0.
     if (mname == "any?" || mname == "all?" || mname == "none?" || mname == "one?") && @nd_block[nid] >= 0
       return compile_array_predicate_block(nid, rc, "range", mname)
+    end
+ # `(a..b).step(k)` -- returns an IntArray of a, a+k, ... up to b.
+ # Without a block; block form is rarer and stays unhandled.
+ # Issue #731.
+    if mname == "step" && @nd_block[nid] < 0
+      @needs_int_array = 1
+      @needs_gc = 1
+      step_arg = compile_arg0_as_int(nid)
+      range_nid_step = resolve_literal_range_recv(nid)
+      if range_nid_step >= 0
+        rright_step = compile_expr(@nd_right[range_nid_step])
+        if range_excl_end(range_nid_step) == 1
+          rright_step = "(" + rright_step + ") - 1"
+        end
+        return "sp_IntArray_from_range_step(" + compile_expr(@nd_left[range_nid_step]) + ", " + rright_step + ", " + step_arg + ")"
+      end
+      return "sp_IntArray_from_range_step(" + rc + ".first, " + rc + ".last, " + step_arg + ")"
     end
     ""
   end
@@ -19464,8 +20726,26 @@ class Compiler
     if mname == "to_f"
       return "(mrb_float)(" + rc + ")"
     end
-    if mname == "abs"
+    if mname == "abs" || mname == "magnitude"
       return "((" + rc + ") < 0 ? -(" + rc + ") : (" + rc + "))"
+    end
+    if mname == "modulo"
+      return "sp_imod(" + rc + ", " + compile_arg0(nid) + ")"
+    end
+    if mname == "remainder"
+ # Ruby's Integer#remainder uses truncated division (C `%`),
+ # which differs from `%` (Ruby) / sp_imod (floored division)
+ # for mixed-sign operands: -7.remainder(3) == -1.
+      arg_rem = compile_arg0(nid)
+      return "((" + rc + ") - (((" + rc + ") / (" + arg_rem + ")) * (" + arg_rem + ")))"
+    end
+ # Integer#size: bytes used to represent the integer. Spinel
+ # stores mrb_int as int64, so always 8 on every supported
+ # target. CRuby distinguishes Fixnum (machine word) from Bignum
+ # (variable), but spinel's fixnum range is the whole 64-bit
+ # space anyway. Issue #860.
+    if mname == "size"
+      return "8"
     end
     if mname == "even?"
       return "((" + rc + ") % 2 == 0)"
@@ -19486,11 +20766,35 @@ class Compiler
     if mname == "zero?"
       return "((" + rc + ") == 0)"
     end
+ # Integer#nonzero?: returns nil for 0, self otherwise. Uses the
+ # int? nullable representation (SP_INT_NIL sentinel for nil).
+ # Issue #874.
+    if mname == "nonzero?"
+      return "((" + rc + ") == 0 ? SP_INT_NIL : (" + rc + "))"
+    end
     if mname == "gcd"
       return "sp_gcd(" + rc + ", " + compile_arg0(nid) + ")"
     end
     if mname == "lcm"
       return "sp_lcm(" + rc + ", " + compile_arg0(nid) + ")"
+    end
+ # Integer#quo: returns a Rational. Issue #872.
+    if mname == "quo"
+      return "sp_rational_new(" + rc + ", " + compile_arg0(nid) + ")"
+    end
+ # Integer#gcdlcm: [gcd, lcm]. Emitted as a tuple value via the
+ # same registered-tuple path divmod uses. Issue #894.
+    if mname == "gcdlcm"
+      tt_gl = "tuple:int,int"
+      register_tuple_type(tt_gl)
+      @needs_gc = 1
+      name_gl = tuple_c_name(tt_gl)
+      arg_gl = compile_arg0(nid)
+      tmp_gl = new_temp
+      emit("  " + name_gl + " *" + tmp_gl + " = (" + name_gl + " *)sp_gc_alloc(sizeof(" + name_gl + "), NULL, " + tuple_scan_name(tt_gl) + ");")
+      emit("  " + tmp_gl + "->_0 = sp_gcd(" + rc + ", " + arg_gl + ");")
+      emit("  " + tmp_gl + "->_1 = sp_lcm(" + rc + ", " + arg_gl + ");")
+      return tmp_gl
     end
     if mname == "ceildiv"
       return "sp_ceildiv(" + rc + ", " + compile_arg0(nid) + ")"
@@ -19554,6 +20858,20 @@ class Compiler
           return "(((" + rc + ") >> (" + idx + ")) & 1)"
         end
       end
+    end
+ # Integer#times / upto / downto in expression position. The stmt
+ # form is handled by compile_block_iteration_stmt; the expression
+ # form needs the same loop emit but a value too -- return self
+ # per MRI. Issue #877.
+    if (mname == "times" || mname == "upto" || mname == "downto") && @nd_block[nid] >= 0
+      if mname == "times"
+        compile_times_block(nid)
+      elsif mname == "upto"
+        compile_upto_block(nid)
+      else
+        compile_downto_block(nid)
+      end
+      return rc
     end
     ""
   end
@@ -19822,8 +21140,8 @@ class Compiler
         heterogeneous = 1
       end
  # Compile all zip arguments
-      arg_rcs = "".split(",")
-      arg_types = "".split(",")
+      arg_rcs = "".split(",", -1)
+      arg_types = "".split(",", -1)
       k = 0
       while k < aargs.length
         arg_rcs.push(compile_expr(aargs[k]))
@@ -19837,7 +21155,7 @@ class Compiler
       emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < sp_" + pfx_recv + "_length(" + rc + "); " + itmp + "++) {")
       if heterogeneous == 1
  # Build tuple type
-        parts = "".split(",")
+        parts = "".split(",", -1)
         parts.push(elem_type_of_array(recv_type))
         k = 0
         while k < arg_types.length
@@ -20044,6 +21362,9 @@ class Compiler
     if (mname == "find" || mname == "detect") && @nd_block[nid] >= 0
       return compile_array_find_block(nid, rc, recv_type)
     end
+    if mname == "find_index" && @nd_block[nid] >= 0
+      return compile_array_find_index_block(nid, rc, recv_type)
+    end
     if mname == "filter_map" && @nd_block[nid] >= 0
       return compile_array_filter_map(nid, rc, recv_type)
     end
@@ -20129,10 +21450,206 @@ class Compiler
  # Array methods
     if recv_type == "int_array" || recv_type == "sym_array"
       if mname == "length" || mname == "size"
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_IntArray_length(" + rc + ")"
+      end
+ # `arr.values_at(i, j, ...)` -- pick elements at the given
+ # indices, return a fresh array of the same element type.
+ # Issue #742.
+      if mname == "values_at"
+        @needs_int_array = 1
+        @needs_gc = 1
+        tmp_va = new_temp
+        emit("  sp_IntArray *" + tmp_va + " = sp_IntArray_new();")
+        va_args = @nd_arguments[nid]
+        if va_args >= 0
+          va_ids = get_args(va_args)
+          va_k = 0
+          while va_k < va_ids.length
+            emit("  sp_IntArray_push(" + tmp_va + ", sp_IntArray_get(" + rc + ", " + compile_expr(va_ids[va_k]) + "));")
+            va_k = va_k + 1
+          end
+        end
+        return tmp_va
+      end
+ # `arr.combination(k)` -- ordered k-element combinations as a
+ # PtrArray of IntArrays. Issue #742.
+      if mname == "combination"
+        @needs_int_array = 1
+        @needs_gc = 1
+        return "sp_IntArray_combination(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+ # `arr.product(other)` for two int_arrays — 2-arg Cartesian
+ # product via the runtime helper.
+      if mname == "product"
+        args_id_pr = @nd_arguments[nid]
+        if args_id_pr >= 0
+          a_pr = get_args(args_id_pr)
+          if a_pr.length == 1 && infer_type(a_pr[0]) == "int_array"
+            @needs_int_array = 1
+            @needs_gc = 1
+            return "sp_IntArray_product(" + rc + ", " + compile_expr(a_pr[0]) + ")"
+          end
+        end
+      end
+      if mname == "permutation"
+        @needs_int_array = 1
+        @needs_gc = 1
+        return "sp_IntArray_permutation(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+ # `arr.slice_when { |a, b| pred }` materialises an array of
+ # contiguous chunks split where the block predicate is true.
+ # `.to_a` on the result is a no-op (int_array_ptr_array).
+      if mname == "slice_when" && @nd_block[nid] >= 0
+        @needs_int_array = 1
+        @needs_gc = 1
+        out_sw = new_temp
+        cur_sw = new_temp
+        ii_sw = new_temp
+        prev_sw = new_temp
+        has_prev_sw = new_temp
+        cur_val_sw = new_temp
+        emit("  sp_PtrArray *" + out_sw + " = sp_PtrArray_new();")
+        emit("  SP_GC_ROOT(" + out_sw + ");")
+        emit("  sp_IntArray *" + cur_sw + " = sp_IntArray_new();")
+        emit("  SP_GC_ROOT(" + cur_sw + ");")
+        emit("  mrb_int " + prev_sw + " = 0;")
+        emit("  int " + has_prev_sw + " = 0;")
+        emit("  for (mrb_int " + ii_sw + " = 0; " + ii_sw + " < sp_IntArray_length(" + rc + "); " + ii_sw + "++) {")
+        emit("    mrb_int " + cur_val_sw + " = sp_IntArray_get(" + rc + ", " + ii_sw + ");")
+        bp_a_sw = get_block_param(nid, 0)
+        bp_a_sw = "_a" if bp_a_sw == ""
+        bp_b_sw = get_block_param(nid, 1)
+        bp_b_sw = "_b" if bp_b_sw == ""
+        emit("    if (" + has_prev_sw + ") {")
+        emit("      mrb_int lv_" + bp_a_sw + " = " + prev_sw + ";")
+        emit("      mrb_int lv_" + bp_b_sw + " = " + cur_val_sw + ";")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_a_sw, "int")
+        declare_var(bp_b_sw, "int")
+        bbody_sw = @nd_body[@nd_block[nid]]
+        bexpr_sw = "FALSE"
+        if bbody_sw >= 0
+          bs_sw = get_stmts(bbody_sw)
+          ks_sw = 0
+          while ks_sw < bs_sw.length - 1
+            compile_stmt(bs_sw[ks_sw])
+            ks_sw = ks_sw + 1
+          end
+          if bs_sw.length > 0
+            bexpr_sw = compile_expr(bs_sw.last)
+          end
+        end
+        emit("      if (" + bexpr_sw + ") { sp_PtrArray_push(" + out_sw + ", " + cur_sw + "); " + cur_sw + " = sp_IntArray_new(); }")
+        pop_scope
+        @indent = @indent - 1
+        emit("    }")
+        emit("    sp_IntArray_push(" + cur_sw + ", " + cur_val_sw + ");")
+        emit("    " + prev_sw + " = " + cur_val_sw + ";")
+        emit("    " + has_prev_sw + " = 1;")
+        emit("  }")
+        emit("  if (" + cur_sw + "->len > 0) sp_PtrArray_push(" + out_sw + ", " + cur_sw + ");")
+        return out_sw
+      end
+ # `arr.slice_before(val)` / `slice_after(val)` — split before
+ # or after each matching element. Simple int-equality arg form
+ # only (no regexp / block); covers the common idiom.
+      if (mname == "slice_before" || mname == "slice_after") && @nd_block[nid] < 0
+        args_id_sb = @nd_arguments[nid]
+        if args_id_sb >= 0
+          a_sb = get_args(args_id_sb)
+          if a_sb.length == 1
+            @needs_int_array = 1
+            @needs_gc = 1
+            after_p = (mname == "slice_after") ? 1 : 0
+            pat_sb = compile_expr_as_int(a_sb[0])
+            out_sb = new_temp
+            cur_sb = new_temp
+            ii_sb = new_temp
+            v_sb = new_temp
+            pat_var = new_temp
+            emit("  sp_PtrArray *" + out_sb + " = sp_PtrArray_new();")
+            emit("  SP_GC_ROOT(" + out_sb + ");")
+            emit("  sp_IntArray *" + cur_sb + " = sp_IntArray_new();")
+            emit("  SP_GC_ROOT(" + cur_sb + ");")
+            emit("  mrb_int " + pat_var + " = " + pat_sb + ";")
+            emit("  for (mrb_int " + ii_sb + " = 0; " + ii_sb + " < sp_IntArray_length(" + rc + "); " + ii_sb + "++) {")
+            emit("    mrb_int " + v_sb + " = sp_IntArray_get(" + rc + ", " + ii_sb + ");")
+            if after_p == 0
+              emit("    if (" + v_sb + " == " + pat_var + " && " + cur_sb + "->len > 0) { sp_PtrArray_push(" + out_sb + ", " + cur_sb + "); " + cur_sb + " = sp_IntArray_new(); }")
+              emit("    sp_IntArray_push(" + cur_sb + ", " + v_sb + ");")
+            else
+              emit("    sp_IntArray_push(" + cur_sb + ", " + v_sb + ");")
+              emit("    if (" + v_sb + " == " + pat_var + ") { sp_PtrArray_push(" + out_sb + ", " + cur_sb + "); " + cur_sb + " = sp_IntArray_new(); }")
+            end
+            emit("  }")
+            emit("  if (" + cur_sb + "->len > 0) sp_PtrArray_push(" + out_sb + ", " + cur_sb + ");")
+            return out_sb
+          end
+        end
+      end
+ # `arr.chunk { |x| key }` materialises an array of [key,
+ # sub_array] pairs where consecutive elements with the same
+ # block-returned key are grouped.
+      if mname == "chunk" && @nd_block[nid] >= 0
+        @needs_int_array = 1
+        @needs_rb_value = 1
+        @needs_gc = 1
+        out_ck = new_temp
+        cur_ck = new_temp
+        cur_key_ck = new_temp
+        ii_ck = new_temp
+        has_prev_ck = new_temp
+        elem_ck = new_temp
+        key_ck = new_temp
+        emit("  sp_PolyArray *" + out_ck + " = sp_PolyArray_new();")
+        emit("  SP_GC_ROOT(" + out_ck + ");")
+        emit("  sp_IntArray *" + cur_ck + " = sp_IntArray_new();")
+        emit("  SP_GC_ROOT(" + cur_ck + ");")
+        emit("  mrb_int " + cur_key_ck + " = 0;")
+        emit("  int " + has_prev_ck + " = 0;")
+        emit("  for (mrb_int " + ii_ck + " = 0; " + ii_ck + " < sp_IntArray_length(" + rc + "); " + ii_ck + "++) {")
+        emit("    mrb_int " + elem_ck + " = sp_IntArray_get(" + rc + ", " + ii_ck + ");")
+        bp_x_ck = get_block_param(nid, 0)
+        bp_x_ck = "_x" if bp_x_ck == ""
+        emit("    mrb_int lv_" + bp_x_ck + " = " + elem_ck + ";")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_x_ck, "int")
+        bbody_ck = @nd_body[@nd_block[nid]]
+        bexpr_ck = "0"
+        if bbody_ck >= 0
+          bs_ck = get_stmts(bbody_ck)
+          kk_ck = 0
+          while kk_ck < bs_ck.length - 1
+            compile_stmt(bs_ck[kk_ck])
+            kk_ck = kk_ck + 1
+          end
+          if bs_ck.length > 0
+            bexpr_ck = compile_expr(bs_ck.last)
+          end
+        end
+        emit("    mrb_int " + key_ck + " = " + bexpr_ck + ";")
+        pop_scope
+        @indent = @indent - 1
+        emit("    if (" + has_prev_ck + " && " + key_ck + " != " + cur_key_ck + ") {")
+        emit("      sp_PolyArray *_pair = sp_PolyArray_new();")
+        emit("      sp_PolyArray_push(_pair, sp_box_int(" + cur_key_ck + "));")
+        emit("      sp_PolyArray_push(_pair, sp_box_poly_array((sp_PolyArray *)sp_IntArray_to_poly(" + cur_ck + ")));")
+        emit("      sp_PolyArray_push(" + out_ck + ", sp_box_poly_array(_pair));")
+        emit("      " + cur_ck + " = sp_IntArray_new();")
+        emit("    }")
+        emit("    sp_IntArray_push(" + cur_ck + ", " + elem_ck + ");")
+        emit("    " + cur_key_ck + " = " + key_ck + ";")
+        emit("    " + has_prev_ck + " = 1;")
+        emit("  }")
+        emit("  if (" + cur_ck + "->len > 0) {")
+        emit("    sp_PolyArray *_pair2 = sp_PolyArray_new();")
+        emit("    sp_PolyArray_push(_pair2, sp_box_int(" + cur_key_ck + "));")
+        emit("    sp_PolyArray_push(_pair2, sp_box_poly_array((sp_PolyArray *)sp_IntArray_to_poly(" + cur_ck + ")));")
+        emit("    sp_PolyArray_push(" + out_ck + ", sp_box_poly_array(_pair2));")
+        emit("  }")
+        return out_ck
       end
       if mname == "[]"
  # a[range] and a[start, len] return slices; bare a[i] stays a get.
@@ -20168,6 +21685,23 @@ class Compiler
         return "sp_IntArray_empty(" + rc + ")"
       end
       if mname == "include?"
+ # Issue #911: cross-type include? returns false (CRuby). Sym_array
+ # shares the int_array dispatch (sym ids stored as ints), so allow
+ # "symbol" args too when receiver is sym_array.
+        args_id_inc = @nd_arguments[nid]
+        if args_id_inc >= 0
+          aa_inc = get_args(args_id_inc)
+          if aa_inc.length > 0
+            at_inc = infer_type(aa_inc[0])
+            ok_inc = at_inc == "int" || at_inc == "int?" || at_inc == "poly"
+            if recv_type == "sym_array" && at_inc == "symbol"
+              ok_inc = true
+            end
+            if !ok_inc
+              return "FALSE"
+            end
+          end
+        end
         return "sp_IntArray_include(" + rc + ", " + compile_arg0_as_int(nid) + ")"
       end
       if mname == "index" || mname == "find_index"
@@ -20224,6 +21758,15 @@ class Compiler
             emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + ntmp + "; " + itmp + "++) " + tmp + "[" + itmp + "] = (char)sp_IntArray_get(" + rc + ", " + itmp + ");")
             emit("  " + tmp + "[" + ntmp + "] = 0;")
             return tmp
+          end
+        end
+ # Generic format string: route through the runtime helper in
+ # libspinel_rt.a (sp_pack.c). The C* fast-path above stays as
+ # an open-coded fast path for the hot optcarrot use.
+        if args_id >= 0
+          a_pk2 = get_args(args_id)
+          if a_pk2.length >= 1
+            return "sp_IntArray_pack(" + rc + ", " + compile_expr(a_pk2[0]) + ")"
           end
         end
       end
@@ -20332,11 +21875,13 @@ class Compiler
         pop_scope
         return tmp
       end
- # tally: sym_array only — int_array would need an int_int_hash
- # variant which doesn't exist yet. Result is sym_int_hash.
+ # Array#tally — sym keys → sym_int_hash, int keys → int_int_hash.
       if mname == "tally" && recv_type == "sym_array"
         @needs_sym_int_hash = 1
         return "sp_SymArray_tally(" + rc + ")"
+      end
+      if mname == "tally" && recv_type == "int_array"
+        return "sp_IntArray_tally_int(" + rc + ")"
       end
       if mname == "first"
         return "sp_IntArray_get(" + rc + ", 0)"
@@ -20513,9 +22058,6 @@ class Compiler
  # Float array methods
     if recv_type == "float_array"
       if mname == "length"
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_FloatArray_length(" + rc + ")"
       end
       if mname == "[]"
@@ -20587,10 +22129,11 @@ class Compiler
       elem_type = ptr_array_elem_type(recv_type)
       ct = c_type(elem_type)
       if mname == "length" || mname == "size"
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_PtrArray_length(" + rc + ")"
+      end
+      if mname == "to_a"
+ # Identity -- the receiver IS the array. Issue #742.
+        return rc
       end
       if mname == "[]"
         return "((" + ct + ")sp_PtrArray_get(" + rc + ", " + compile_arg0_as_int(nid) + "))"
@@ -20640,6 +22183,20 @@ class Compiler
  # by `sp_IntArray_cmp`. Empty recv falls through to the
  # unresolved-call warning (CRuby would return nil; we don't
  # have a poly-aware nil to return in this typed path).
+ # `arr.flatten` on int_array_ptr_array -- concatenate all inner
+ # IntArrays into a single IntArray. Issue #739.
+      if mname == "flatten" && elem_type == "int_array"
+        @needs_int_array = 1
+        @needs_gc = 1
+        tmp_f = new_temp
+        idx_f = new_temp
+        emit("  sp_IntArray *" + tmp_f + " = sp_IntArray_new();")
+        emit("  for (mrb_int " + idx_f + " = 0; " + idx_f + " < sp_PtrArray_length(" + rc + "); " + idx_f + "++) {")
+        emit("    sp_IntArray *_ia = (sp_IntArray *)sp_PtrArray_get(" + rc + ", " + idx_f + ");")
+        emit("    if (_ia) { for (mrb_int _j = 0; _j < _ia->len; _j++) sp_IntArray_push(" + tmp_f + ", _ia->data[_ia->start + _j]); }")
+        emit("  }")
+        return tmp_f
+      end
       if (mname == "max" || mname == "min") && elem_type == "int_array" && @nd_block[nid] < 0
         @needs_int_array = 1
         tmp_w = new_temp
@@ -20686,16 +22243,28 @@ class Compiler
     end
     if recv_type == "str_array"
       if mname == "length"
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_StrArray_length(" + rc + ")"
       end
       if mname == "size"
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_StrArray_length(" + rc + ")"
+      end
+ # `arr.values_at(i, j, ...)` -- pick elements at the given
+ # indices. Issue #742.
+      if mname == "values_at"
+        @needs_str_array = 1
+        @needs_gc = 1
+        tmp_va_s = new_temp
+        emit("  sp_StrArray *" + tmp_va_s + " = sp_StrArray_new();")
+        va_args_s = @nd_arguments[nid]
+        if va_args_s >= 0
+          va_ids_s = get_args(va_args_s)
+          va_ks = 0
+          while va_ks < va_ids_s.length
+            emit("  sp_StrArray_push(" + tmp_va_s + ", sp_StrArray_get(" + rc + ", " + compile_expr(va_ids_s[va_ks]) + "));")
+            va_ks = va_ks + 1
+          end
+        end
+        return tmp_va_s
       end
       if mname == "[]"
  # a[range] / a[start, len] return slices; bare a[i] stays a get.
@@ -20742,6 +22311,17 @@ class Compiler
         return "sp_StrArray_empty(" + rc + ")"
       end
       if mname == "include?"
+ # Issue #911.
+        args_id_inc_s = @nd_arguments[nid]
+        if args_id_inc_s >= 0
+          aa_inc_s = get_args(args_id_inc_s)
+          if aa_inc_s.length > 0
+            at_inc_s = infer_type(aa_inc_s[0])
+            if at_inc_s != "string" && at_inc_s != "string?" && at_inc_s != "mutable_str" && at_inc_s != "poly"
+              return "FALSE"
+            end
+          end
+        end
         return "sp_StrArray_include(" + rc + ", " + compile_arg0(nid) + ")"
       end
       if mname == "index" || mname == "find_index"
@@ -20787,12 +22367,73 @@ class Compiler
       if mname == "difference"
         return "sp_StrArray_difference(" + rc + ", " + compile_arg0(nid) + ")"
       end
+      if mname == "min_by" || mname == "max_by"
+        if @nd_block[nid] >= 0
+          blk = @nd_block[nid]
+          bp = get_block_param(nid, 0)
+          tmp_sa_mb = new_temp
+          itmp_sa = new_temp
+          emit("  const char *" + tmp_sa_mb + " = sp_StrArray_get(" + rc + ", 0);")
+          init_sa = (mname == "min_by") ? "INT64_MAX" : "INT64_MIN"
+          cmp_sa = (mname == "min_by") ? "<" : ">"
+          emit("  { mrb_int _best_sa = " + init_sa + ";")
+          emit("  for (mrb_int " + itmp_sa + " = 0; " + itmp_sa + " < sp_StrArray_length(" + rc + "); " + itmp_sa + "++) {")
+          emit("    const char *lv_" + bp + " = sp_StrArray_get(" + rc + ", " + itmp_sa + ");")
+          bbody_sa = @nd_body[blk]
+          bexpr_sa = "0"
+          if bbody_sa >= 0
+            bs_sa = get_stmts(bbody_sa)
+            if bs_sa.length > 0
+              bexpr_sa = compile_expr(bs_sa.last)
+            end
+          end
+          emit("    mrb_int _v = " + bexpr_sa + ";")
+          emit("    if (_v " + cmp_sa + " _best_sa) { _best_sa = _v; " + tmp_sa_mb + " = lv_" + bp + "; }")
+          emit("  } }")
+          return tmp_sa_mb
+        end
+      end
     end
 
  # PolyArray methods
     if recv_type == "poly_array"
       if mname == "length" || mname == "size"
         return "sp_PolyArray_length(" + rc + ")"
+      end
+      if mname == "to_a"
+        return rc
+      end
+      if mname == "include?"
+        args_id_pinc = @nd_arguments[nid]
+        if args_id_pinc >= 0
+          a_pinc = get_args(args_id_pinc)
+          if a_pinc.length > 0
+            @needs_rb_value = 1
+            return "sp_PolyArray_include(" + rc + ", " + box_expr_to_poly(a_pinc[0]) + ")"
+          end
+        end
+        return "FALSE"
+      end
+      if mname == "assoc" || mname == "rassoc"
+        args_id_pa = @nd_arguments[nid]
+        if args_id_pa >= 0
+          a_pa = get_args(args_id_pa)
+          if a_pa.length > 0
+            @needs_rb_value = 1
+            helper_pa = (mname == "assoc") ? "sp_PolyArray_assoc" : "sp_PolyArray_rassoc"
+            return helper_pa + "(" + rc + ", " + box_expr_to_poly(a_pa[0]) + ")"
+          end
+        end
+        return "NULL"
+      end
+      if mname == "pack"
+        args_id_pkp = @nd_arguments[nid]
+        if args_id_pkp >= 0
+          a_pkp = get_args(args_id_pkp)
+          if a_pkp.length >= 1
+            return "sp_PolyArray_pack(" + rc + ", " + compile_expr(a_pkp[0]) + ")"
+          end
+        end
       end
       if mname == "[]"
         return "sp_PolyArray_get(" + rc + ", " + compile_arg0_as_int(nid) + ")"
@@ -20825,6 +22466,19 @@ class Compiler
  # Strip SP_TAG_NIL elements. The runtime helper handles the
  # tag-table walk. Issue #725.
         return "sp_PolyArray_compact(" + rc + ")"
+      end
+      if mname == "flatten"
+ # Recursive flatten into nested array-typed elements. With a
+ # depth arg the depth-bounded variant runs; without, fully
+ # flatten.
+        args_id_fl = @nd_arguments[nid]
+        if args_id_fl >= 0
+          a_fl = get_args(args_id_fl)
+          if a_fl.length >= 1
+            return "sp_PolyArray_flatten_n(" + rc + ", " + compile_expr_as_int(a_fl[0]) + ")"
+          end
+        end
+        return "sp_PolyArray_flatten(" + rc + ")"
       end
       if mname == "empty?"
         return "(sp_PolyArray_length(" + rc + ") == 0)"
@@ -20861,7 +22515,111 @@ class Compiler
     if mname == "to_h" && is_hash_type(recv_type) == 1
       return rc
     end
+ # Issue #851: typed-hash inspect/to_s — route through the
+ # variant-specific runtime helper so `puts h.inspect` works
+ # for any typed hash, not just sym_int_hash.
+    if (mname == "inspect" || mname == "to_s") && is_hash_type(recv_type) == 1
+      ins_h = compile_inspect_for(recv_type, rc)
+      if ins_h != ""
+        return ins_h
+      end
+    end
+ # Hash#clear mutates in place and returns the now-empty receiver.
+ # Per-variant empty-slot reset (-1 for sym/int keys, NULL for str
+ # keys, occ/used array for variants that track occupancy
+ # separately) so subsequent inserts don't collide with stale
+ # slots in the open-addressing probe chain.
+    if mname == "clear" && is_hash_type(recv_type) == 1
+      ce = hash_clear_c_expr(recv_type, rc)
+      if ce != ""
+        return ce
+      end
+    end
+ # Hash#fetch(k) { |k| default } — block form. `compile_body_into`
+ # walks the block body emitting all statements; the final
+ # expression assigns into a temp that we return. The non-block
+ # 2-arg fetch (default value) stays in the per-variant arms
+ # below; this arm is for the block-default form which they
+ # didn't cover.
+    if mname == "fetch" && @nd_block[nid] >= 0
+      fi = hash_fetch_block_info(recv_type)
+      if fi != nil
+        args_id_fb = @nd_arguments[nid]
+        if args_id_fb >= 0
+          aargs_fb = get_args(args_id_fb)
+          if aargs_fb.length >= 1
+            key_fb = compile_expr(aargs_fb[0])
+            tmp_fb = new_temp
+            emit("  " + fi[1] + " " + tmp_fb + ";")
+            emit("  if (" + fi[2] + "(" + rc + ", " + key_fb + ")) {")
+            emit("    " + tmp_fb + " = " + fi[3] + "(" + rc + ", " + key_fb + ");")
+            emit("  } else {")
+            @indent = @indent + 1
+            push_scope
+            compile_body_into(@nd_body[@nd_block[nid]], tmp_fb, fi[0])
+            pop_scope
+            @indent = @indent - 1
+            emit("  }")
+            return tmp_fb
+          end
+        end
+      end
+    end
     if recv_type == "sym_int_hash"
+      if mname == "map" && @nd_block[nid] >= 0
+ # Hash#map { |k, v| ... } walks the hash and accumulates the
+ # block's return into a result array. Result type comes from
+ # the block body's last expr (string → str_array, int → int_array,
+ # else poly_array). The previous fallthrough emitted a stale
+ # `_t = 0` and crashed on .inspect.
+        rc_hm = rc
+        bp_k_hm = get_block_param(nid, 0)
+        bp_k_hm = "_k" if bp_k_hm == ""
+        bp_v_hm = get_block_param(nid, 1)
+        bp_v_hm = "_v" if bp_v_hm == ""
+        blk_id_hm = @nd_block[nid]
+        body_id_hm = @nd_body[blk_id_hm]
+        body_stmts_hm = body_id_hm >= 0 ? get_stmts(body_id_hm) : []
+        body_ret_t_hm = "int"
+        if body_stmts_hm.length > 0
+          body_ret_t_hm = infer_type(body_stmts_hm.last)
+        end
+        out_hm = new_temp
+        iter_hm = new_temp
+        out_pfx = "IntArray"
+        if body_ret_t_hm == "string"
+          out_pfx = "StrArray"
+          @needs_str_array = 1
+        elsif body_ret_t_hm == "float"
+          out_pfx = "FloatArray"
+          @needs_float_array = 1
+        else
+          @needs_int_array = 1
+        end
+        emit("  sp_" + out_pfx + " *" + out_hm + " = sp_" + out_pfx + "_new();")
+        emit("  SP_GC_ROOT(" + out_hm + ");")
+        emit("  for (mrb_int " + iter_hm + " = 0; " + iter_hm + " < " + rc_hm + "->len; " + iter_hm + "++) {")
+        emit("    sp_sym lv_" + bp_k_hm + " = " + rc_hm + "->order[" + iter_hm + "];")
+        emit("    mrb_int lv_" + bp_v_hm + " = sp_SymIntHash_get(" + rc_hm + ", lv_" + bp_k_hm + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_k_hm, "symbol")
+        declare_var(bp_v_hm, "int")
+        bexpr_hm = "0"
+        if body_stmts_hm.length > 0
+          k_hm = 0
+          while k_hm < body_stmts_hm.length - 1
+            compile_stmt(body_stmts_hm[k_hm])
+            k_hm = k_hm + 1
+          end
+          bexpr_hm = compile_expr(body_stmts_hm.last)
+        end
+        emit("    sp_" + out_pfx + "_push(" + out_hm + ", " + bexpr_hm + ");")
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        return out_hm
+      end
       if mname == "[]"
         args_id0 = @nd_arguments[nid]
         if args_id0 >= 0
@@ -20888,10 +22646,14 @@ class Compiler
         end
         return "sp_SymIntHash_has_key((sp_SymIntHash *)(" + rc + "), " + compile_arg0_as_sym(nid) + ")"
       end
+      if mname == "value?" || mname == "has_value?"
+        return "sp_SymIntHash_has_value((sp_SymIntHash *)(" + rc + "), " + compile_arg0_as_int(nid) + ")"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
+ # Don't reuse @hoisted_strlen_var for a hash receiver -- the
+ # cache was computed via strlen() on a string and reading
+ # `h->len` field through that cache value would be junk.
+ # Issue #730.
         return "sp_SymIntHash_length((sp_SymIntHash *)(" + rc + "))"
       end
       if mname == "empty?"
@@ -20899,6 +22661,15 @@ class Compiler
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_SymIntHash_length(" + rc + ") > 0)"
+      end
+ # Issue #802: block-form filters across all 8 hash variants. The
+ # select/reject path returns the same variant; count/any?/all?
+ # return mrb_int / mrb_bool.
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "sym_int_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "sym_int_hash", rc, mname)
       end
       if mname == "fetch"
         args_id = @nd_arguments[nid]
@@ -20922,7 +22693,8 @@ class Compiler
             end
             return "(sp_SymIntHash_has_key(" + rc + ", " + key + ") ? sp_SymIntHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
-          return "sp_SymIntHash_get((sp_SymIntHash *)(" + rc + "), " + key + ")"
+ # Issue #914: fetch without default raises KeyError on miss.
+          return "(sp_SymIntHash_has_key(" + rc + ", " + key + ") ? sp_SymIntHash_get((sp_SymIntHash *)(" + rc + "), " + key + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), (mrb_int)0))"
         end
       end
       if mname == "keys"
@@ -20932,6 +22704,16 @@ class Compiler
       if mname == "values"
         @needs_int_array = 1
         return "sp_SymIntHash_values(" + rc + ")"
+      end
+ # Issue #738: to_a -- poly_array of [key, value] pairs. Each
+ # pair is itself a poly_array boxed via sp_box_poly_array.
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_SymIntHash_to_a(" + rc + ")"
+      end
+      if mname == "invert"
+        @needs_rb_value = 1
+        return "sp_SymIntHash_invert(" + rc + ")"
       end
  # transform_values { |v| ... } — same key set, block-transformed
  # int values. Keeps the result a sym_int_hash; the block's last
@@ -20964,6 +22746,60 @@ class Compiler
  # merge / dup / delete -- sibling of #510 (which fixed
  # sym_str_hash / sym_poly_hash) but for sym_int_hash. Issue
  # #546.
+      if mname == "merge" && @nd_block[nid] >= 0
+ # `h1.merge(h2) { |k, v1, v2| ... }` — conflict-resolution
+ # block form. Only support sym_int_hash + sym_int_hash with
+ # an int-returning block (most common shape); other variant
+ # combinations fall through to the block-less path below.
+        args_id_mb = @nd_arguments[nid]
+        if args_id_mb >= 0
+          a_mb = get_args(args_id_mb)
+          if a_mb.length >= 1 && infer_type(a_mb[0]) == "sym_int_hash"
+            arg_mb = compile_expr_gc_rooted(a_mb[0])
+            result_mb = new_temp
+            iter_mb = new_temp
+            bp_k_mb = get_block_param(nid, 0)
+            bp_k_mb = "_mk" if bp_k_mb == ""
+            bp_v1_mb = get_block_param(nid, 1)
+            bp_v1_mb = "_mv1" if bp_v1_mb == ""
+            bp_v2_mb = get_block_param(nid, 2)
+            bp_v2_mb = "_mv2" if bp_v2_mb == ""
+            emit("  sp_SymIntHash *" + result_mb + " = sp_SymIntHash_dup(" + rc + ");")
+            emit("  SP_GC_ROOT(" + result_mb + ");")
+            emit("  for (mrb_int " + iter_mb + " = 0; " + iter_mb + " < " + arg_mb + "->len; " + iter_mb + "++) {")
+            emit("    sp_sym lv_" + bp_k_mb + " = " + arg_mb + "->order[" + iter_mb + "];")
+            emit("    mrb_int lv_" + bp_v2_mb + " = sp_SymIntHash_get(" + arg_mb + ", lv_" + bp_k_mb + ");")
+            emit("    if (sp_SymIntHash_has_key(" + result_mb + ", lv_" + bp_k_mb + ")) {")
+            emit("      mrb_int lv_" + bp_v1_mb + " = sp_SymIntHash_get(" + result_mb + ", lv_" + bp_k_mb + ");")
+            @indent = @indent + 2
+            push_scope
+            declare_var(bp_k_mb, "symbol")
+            declare_var(bp_v1_mb, "int")
+            declare_var(bp_v2_mb, "int")
+            bbody_mb = @nd_body[@nd_block[nid]]
+            bexpr_mb = "0"
+            if bbody_mb >= 0
+              bs_mb = get_stmts(bbody_mb)
+              k_mb = 0
+              while k_mb < bs_mb.length - 1
+                compile_stmt(bs_mb[k_mb])
+                k_mb = k_mb + 1
+              end
+              if bs_mb.length > 0
+                bexpr_mb = compile_expr(bs_mb.last)
+              end
+            end
+            emit("    sp_SymIntHash_set(" + result_mb + ", lv_" + bp_k_mb + ", " + bexpr_mb + ");")
+            pop_scope
+            @indent = @indent - 2
+            emit("    } else {")
+            emit("      sp_SymIntHash_set(" + result_mb + ", lv_" + bp_k_mb + ", lv_" + bp_v2_mb + ");")
+            emit("    }")
+            emit("  }")
+            return result_mb
+          end
+        end
+      end
       if mname == "merge"
         args_id_m546 = @nd_arguments[nid]
         if args_id_m546 >= 0
@@ -21031,7 +22867,10 @@ class Compiler
         return "(" + rc + "->default_v = (mrb_int)(" + compile_arg0(nid) + "))"
       end
       if mname == "delete"
-        return "(sp_SymIntHash_delete(" + rc + ", " + compile_arg0(nid) + "), 0)"
+ # Return the deleted value (or 0 / default_v when absent) — CRuby
+ # returns the prior value. Pre-eval the key once so has_key /
+ # get / delete all see the same sp_sym.
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; mrb_int _v = sp_SymIntHash_has_key(" + rc + ", _k) ? sp_SymIntHash_get(" + rc + ", _k) : 0; sp_SymIntHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "sym_str_hash"
@@ -21067,14 +22906,28 @@ class Compiler
         end
         return "sp_SymStrHash_has_key((sp_SymStrHash *)(" + rc + "), " + compile_arg0_as_sym(nid) + ")"
       end
+      if mname == "value?" || mname == "has_value?"
+        return "sp_SymStrHash_has_value((sp_SymStrHash *)(" + rc + "), " + compile_str_arg0(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_SymStrHash_to_a((sp_SymStrHash *)(" + rc + "))"
+      end
+      if mname == "invert"
+        @needs_rb_value = 1
+        return "sp_SymStrHash_invert((sp_SymStrHash *)(" + rc + "))"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_SymStrHash_length((sp_SymStrHash *)(" + rc + "))"
       end
       if mname == "empty?"
         return "(sp_SymStrHash_length(" + rc + ") == 0)"
+      end
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "sym_str_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "sym_str_hash", rc, mname)
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_SymStrHash_length(" + rc + ") > 0)"
@@ -21088,7 +22941,8 @@ class Compiler
             defval = compile_expr(aargs[1])
             return "(sp_SymStrHash_has_key(" + rc + ", " + key + ") ? sp_SymStrHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
-          return "sp_SymStrHash_get((sp_SymStrHash *)(" + rc + "), " + key + ")"
+ # Issue #914.
+          return "(sp_SymStrHash_has_key(" + rc + ", " + key + ") ? sp_SymStrHash_get((sp_SymStrHash *)(" + rc + "), " + key + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), (const char *)0))"
         end
       end
       if mname == "keys"
@@ -21146,7 +23000,7 @@ class Compiler
         return "(" + rc + "->default_v = " + compile_expr_as_string(get_args(@nd_arguments[nid])[0]) + ")"
       end
       if mname == "delete"
-        return "(sp_SymStrHash_delete(" + rc + ", " + compile_arg0(nid) + "), 0)"
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; const char *_v = sp_SymStrHash_has_key(" + rc + ", _k) ? sp_SymStrHash_get(" + rc + ", _k) : NULL; sp_SymStrHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "sym_poly_hash"
@@ -21167,6 +23021,12 @@ class Compiler
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_SymPolyHash_length(" + rc + ") > 0)"
+      end
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "sym_poly_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "sym_poly_hash", rc, mname)
       end
       if mname == "keys"
         @needs_int_array = 1
@@ -21256,7 +23116,8 @@ class Compiler
               defval_f = box_expr_to_poly(aargs_f[1])
               return "(sp_SymPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_SymPolyHash_get(" + rc + ", " + key_f + ") : (" + defval_f + "))"
             end
-            return "sp_SymPolyHash_get(" + rc + ", " + key_f + ")"
+ # Issue #914.
+            return "(sp_SymPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_SymPolyHash_get(" + rc + ", " + key_f + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), sp_box_nil()))"
           end
         end
       end
@@ -21272,7 +23133,7 @@ class Compiler
         return "(" + rc + "->default_v = " + box_expr_to_poly(get_args(@nd_arguments[nid])[0]) + ")"
       end
       if mname == "delete"
-        return "(sp_SymPolyHash_delete(" + rc + ", " + compile_arg0(nid) + "), sp_box_nil())"
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; sp_RbVal _v = sp_SymPolyHash_has_key(" + rc + ", _k) ? sp_SymPolyHash_get(" + rc + ", _k) : sp_box_nil(); sp_SymPolyHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "str_poly_hash"
@@ -21290,6 +23151,12 @@ class Compiler
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_StrPolyHash_length(" + rc + ") > 0)"
+      end
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "str_poly_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?" || mname == "find" || mname == "detect") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "str_poly_hash", rc, mname)
       end
       if mname == "keys"
         return "sp_StrPolyHash_keys(" + rc + ")"
@@ -21356,7 +23223,8 @@ class Compiler
               defval_f = box_expr_to_poly(aargs_f[1])
               return "(sp_StrPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_StrPolyHash_get(" + rc + ", " + key_f + ") : (" + defval_f + "))"
             end
-            return "sp_StrPolyHash_get(" + rc + ", " + key_f + ")"
+ # Issue #914.
+            return "(sp_StrPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_StrPolyHash_get(" + rc + ", " + key_f + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), sp_box_nil()))"
           end
         end
       end
@@ -21374,6 +23242,10 @@ class Compiler
     end
     if recv_type == "poly_poly_hash"
       args_id_ph = @nd_arguments[nid]
+      if mname == "inspect" || mname == "to_s"
+ # Issue #738: poly_poly_hash inspect through sp_PolyPolyHash_inspect.
+        return "sp_PolyPolyHash_inspect(" + rc + ")"
+      end
       if mname == "[]" && args_id_ph >= 0
         a0 = get_args(args_id_ph)[0]
         return "sp_PolyPolyHash_get(" + rc + ", " + box_expr_to_poly(a0) + ")"
@@ -21390,6 +23262,12 @@ class Compiler
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_PolyPolyHash_length(" + rc + ") > 0)"
+      end
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "poly_poly_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "poly_poly_hash", rc, mname)
       end
       if mname == "keys"
         @needs_poly_array = 1
@@ -21415,7 +23293,8 @@ class Compiler
               defval_f = box_expr_to_poly(aargs_f[1])
               return "(sp_PolyPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_PolyPolyHash_get(" + rc + ", " + key_f + ") : (" + defval_f + "))"
             end
-            return "sp_PolyPolyHash_get(" + rc + ", " + key_f + ")"
+ # Issue #914.
+            return "(sp_PolyPolyHash_has_key(" + rc + ", " + key_f + ") ? sp_PolyPolyHash_get(" + rc + ", " + key_f + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), sp_box_nil()))"
           end
         end
       end
@@ -21430,10 +23309,18 @@ class Compiler
       if mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?"
         return "sp_StrIntHash_has_key(" + rc + ", " + compile_str_arg0(nid) + ")"
       end
+      if mname == "value?" || mname == "has_value?"
+        return "sp_StrIntHash_has_value(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_StrIntHash_to_a(" + rc + ")"
+      end
+      if mname == "invert"
+        @needs_rb_value = 1
+        return "sp_StrIntHash_invert_poly(" + rc + ")"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_StrIntHash_length(" + rc + ")"
       end
       if mname == "empty?"
@@ -21484,7 +23371,8 @@ class Compiler
             end
             return "(sp_StrIntHash_has_key(" + rc + ", " + key + ") ? sp_StrIntHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
-          return "sp_StrIntHash_get(" + rc + ", " + key + ")"
+ # Issue #914.
+          return "(sp_StrIntHash_has_key(" + rc + ", " + key + ") ? sp_StrIntHash_get(" + rc + ", " + key + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), (mrb_int)0))"
         end
       end
       if mname == "merge"
@@ -21593,6 +23481,26 @@ class Compiler
         end
       end
     end
+    if recv_type == "int_int_hash"
+      if mname == "[]"
+        return "sp_IntIntHash_get(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?"
+        return "sp_IntIntHash_has_key(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
+        return "sp_IntIntHash_length(" + rc + ")"
+      end
+      if mname == "empty?"
+        return "(sp_IntIntHash_length(" + rc + ") == 0)"
+      end
+      if mname == "any?" && @nd_block[nid] < 0
+        return "(sp_IntIntHash_length(" + rc + ") > 0)"
+      end
+      if mname == "dup" || mname == "clone"
+        return "sp_IntIntHash_dup(" + rc + ")"
+      end
+    end
     if recv_type == "int_str_hash"
       @needs_int_str_hash = 1
       if mname == "[]"
@@ -21600,6 +23508,17 @@ class Compiler
       end
       if mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?"
         return "sp_IntStrHash_has_key(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "value?" || mname == "has_value?"
+        return "sp_IntStrHash_has_value(" + rc + ", " + compile_str_arg0(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_IntStrHash_to_a(" + rc + ")"
+      end
+      if mname == "invert"
+        @needs_rb_value = 1
+        return "sp_IntStrHash_invert(" + rc + ")"
       end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
         return "sp_IntStrHash_length(" + rc + ")"
@@ -21609,6 +23528,12 @@ class Compiler
       end
       if mname == "any?" && @nd_block[nid] < 0
         return "(sp_IntStrHash_length(" + rc + ") > 0)"
+      end
+      if (mname == "select" || mname == "filter" || mname == "reject") && @nd_block[nid] >= 0
+        return compile_hash_select_reject(nid, "int_str_hash", rc, mname == "filter" ? "select" : mname)
+      end
+      if (mname == "count" || mname == "any?" || mname == "all?") && @nd_block[nid] >= 0
+        return compile_hash_block_predicate(nid, "int_str_hash", rc, mname)
       end
       if mname == "keys"
         @needs_int_array = 1
@@ -21630,7 +23555,8 @@ class Compiler
             defval = compile_expr(aargs[1])
             return "(sp_IntStrHash_has_key(" + rc + ", " + key + ") ? sp_IntStrHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
-          return "sp_IntStrHash_get(" + rc + ", " + key + ")"
+ # Issue #914.
+          return "(sp_IntStrHash_has_key(" + rc + ", " + key + ") ? sp_IntStrHash_get(" + rc + ", " + key + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), (const char *)0))"
         end
       end
  # transform_values block form. Mirrors str_int_hash's arm: walk
@@ -21678,10 +23604,18 @@ class Compiler
       if mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?"
         return "sp_StrStrHash_has_key(" + rc + ", " + compile_str_arg0(nid) + ")"
       end
+      if mname == "value?" || mname == "has_value?"
+        return "sp_StrStrHash_has_value(" + rc + ", " + compile_str_arg0(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_StrStrHash_to_a(" + rc + ")"
+      end
+      if mname == "invert"
+ # str_str_hash invert preserves type (str→str round-trip).
+        return "sp_StrStrHash_invert(" + rc + ")"
+      end
       if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
-        if @hoisted_strlen_var != "" && @hoisted_strlen_recv == rc
-          return @hoisted_strlen_var
-        end
         return "sp_StrStrHash_length(" + rc + ")"
       end
       if mname == "empty?"
@@ -21730,7 +23664,8 @@ class Compiler
             defval = compile_expr(aargs[1])
             return "(sp_StrStrHash_has_key(" + rc + ", " + key + ") ? sp_StrStrHash_get(" + rc + ", " + key + ") : " + defval + ")"
           end
-          return "sp_StrStrHash_get(" + rc + ", " + key + ")"
+ # Issue #914.
+          return "(sp_StrStrHash_has_key(" + rc + ", " + key + ") ? sp_StrStrHash_get(" + rc + ", " + key + ") : (sp_raise_cls(\"KeyError\", \"key not found\"), (const char *)0))"
         end
       end
       if mname == "dup" || mname == "clone"
@@ -21762,11 +23697,11 @@ class Compiler
       return "sp_box_nil()"
     end
 
- # `"".split(",")` builds an empty str_array — bare `[]` would be
+ # `"".split(",", -1)` builds an empty str_array — bare `[]` would be
  # inferred as int_array under spinel's self-host rules and can't
  # hold the string temps below.
-    key_tmps = "".split(",")
-    key_types = "".split(",")
+    key_tmps = "".split(",", -1)
+    key_types = "".split(",", -1)
     ki = 0
     while ki < aargs.length
       kt = infer_type(aargs[ki])
@@ -22158,6 +24093,23 @@ class Compiler
         if mname == "basename"
           return "sp_file_basename(" + compile_arg0(nid) + ")"
         end
+ # Issue #892.
+        if mname == "dirname"
+          return "sp_file_dirname(" + compile_arg0(nid) + ")"
+        end
+        if mname == "extname"
+          return "sp_file_extname(" + compile_arg0(nid) + ")"
+        end
+      end
+      if rcname == "Dir"
+        if mname == "pwd" || mname == "getwd"
+          return "sp_dir_pwd()"
+        end
+      end
+      if rcname == "StringScanner"
+        if mname == "new"
+          return "sp_StringScanner_new(" + compile_arg0(nid) + ")"
+        end
       end
       if rcname == "Time"
         if mname == "now"
@@ -22243,6 +24195,16 @@ class Compiler
       if rcname == "Process"
         if mname == "clock_gettime"
           return "({ struct timespec _ts; clock_gettime(CLOCK_MONOTONIC, &_ts); (mrb_float)_ts.tv_sec + (mrb_float)_ts.tv_nsec / 1e9; })"
+        end
+ # Process.pid / .ppid: direct syscall lowering. unistd.h is
+ # already included in the runtime. MinGW's <unistd.h> lacks
+ # getppid -- route through a runtime wrapper that #ifdef's
+ # away on Windows. Issue #893.
+        if mname == "pid"
+          return "((mrb_int)getpid())"
+        end
+        if mname == "ppid"
+          return "sp_process_ppid()"
         end
       end
  # Regexp.escape / Regexp.quote -- single-string-arg form. Routes
@@ -22361,9 +24323,9 @@ class Compiler
         owner_ci = cls_method_owner_for(ci3, mname, "cmeth")
         if owner_ci >= 0
           owner_name = @cls_names[owner_ci]
-          owner_cmnames = @cls_cmeth_names[owner_ci].split(";")
-          owner_cmptypes = @cls_cmeth_ptypes[owner_ci].split("|")
-          owner_cmdefaults = @cls_cmeth_defaults[owner_ci].split("|")
+          owner_cmnames = @cls_cmeth_names[owner_ci].split(";", -1)
+          owner_cmptypes = @cls_cmeth_ptypes[owner_ci].split("|", -1)
+          owner_cmdefaults = @cls_cmeth_defaults[owner_ci].split("|", -1)
           cmidx = 0
           while cmidx < owner_cmnames.length
             if owner_cmnames[cmidx] == mname
@@ -22374,10 +24336,10 @@ class Compiler
           ca = ""
           if cmidx < owner_cmnames.length && cmidx < owner_cmptypes.length
             owner_pn = cls_cmeth_pnames_get(owner_ci, cmidx)
-            owner_pt = owner_cmptypes[cmidx].split(",")
-            owner_df = "".split(",")
+            owner_pt = owner_cmptypes[cmidx].split(",", -1)
+            owner_df = "".split(",", -1)
             if cmidx < owner_cmdefaults.length
-              owner_df = owner_cmdefaults[cmidx].split(",")
+              owner_df = owner_cmdefaults[cmidx].split(",", -1)
             end
  # Extract positional + kwarg pairs from the call site, so
  # `W.write(200, set_cookies: cookies)` against
@@ -22391,8 +24353,8 @@ class Compiler
             if args_id_cm2 >= 0
               arg_ids_cm2 = get_args(args_id_cm2)
             end
-            kw_names_cm = "".split(",")
-            kw_vals_cm = "".split(",")
+            kw_names_cm = "".split(",", -1)
+            kw_vals_cm = "".split(",", -1)
             kw_arg_ids_cm = []
             positional_cm = []
             ak_cm = 0
@@ -22556,7 +24518,7 @@ class Compiler
                 ci_walk = 0
                 while ci_walk < owner_ci
                   if ci_walk < @cls_cmeth_names.length
-                    flat_idx = flat_idx + @cls_cmeth_names[ci_walk].split(";").length
+                    flat_idx = flat_idx + @cls_cmeth_names[ci_walk].split(";", -1).length
                   end
                   ci_walk = ci_walk + 1
                 end
@@ -22673,6 +24635,20 @@ class Compiler
  # is_a? / kind_of? — kind_of? is an exact alias of is_a? in MRI.
  # Both walk the class hierarchy: cname is or inherits from arg0 → TRUE.
     if mname == "is_a?" || mname == "kind_of?"
+      if base_type(recv_type) == "encoding"
+        arg0_enc_isa = ""
+        args_id_enc_isa = @nd_arguments[nid]
+        if args_id_enc_isa >= 0
+          a_enc_isa = get_args(args_id_enc_isa)
+          if a_enc_isa.length > 0
+            arg0_enc_isa = resolve_introspection_arg_name(a_enc_isa[0])
+          end
+        end
+        if arg0_enc_isa == "Encoding" || arg0_enc_isa == "Object" || arg0_enc_isa == "Kernel" || arg0_enc_isa == "BasicObject"
+          return "TRUE"
+        end
+        return "FALSE"
+      end
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
         arg0 = ""
@@ -22752,6 +24728,12 @@ class Compiler
       if arg0 == "Hash" && is_hash_type(recv_type) == 1
         return "TRUE"
       end
+      if base_type(recv_type) == "encoding"
+        if arg0 == "Encoding"
+          return "TRUE"
+        end
+        return "FALSE"
+      end
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
         target_ci = find_class_idx(arg0)
@@ -22818,7 +24800,7 @@ class Compiler
             return "TRUE"
           end
  # Check attr_readers
-          readers = @cls_attr_readers[ci].split(";")
+          readers = @cls_attr_readers[ci].split(";", -1)
           rk = 0
           while rk < readers.length
             if readers[rk] == arg0
@@ -22892,6 +24874,52 @@ class Compiler
         return "sp_class_to_s(((sp_Class){" + cls_id_for_user_internal(@current_class_idx).to_s + "LL}))"
       end
     end
+    if recv_type == "encoding"
+      if mname == "name" || mname == "to_s"
+        return "sp_encoding_name(" + rc + ")"
+      end
+      if mname == "inspect"
+        return "sp_encoding_inspect(" + rc + ")"
+      end
+      if mname == "==" || mname == "eql?"
+        arg0_enc_eq = -1
+        if @nd_arguments[nid] >= 0
+          args_enc_eq = get_args(@nd_arguments[nid])
+          if args_enc_eq.length > 0
+            arg0_enc_eq = args_enc_eq[0]
+          end
+        end
+        if arg0_enc_eq >= 0 && infer_type(arg0_enc_eq) == "encoding"
+          rhs_enc_eq = compile_expr(arg0_enc_eq)
+          return "sp_encoding_eq(" + rc + ", " + rhs_enc_eq + ")"
+        end
+        return "FALSE"
+      end
+      if mname == "!="
+        arg0_enc_ne = -1
+        if @nd_arguments[nid] >= 0
+          args_enc_ne = get_args(@nd_arguments[nid])
+          if args_enc_ne.length > 0
+            arg0_enc_ne = args_enc_ne[0]
+          end
+        end
+        if arg0_enc_ne >= 0 && infer_type(arg0_enc_ne) == "encoding"
+          rhs_enc_ne = compile_expr(arg0_enc_ne)
+          return "(!sp_encoding_eq(" + rc + ", " + rhs_enc_ne + "))"
+        end
+        return "TRUE"
+      end
+      if mname == "class"
+        bid_enc = builtin_class_id_for_name("Encoding")
+        if bid_enc >= 0
+          @needs_class_table = 1
+          return "((sp_Class){" + bid_enc.to_s + "LL})"
+        end
+      end
+      if mname == "nil?"
+        return "FALSE"
+      end
+    end
  # methods on a sp_Class value.
  #
  # Phase 1: `.to_s` -> sp_class_to_s(c) (per-program
@@ -22927,6 +24955,27 @@ class Compiler
       if mname == "to_s" || mname == "name" || mname == "inspect"
         @needs_class_table = 1
         return "sp_class_to_s(" + rc + ")"
+      end
+ # Module#const_defined?(:X) — static-class + literal-symbol-arg
+ # fast path. Spinel emits one C global per user-class constant
+ # named `cst_<Class>_<X>`, and the analyzer tracks those names
+ # in `@const_names`. Look up via `find_const_idx` to fold to
+ # TRUE / FALSE at compile time. Dynamic receivers or non-
+ # literal symbol args (or builtin classes whose constants live
+ # outside @const_names — Math::PI etc.) keep falling through.
+      if mname == "const_defined?"
+        recv_id_cd = @nd_receiver[nid]
+        args_id_cd = @nd_arguments[nid]
+        if recv_id_cd >= 0 && @nd_type[recv_id_cd] == "ConstantReadNode" && args_id_cd >= 0
+          aa_cd = get_args(args_id_cd)
+          if aa_cd.length >= 1 && @nd_type[aa_cd[0]] == "SymbolNode"
+            qname_cd = @nd_name[recv_id_cd] + "_" + @nd_content[aa_cd[0]]
+            if find_const_idx(qname_cd) >= 0
+              return "TRUE"
+            end
+            return "FALSE"
+          end
+        end
       end
       if mname == "==" || mname == "eql?"
         rhs_eq = compile_arg0(nid)
@@ -23049,11 +25098,11 @@ class Compiler
                 end
                 if ovr != ""
                   base_rt = cls_method_return(owner_idx, mname, "cmeth")
-                  ovr_pairs = ovr.split(";")
+                  ovr_pairs = ovr.split(";", -1)
                   rt_ok = 1
                   op = 0
                   while op < ovr_pairs.length
-                    pair = ovr_pairs[op].split(",")
+                    pair = ovr_pairs[op].split(",", -1)
                     cand_owner_check = pair[1].to_i
                     cand_rt = cls_method_return(cand_owner_check, mname, "cmeth")
                     if cand_rt != base_rt
@@ -23079,7 +25128,7 @@ class Compiler
                     emit("  switch (" + inner_c_chain + "->cls_id) {")
                     oi_chain = 0
                     while oi_chain < ovr_pairs.length
-                      pair_chain = ovr_pairs[oi_chain].split(",")
+                      pair_chain = ovr_pairs[oi_chain].split(",", -1)
                       cand_cid_chain = pair_chain[0].to_i
                       cand_owner_chain = pair_chain[1].to_i
                       cand_name_chain = @cls_names[cand_owner_chain]
@@ -23112,7 +25161,7 @@ class Compiler
                     emit("  switch (" + inner_c_chain + "->cls_id) {")
                     oi_div = 0
                     while oi_div < ovr_pairs.length
-                      pair_div = ovr_pairs[oi_div].split(",")
+                      pair_div = ovr_pairs[oi_div].split(",", -1)
                       cand_cid_div = pair_div[0].to_i
                       cand_owner_div = pair_div[1].to_i
                       cand_name_div = @cls_names[cand_owner_div]
@@ -23180,6 +25229,8 @@ class Compiler
         prim_class_name_pc = "Range"
       elsif bt_pc == "time"
         prim_class_name_pc = "Time"
+      elsif bt_pc == "encoding"
+        prim_class_name_pc = "Encoding"
       elsif is_array_type(bt_pc) == 1
         prim_class_name_pc = "Array"
       elsif is_hash_type(bt_pc) == 1
@@ -23194,6 +25245,13 @@ class Compiler
           return "((sp_Class){" + bid_pc.to_s + "LL})"
         end
       end
+    end
+ # StringScanner: the type is a primitive (`stringscanner` →
+ # `sp_StringScanner *`); methods route to the sp_StringScanner_*
+ # helpers in libspinel_rt.a (lib/sp_strscan.c).
+    if recv_type == "stringscanner"
+      ssm = strscan_runtime_call(mname, rc, nid)
+      return ssm if ssm != ""
     end
  # Object method calls
     if is_obj_type(recv_type) == 1
@@ -23244,7 +25302,7 @@ class Compiler
         if mname.length > 1
           if mname[mname.length - 1] == "="
             bname = mname[0, mname.length - 1]
-            writers = @cls_attr_writers[ci].split(";")
+            writers = @cls_attr_writers[ci].split(";", -1)
             j = 0
             while j < writers.length
               if writers[j] == bname
@@ -23345,10 +25403,10 @@ class Compiler
               base_rt_so = cls_method_return(oci2, mname)
               base_rt_c_so = c_type(base_rt_so)
               rt_ok_so = 1
-              ovr_list_so = ovr_pairs_so.split(";")
+              ovr_list_so = ovr_pairs_so.split(";", -1)
               ol_so = 0
               while ol_so < ovr_list_so.length
-                p_so = ovr_list_so[ol_so].split(",")
+                p_so = ovr_list_so[ol_so].split(",", -1)
                 cand_owner_so = p_so[1].to_i
                 cand_rt_so = cls_method_return(cand_owner_so, mname)
                 if c_type(cand_rt_so) != base_rt_c_so
@@ -23358,7 +25416,7 @@ class Compiler
                   ol_so = ol_so + 1
                 end
               end
-              base_ptypes_so = midx2 >= 0 ? cls_meth_ptypes_get(oci2, midx2) : "".split(",")
+              base_ptypes_so = midx2 >= 0 ? cls_meth_ptypes_get(oci2, midx2) : "".split(",", -1)
               pt_ok_so = cls_imeth_override_ptypes_match(ovr_pairs_so, mname, base_ptypes_so)
               if rt_ok_so == 1 && pt_ok_so == 1
                 tmp_so = new_temp
@@ -23372,7 +25430,7 @@ class Compiler
                 emit("  switch (" + rc + "->cls_id) {")
                 ol2_so = 0
                 while ol2_so < ovr_list_so.length
-                  p2_so = ovr_list_so[ol2_so].split(",")
+                  p2_so = ovr_list_so[ol2_so].split(",", -1)
                   cand_internal_ci_so = p2_so[0].to_i
                   cand_cid_so = cls_id_for_user_internal(cand_internal_ci_so)
                   cand_owner2_so = p2_so[1].to_i
@@ -23419,7 +25477,7 @@ class Compiler
       ci2 = 0
       while ci2 < @cls_names.length
         cname2 = @cls_names[ci2]
-        readers2 = @cls_attr_readers[ci2].split(";")
+        readers2 = @cls_attr_readers[ci2].split(";", -1)
         found_reader = 0
         j2 = 0
         while j2 < readers2.length
@@ -23435,7 +25493,7 @@ class Compiler
         if mname.length > 1
           if mname[mname.length - 1] == "="
             bname2 = mname[0, mname.length - 1]
-            writers2 = @cls_attr_writers[ci2].split(";")
+            writers2 = @cls_attr_writers[ci2].split(";", -1)
             j2 = 0
             while j2 < writers2.length
               if writers2[j2] == bname2
@@ -23480,7 +25538,7 @@ class Compiler
  # Returns 1 if class `ci` declares `mname` as an attr_reader (in
  # which case `obj.<mname>` reads `obj->iv_<mname>`).
   def cls_has_attr_reader(ci, mname)
-    readers = @cls_attr_readers[ci].split(";")
+    readers = @cls_attr_readers[ci].split(";", -1)
     j = 0
     while j < readers.length
       if readers[j] == mname
@@ -23604,7 +25662,7 @@ class Compiler
     if obs == ""
       return 0
     end
-    distinct = obs.split(",")
+    distinct = obs.split(",", -1)
     saw_any = 0
     di = 0
     while di < distinct.length
@@ -23642,7 +25700,7 @@ class Compiler
       return @lv_alias_cache[cache_key]
     end
     found = ""
-    bodies = @cls_meth_bodies[@current_class_idx].split(";")
+    bodies = @cls_meth_bodies[@current_class_idx].split(";", -1)
     bi = 0
     while bi < bodies.length
       bid = bodies[bi].to_i
@@ -23710,7 +25768,7 @@ class Compiler
     if ci < 0 || ci >= @cls_ivar_observed_types.length
       return ""
     end
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
     parts = @cls_ivar_observed_types[ci].split(";", -1)
     k = 0
     while k < names.length
@@ -23745,6 +25803,9 @@ class Compiler
     end
     if klass == "Symbol"
       return "(" + recv_tmp + ".tag == SP_TAG_SYM)"
+    end
+    if klass == "Encoding"
+      return "(" + recv_tmp + ".tag == SP_TAG_ENCODING)"
     end
     if klass == "NilClass"
       return "(" + recv_tmp + ".tag == SP_TAG_NIL)"
@@ -23894,7 +25955,7 @@ class Compiler
  # result temp widens to sp_RbVal whenever an unreachable arm
  # has a different return type. Issue #549.
     args_id_pre = @nd_arguments[nid]
-    arg_types_pre = "".split(",")
+    arg_types_pre = "".split(",", -1)
     if args_id_pre >= 0
       aargs_pre = get_args(args_id_pre)
       kp = 0
@@ -23929,8 +25990,8 @@ class Compiler
  # Compile the call's argument list once. Track the inferred
  # source type alongside the compiled expression so the int-bit
  # branch below can unbox a poly arg without re-walking the AST.
-    arg_compiled = "".split(",")
-    arg_types = "".split(",")
+    arg_compiled = "".split(",", -1)
+    arg_types = "".split(",", -1)
     aargs_for_unbox = []
     arg_strs = ""
     args_id = @nd_arguments[nid]
@@ -25118,6 +27179,18 @@ class Compiler
       end
       return "(!sp_class_eq(" + lc_cls + ", " + rc_cls + "))"
     end
+ # Encoding is a value-type struct, so plain C `==` is invalid.
+ # Encoding only compares equal to another Encoding value.
+    if lt == "encoding" && at == "encoding"
+      lc_enc = compile_expr(recv)
+      rc_enc = arg_id >= 0 ? compile_expr(arg_id) : "sp_encoding_utf8()"
+      if op == "=="
+        return "sp_encoding_eq(" + lc_enc + ", " + rc_enc + ")"
+      end
+      return "(!sp_encoding_eq(" + lc_enc + ", " + rc_enc + "))"
+    elsif (lt == "encoding" || at == "encoding") && lt != "poly" && at != "poly"
+      return op == "==" ? "FALSE" : "TRUE"
+    end
  # Time == Time / != — equal instant (tv_sec and tv_nsec). Plain
  # `==` on the struct isn't valid C. Same-instant times compare
  # equal regardless of the is_utc presentation flag.
@@ -25420,6 +27493,9 @@ class Compiler
     if base == "symbol"
       return "(sp_sym)(" + val + ").v.i"
     end
+    if base == "encoding"
+      return "((sp_Encoding){(" + val + ").v.s})"
+    end
     if base == "int_array"
       return "(sp_IntArray *)(" + val + ").v.p"
     end
@@ -25551,6 +27627,9 @@ class Compiler
     if at == "symbol"
       return "sp_box_sym(" + val + ")"
     end
+    if at == "encoding"
+      return "sp_box_encoding(" + val + ")"
+    end
     if at == "int_array"
       return "sp_box_int_array(" + val + ")"
     end
@@ -25606,6 +27685,12 @@ class Compiler
  # Other pointer types — box with a neutral cls_id of 0 rather
  # than truncating the pointer to int.
     if type_is_pointer(at) == 1
+      return "sp_box_obj((void *)(" + val + "), 0)"
+    end
+ # FFI :ptr is a raw C pointer that type_is_pointer() reports as
+ # non-pointer (user-managed, not GC-traced). Boxing it into a poly
+ # slot still needs to survive as a pointer, not as an int.
+    if at == "ptr"
       return "sp_box_obj((void *)(" + val + "), 0)"
     end
     "sp_box_int(" + val + ")"
@@ -26160,12 +28245,12 @@ class Compiler
     if args_id >= 0
       arg_ids = get_args(args_id)
     end
-    pnames = @meth_param_names[mi].split(",")
-    ptypes = @meth_param_types[mi].split(",")
-    defaults = @meth_has_defaults[mi].split(",")
+    pnames = @meth_param_names[mi].split(",", -1)
+    ptypes = @meth_param_types[mi].split(",", -1)
+    defaults = @meth_has_defaults[mi].split(",", -1)
     rest_param_idx = method_rest_index(mi)
     if omit_trailing > 0
-      kept = "".split(",")
+      kept = "".split(",", -1)
       pk = 0
       limit = pnames.length - omit_trailing
       if limit < 0
@@ -26186,8 +28271,8 @@ class Compiler
  # below () can pick the right box helper from the arg's
  # actual source type via box_expr_to_poly, rather than hardcoding
  # sp_box_str.
-    kw_names = "".split(",")
-    kw_vals = "".split(",")
+    kw_names = "".split(",", -1)
+    kw_vals = "".split(",", -1)
     kw_arg_ids = []
     positional_ids = []
     splat_idx = -1
@@ -26681,7 +28766,7 @@ class Compiler
     end
  # Extract keyword pairs — remember the expression nid too so we can
  # box it (sp_box_int etc.) when the matching ctor param is poly.
-    kw_names = "".split(",")
+    kw_names = "".split(",", -1)
     kw_exprs = []
     ak = 0
     while ak < arg_ids.length
@@ -26950,7 +29035,7 @@ class Compiler
   end
 
   def compile_gc_safe_args(arg_ids)
-    temps = "".split(",")
+    temps = "".split(",", -1)
     k = 0
     while k < arg_ids.length
       if expr_may_gc(arg_ids[k]) == 1
@@ -27037,12 +29122,12 @@ class Compiler
     if args_id >= 0
       raw_arg_ids = get_args(args_id)
     end
-    all_defaults = @cls_meth_defaults[target_ci].split("|")
+    all_defaults = @cls_meth_defaults[target_ci].split("|", -1)
     ptypes = cls_meth_ptypes_get(target_ci, target_midx)
     pnames_t = cls_meth_pnames_get(target_ci, target_midx)
-    defaults = "".split(",")
+    defaults = "".split(",", -1)
     if target_midx < all_defaults.length
-      defaults = all_defaults[target_midx].split(",")
+      defaults = all_defaults[target_midx].split(",", -1)
     end
  # Pull out kwargs (KeywordHashNode) from the positional stream
  # so the loop below can map `key: value` to the matching named
@@ -27051,8 +29136,8 @@ class Compiler
  # next positional slot (ptype[1]) and emit garbage for the
  # actual content_type kwarg slot.
     arg_ids = []
-    kw_name_to_arg = "".split(",")
-    kw_name_keys  = "".split(",")
+    kw_name_to_arg = "".split(",", -1)
+    kw_name_keys  = "".split(",", -1)
     kak = 0
     while kak < raw_arg_ids.length
       if @nd_type[raw_arg_ids[kak]] == "KeywordHashNode"
@@ -27367,7 +29452,7 @@ class Compiler
     if ci < 0
       return ""
     end
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < mnames.length
       if mnames[j] == mname
@@ -27382,6 +29467,137 @@ class Compiler
       end
     end
     ""
+  end
+
+ # --- prepend chain helpers (mirror of spinel_analyze.rb) ----------
+ # The chain is materialized into @cls_meth_prep_chain by analyze.
+ # See spinel_analyze.rb prep_snapshot_active for the storage shape.
+
+ # List of synthetic shadow names for (ci, mname). Index 0 is the
+ # oldest snapshot (closest to parent); the highest index is the
+ # newest (next super target from the active method).
+  def prep_chain_syn_names(ci, mname)
+    result = "".split(",", -1)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return result
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return result
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        em = entries[ei][0, eq_pos]
+        if em == mname
+          syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+          return syns_str.split(",", -1)
+        end
+      end
+      ei = ei + 1
+    end
+    result
+  end
+
+ # Reverse lookup -- source user mname for a synthetic shadow on
+ # class ci. "" if syn_name is not a shadow.
+  def prep_syn_source_mname(ci, syn_name)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return ""
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return ""
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        em = entries[ei][0, eq_pos]
+        syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+        syns = syns_str.split(",", -1)
+        si = 0
+        while si < syns.length
+          if syns[si] == syn_name
+            return em
+          end
+          si = si + 1
+        end
+      end
+      ei = ei + 1
+    end
+    ""
+  end
+
+ # Position in chain (0 = oldest = deepest from active) for a
+ # synthetic shadow on ci. -1 if syn_name is not a shadow.
+  def prep_syn_position(ci, syn_name)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return -1
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return -1
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+        syns = syns_str.split(",", -1)
+        si = 0
+        while si < syns.length
+          if syns[si] == syn_name
+            return si
+          end
+          si = si + 1
+        end
+      end
+      ei = ei + 1
+    end
+    -1
+  end
+
+ # Synthetic on-class super target for (ci, cur_mname). Returns
+ # the shadow name to call (always a method on ci) or "" to mean
+ # "fall through to the parent class".
+  def prep_super_target(ci, cur_mname)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return ""
+    end
+    if @cls_meth_prep_chain[ci] == ""
+      return ""
+    end
+    pos = prep_syn_position(ci, cur_mname)
+    if pos >= 0
+      if pos > 0
+        src_mname = prep_syn_source_mname(ci, cur_mname)
+        syns = prep_chain_syn_names(ci, src_mname)
+        if pos - 1 < syns.length
+          return syns[pos - 1]
+        end
+      end
+      return ""
+    end
+    syns = prep_chain_syn_names(ci, cur_mname)
+    if syns.length > 0
+      return syns[syns.length - 1]
+    end
+    ""
+  end
+
+ # When super walks past the synthetic to the parent, the parent
+ # lookup uses the original user mname.
+  def prep_super_parent_mname(ci, cur_mname)
+    src = prep_syn_source_mname(ci, cur_mname)
+    if src != ""
+      return src
+    end
+    cur_mname
   end
 
  # `recv OP rhs` lowering for an obj-typed receiver. When the
@@ -27739,7 +29955,7 @@ class Compiler
     if is_tuple_type(arr_type) == 1
       name = tuple_c_name(arr_type)
       tmp = new_temp
-      parts = tuple_elem_types_str(arr_type).split(",")
+      parts = tuple_elem_types_str(arr_type).split(",", -1)
       emit("  " + name + " *" + tmp + " = (" + name + " *)sp_gc_alloc(sizeof(" + name + "), NULL, " + tuple_scan_name(arr_type) + ");")
       k = 0
       while k < elems.length && k < parts.length
@@ -28105,14 +30321,9 @@ class Compiler
     end
     t = @nd_type[nid]
     if t == "UnsupportedNode"
- # Same softer path as compile_expr's UnsupportedNode arm: warn
- # + no-op for Rational/Complex/Imaginary literals so the rest of
- # the file still compiles. Issue #728.
+ # Imaginary / Rational now have proper nodes (#840 #841). Any
+ # remaining UnsupportedNode is a genuine syntax gap; hard-error.
       kind_us2 = @nd_content[nid]
-      if kind_us2 == "RationalNode" || kind_us2 == "ComplexNode" || kind_us2 == "ImaginaryNode"
-        $stderr.puts "warning: spinel does not support " + kind_us2 + " at line " + @nd_value[nid].to_s + " (no-op)"
-        return
-      end
       $stderr.puts "Spinel: cannot compile " + kind_us2 + " at line " + @nd_value[nid].to_s + " (unsupported Ruby syntax)"
       exit(1)
     end
@@ -29472,8 +31683,8 @@ class Compiler
       elems = parse_id_list(@nd_elements[val_id])
       n = elems.length
  # Evaluate all RHS into temps first (swap-safe).
-      tmps = "".split(",")
-      ttypes = "".split(",")
+      tmps = "".split(",", -1)
+      ttypes = "".split(",", -1)
       k = 0
       while k < n
         tmp = new_temp
@@ -29674,8 +31885,8 @@ class Compiler
  # Direct array literal: a, b, c = [1, 2, 3] or a, b = b, a
       elems = parse_id_list(@nd_elements[val_id])
  # For swap safety, evaluate all RHS first into temps
-      tmps = "".split(",")
-      ttypes_lit = "".split(",")
+      tmps = "".split(",", -1)
+      ttypes_lit = "".split(",", -1)
       k = 0
       while k < elems.length
         tmp = new_temp
@@ -30180,7 +32391,7 @@ class Compiler
  # — keeps the receiver call (and its transient root) per-iteration,
  # so EOF on stdin actually advances `_t1` and the condition flips.
       saved_out = @out_lines
-      @out_lines = "".split(",")
+      @out_lines = "".split(",", -1)
       cond = compile_cond_expr(@nd_predicate[nid])
       cond_hoists = @out_lines
       @out_lines = saved_out
@@ -30523,6 +32734,18 @@ class Compiler
  # tmp, tripping the C compile.
           elsif @nd_type[cid] == "ConstantReadNode" && not_in(@nd_name[cid], @builtin_class_names) == 0
             result = result + (@nd_name[cid] == "String" ? "1" : "0")
+ # Issue #852: `case <string> when /regex/` -- Regexp#=== runs
+ # the regex against the receiver. Route through sp_re_match_p.
+ # Without this, the generic strcmp arm passed `0` (compile_expr
+ # fallback for RegularExpressionNode) and segfaulted.
+          elsif @nd_type[cid] == "RegularExpressionNode" || @nd_type[cid] == "InterpolatedRegularExpressionNode"
+            rpat_w = regex_pat_c_expr(cid)
+            if rpat_w != ""
+              @needs_regexp = 1
+              result = result + "sp_re_match_p(" + rpat_w + ", " + tmp + ")"
+            else
+              result = result + "0"
+            end
           else
             result = result + "strcmp(" + tmp + ", " + compile_expr(cid) + ") == 0"
           end
@@ -30605,7 +32828,7 @@ class Compiler
  # Track LV names already declared by any preceding ArrayPatternNode
  # arm in this case-match so re-using a name (`in [a, b]` then
  # `in [a, b, c]`) doesn't double-declare the C local.
-    declared_arr_pat_lvs = "".split(",")
+    declared_arr_pat_lvs = "".split(",", -1)
     k = 0
     while k < conds.length
       inid = conds[k]
@@ -30615,15 +32838,32 @@ class Compiler
           kw = "} else if"
         end
         pat = @nd_pattern[inid]
+ # `pat => var` (CapturePatternNode): peel off the capture so the
+ # array/hash arm runs as usual, then inject a binding at the
+ # top of the matched body. Issue #884.
+ # Parser "value" → @nd_expression, "target" → @nd_target.
+        capture_var_name = ""
+        if @nd_type[pat] == "CapturePatternNode"
+          cp_tgt_arm = @nd_target[pat]
+          if cp_tgt_arm >= 0 && @nd_type[cp_tgt_arm] == "LocalVariableTargetNode"
+            capture_var_name = @nd_name[cp_tgt_arm]
+          end
+          pat = @nd_expression[pat]
+        end
  # Array pattern `[a, b, c]`: declare the bound LVs at the
  # case-match level before any per-arm cond, bind them inline,
  # and gate match on length + per-elem sub-pattern check. Issue #669.
         if @nd_type[pat] == "ArrayPatternNode"
-          compile_array_pattern_arm(pat, tmp, pred_type, kw, inid, declared_arr_pat_lvs)
+          compile_array_pattern_arm(pat, tmp, pred_type, kw, inid, declared_arr_pat_lvs, capture_var_name)
+        elsif @nd_type[pat] == "HashPatternNode"
+          compile_hash_pattern_arm(pat, tmp, pred_type, kw, inid, capture_var_name)
         else
           cond_str = compile_in_pattern(pat, tmp, pred_type)
           emit("  " + kw + " (" + cond_str + ") {")
           @indent = @indent + 1
+          if capture_var_name != ""
+            emit("lv_" + capture_var_name + " = " + tmp + ";")
+          end
           compile_stmts_body(@nd_body[inid])
           @indent = @indent - 1
         end
@@ -30648,7 +32888,7 @@ class Compiler
  # LocalVariableTargetNode case (capture) is supported as a leaf;
  # other patterns (literals, pinned, nested) fall back to "0" so the
  # arm doesn't silently match.
-  def compile_array_pattern_arm(pat_id, tmp, pred_type, kw, inid, declared_lvs = "".split(","))
+  def compile_array_pattern_arm(pat_id, tmp, pred_type, kw, inid, declared_lvs = "".split(",", -1), capture_var = "")
     requireds = parse_id_list(@nd_requireds[pat_id])
  # Pick a get expression and elem c_type based on the scrutinee's
  # static array kind. Fall back to mrb_int for unknown shapes.
@@ -30693,7 +32933,12 @@ class Compiler
  # codegen-side declare_method_locals_from emits the C declaration
  # at function entry. No per-arm emit needed here -- the bind
  # below assigns into the pre-declared slot.
-    emit("  " + kw + " (" + len_expr + " == " + n.to_s + ") {")
+ # Issue #805: when the pattern has a trailing rest (`[a, b, *]`),
+ # the length check is `>= requireds` rather than `== requireds`
+ # so longer arrays still match.
+    rest_id = @nd_rest[pat_id]
+    cmp_op = (rest_id >= 0) ? ">=" : "=="
+    emit("  " + kw + " (" + len_expr + " " + cmp_op + " " + n.to_s + ") {")
     @indent = @indent + 1
     qi = 0
     while qi < n
@@ -30713,6 +32958,121 @@ class Compiler
       end
       qi = qi + 1
     end
+ # `*name` rest (SplatNode with non-nil expression): bind the
+ # remaining elements as an array slice. `*` without a name is
+ # just a length-flexibility hint with no binding.
+    if rest_id >= 0 && @nd_type[rest_id] == "SplatNode"
+      rest_expr_id = @nd_expression[rest_id]
+      if rest_expr_id >= 0 && @nd_type[rest_expr_id] == "LocalVariableTargetNode"
+        rname = @nd_name[rest_expr_id]
+        if pred_type == "int_array" || pred_type == "sym_array"
+          emit("lv_" + rname + " = sp_IntArray_slice(" + tmp + ", " + n.to_s + "LL, " + len_expr + " - " + n.to_s + "LL);")
+        elsif pred_type == "str_array"
+          emit("lv_" + rname + " = sp_StrArray_slice(" + tmp + ", " + n.to_s + "LL, " + len_expr + " - " + n.to_s + "LL);")
+        elsif pred_type == "float_array"
+          emit("lv_" + rname + " = sp_FloatArray_slice(" + tmp + ", " + n.to_s + "LL, " + len_expr + " - " + n.to_s + "LL);")
+        elsif pred_type == "poly_array"
+          emit("lv_" + rname + " = sp_PolyArray_slice(" + tmp + ", " + n.to_s + "LL, " + len_expr + " - " + n.to_s + "LL);")
+        end
+      end
+    end
+ # `[1, *] => arr` capture binding: bind the matched scrutinee to
+ # the as-LV at body entry. Issue #884.
+    if capture_var != ""
+      emit("lv_" + capture_var + " = " + tmp + ";")
+    end
+    compile_stmts_body(@nd_body[inid])
+    @indent = @indent - 1
+  end
+
+ # `case h in {a:, b: 2, c:}` -- HashPatternNode. Each AssocNode
+ # element pairs a symbol key with either a LocalVariableTargetNode
+ # (shorthand `a:` binding) or a sub-pattern (literal match like
+ # `b: 2`). The arm matches when every required key is present and,
+ # for non-binding entries, the stored value satisfies the sub-
+ # pattern. Issue #805.
+  def compile_hash_pattern_arm(pat_id, tmp, pred_type, kw, inid, capture_var = "")
+    elems = parse_id_list(@nd_elements[pat_id])
+    has_key_fn = ""
+    get_fn = ""
+    key_cast = ""
+    val_type = ""
+    if pred_type == "sym_int_hash"
+      has_key_fn = "sp_SymIntHash_has_key"
+      get_fn = "sp_SymIntHash_get"
+      val_type = "int"
+    elsif pred_type == "sym_str_hash"
+      has_key_fn = "sp_SymStrHash_has_key"
+      get_fn = "sp_SymStrHash_get"
+      val_type = "string"
+    elsif pred_type == "sym_poly_hash"
+      has_key_fn = "sp_SymPolyHash_has_key"
+      get_fn = "sp_SymPolyHash_get"
+      val_type = "poly"
+    elsif pred_type == "str_int_hash"
+      has_key_fn = "sp_StrIntHash_has_key"
+      get_fn = "sp_StrIntHash_get"
+      val_type = "int"
+    elsif pred_type == "str_str_hash"
+      has_key_fn = "sp_StrStrHash_has_key"
+      get_fn = "sp_StrStrHash_get"
+      val_type = "string"
+    elsif pred_type == "str_poly_hash"
+      has_key_fn = "sp_StrPolyHash_has_key"
+      get_fn = "sp_StrPolyHash_get"
+      val_type = "poly"
+    else
+ # Unknown hash variant -- emit a stub arm so the case still
+ # type-checks but never fires.
+      emit("  " + kw + " (0) {")
+      @indent = @indent + 1
+      compile_stmts_body(@nd_body[inid])
+      @indent = @indent - 1
+      return
+    end
+ # Build the match guard: AND over has_key checks for every required
+ # symbol key. Sub-pattern value checks (literals) are appended below.
+    conds = "".split(",", -1)
+    binds = "".split(",", -1)
+    ei = 0
+    while ei < elems.length
+      asoc = elems[ei]
+      if @nd_type[asoc] == "AssocNode"
+        kn = @nd_key[asoc]
+        if kn >= 0 && @nd_type[kn] == "SymbolNode"
+ # SymbolNode's "value" field is routed to @nd_content by the
+ # AST loader (see compiler_helpers.rb's set_ref_field "value" arm).
+          ksym_name = @nd_content[kn]
+          if pred_type[0, 4] == "sym_"
+            key_c = "SPS_" + ksym_name
+          else
+            key_c = "(&(\"\\xff\" \"" + ksym_name + "\")[1])"
+          end
+          conds.push(has_key_fn + "(" + tmp + ", " + key_c + ")")
+ # AssocNode's "value" REF lowers to @nd_expression in the loader
+ # (see compiler_helpers.rb's set_ref_field).
+          vn = @nd_expression[asoc]
+          if vn >= 0 && @nd_type[vn] == "LocalVariableTargetNode"
+            binds.push("lv_" + @nd_name[vn] + " = " + get_fn + "(" + tmp + ", " + key_c + ");")
+          end
+        end
+      end
+      ei = ei + 1
+    end
+    cond_expr = "1"
+    if conds.length > 0
+      cond_expr = conds.join(" && ")
+    end
+    emit("  " + kw + " (" + cond_expr + ") {")
+    @indent = @indent + 1
+    bi = 0
+    while bi < binds.length
+      emit(binds[bi])
+      bi = bi + 1
+    end
+    if capture_var != ""
+      emit("lv_" + capture_var + " = " + tmp + ";")
+    end
     compile_stmts_body(@nd_body[inid])
     @indent = @indent - 1
   end
@@ -30722,6 +33082,46 @@ class Compiler
       return "1"
     end
     pt = @nd_type[pat_id]
+ # Bare local-variable target (`case x in n`): always match, bind
+ # lv_n to the scrutinee in the condition itself so the body sees
+ # the value. scan_locals already declared the slot. Issue #905.
+    if pt == "LocalVariableTargetNode"
+      lvname_lt = @nd_name[pat_id]
+      return "((lv_" + lvname_lt + " = " + tmp + "), 1)"
+    end
+ # `pat if guard` -- prism represents this as IfNode wrapping the
+ # actual pattern in `statements`. Run the inner pattern's match
+ # (which also runs any LV binds via comma-expr), then AND-fold
+ # the guard expression. Issue #905. Note: "statements" field
+ # is mapped onto @nd_body by compiler_helpers' set_ref_field.
+    if pt == "IfNode"
+      stmts_if = @nd_body[pat_id]
+      inner_pat = -1
+      if stmts_if >= 0
+        inner_stmts = get_stmts(stmts_if)
+        if inner_stmts.length > 0
+          inner_pat = inner_stmts[0]
+        end
+      end
+      inner_cond = compile_in_pattern(inner_pat, tmp, pred_type)
+      guard_pred = @nd_predicate[pat_id]
+      if guard_pred >= 0
+        return "((" + inner_cond + ") && (" + compile_expr(guard_pred) + "))"
+      end
+      return inner_cond
+    end
+ # `pat => var` capture: recurse for the inner pattern's match,
+ # AND-fold the binding side-effect via comma-expr. Issue #884.
+ # Parser "value" → @nd_expression, "target" → @nd_target.
+    if pt == "CapturePatternNode"
+      inner_cp = compile_in_pattern(@nd_expression[pat_id], tmp, pred_type)
+      tgt_cp = @nd_target[pat_id]
+      if tgt_cp >= 0 && @nd_type[tgt_cp] == "LocalVariableTargetNode"
+        lvname_cp = @nd_name[tgt_cp]
+        return "((" + inner_cp + ") && ((lv_" + lvname_cp + " = " + tmp + "), 1))"
+      end
+      return inner_cp
+    end
     if pt == "ConstantReadNode"
       cname = @nd_name[pat_id]
       if pred_type == "poly"
@@ -31372,7 +33772,9 @@ class Compiler
               at = infer_type(argl[0])
               val = compile_expr(argl[0])
               if at == "int"
-                emit("  sp_String_append(" + rc + ", sp_int_to_s(" + val + "));")
+ # Issue #882: `s << int` appends the UTF-8 character at that
+ # codepoint, not the decimal digits. Per MRI String#<<.
+                emit("  sp_String_append(" + rc + ", sp_int_codepoint_to_str(" + val + "));")
               elsif at == "bigint"
                 @needs_bigint = 1
                 emit("  sp_String_append(" + rc + ", sp_bigint_to_s((sp_Bigint *)" + val + "));")
@@ -31786,7 +34188,7 @@ class Compiler
 
   def compile_block_iteration_stmt(nid, mname, recv)
  # each with block
-    if mname == "each" || (mname == "each_pair" && recv >= 0)
+    if mname == "each" || mname == "each_entry" || (mname == "each_pair" && recv >= 0)
       if @nd_block[nid] >= 0
  # For object types with yield-using each, use yield method call
         if recv >= 0
@@ -31801,6 +34203,141 @@ class Compiler
           compile_each_block(nid)
           return 1
         end
+      end
+    end
+
+ # Hash#delete_if / #select! / #reject! on typed hashes —
+ # walk the hash, evaluate block on each (k, v), collect keys
+ # to drop, then delete in a second pass (modify-during-iter is
+ # not safe with the open-addressing layout). select! inverts
+ # the predicate (keep iff true).
+    if (mname == "delete_if" || mname == "reject!" || mname == "select!") && @nd_block[nid] >= 0 && recv >= 0
+      rt_dh = infer_type(recv)
+      pfx_dh = ""
+      key_ty_dh = ""
+      val_ty_dh = ""
+      key_arr_pfx = "IntArray" # default sym ids stored in int array
+      if rt_dh == "sym_int_hash"
+        pfx_dh = "SymIntHash"; key_ty_dh = "symbol"; val_ty_dh = "int"
+      elsif rt_dh == "str_int_hash"
+        pfx_dh = "StrIntHash"; key_ty_dh = "string"; val_ty_dh = "int"; key_arr_pfx = "StrArray"
+      end
+      if pfx_dh != ""
+        old_dh = @in_loop
+        @in_loop = 1
+        rc_dh = compile_expr_gc_rooted(recv)
+        bp_k = get_block_param(nid, 0)
+        bp_k = "_k" if bp_k == ""
+        bp_v = get_block_param(nid, 1)
+        bp_v = "_v" if bp_v == ""
+        rm_arr = new_temp
+        idx_dh = new_temp
+        @needs_int_array = 1
+        @needs_str_array = 1 if key_arr_pfx == "StrArray"
+        @needs_gc = 1
+        emit("  sp_" + key_arr_pfx + " *" + rm_arr + " = sp_" + key_arr_pfx + "_new();")
+        emit("  SP_GC_ROOT(" + rm_arr + ");")
+        emit("  for (mrb_int " + idx_dh + " = 0; " + idx_dh + " < " + rc_dh + "->len; " + idx_dh + "++) {")
+        key_c_decl = (key_ty_dh == "symbol") ? "sp_sym" : "const char *"
+        emit("    " + key_c_decl + " lv_" + bp_k + " = " + rc_dh + "->order[" + idx_dh + "];")
+        emit("    mrb_int lv_" + bp_v + " = sp_" + pfx_dh + "_get(" + rc_dh + ", lv_" + bp_k + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_k, key_ty_dh)
+        declare_var(bp_v, val_ty_dh)
+        bbody_dh = @nd_body[@nd_block[nid]]
+        bexpr_dh = "FALSE"
+        if bbody_dh >= 0
+          bs_dh = get_stmts(bbody_dh)
+          kk = 0
+          while kk < bs_dh.length - 1
+            compile_stmt(bs_dh[kk])
+            kk = kk + 1
+          end
+          if bs_dh.length > 0
+            bexpr_dh = compile_expr(bs_dh.last)
+          end
+        end
+        cond_dh = (mname == "select!") ? "!(" + bexpr_dh + ")" : "(" + bexpr_dh + ")"
+        push_arg = (key_ty_dh == "symbol") ? "(mrb_int)lv_" + bp_k : "lv_" + bp_k
+        emit("    if (" + cond_dh + ") sp_" + key_arr_pfx + "_push(" + rm_arr + ", " + push_arg + ");")
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        rm_idx_dh = new_temp
+        get_call = (key_ty_dh == "symbol") ? "(sp_sym)sp_IntArray_get(" + rm_arr + ", " + rm_idx_dh + ")" : "sp_StrArray_get(" + rm_arr + ", " + rm_idx_dh + ")"
+        emit("  for (mrb_int " + rm_idx_dh + " = 0; " + rm_idx_dh + " < " + rm_arr + "->len; " + rm_idx_dh + "++) {")
+        emit("    sp_" + pfx_dh + "_delete(" + rc_dh + ", " + get_call + ");")
+        emit("  }")
+        @in_loop = old_dh
+        return 1
+      end
+    end
+
+ # `arr.combination(k) { |c| ... }` on int_array — call the
+ # blockless helper to materialise all combinations, then loop
+ # them and bind each sub-array to the block param.
+    if mname == "combination" && @nd_block[nid] >= 0 && recv >= 0
+      rt_co = infer_type(recv)
+      if rt_co == "int_array"
+        old_co = @in_loop
+        @in_loop = 1
+        rc_co = compile_expr_gc_rooted(recv)
+        bp_co = get_block_param(nid, 0)
+        bp_co = "_c" if bp_co == ""
+        @needs_int_array = 1
+        @needs_gc = 1
+        combos_co = new_temp
+        iter_co = new_temp
+        emit("  sp_PtrArray *" + combos_co + " = sp_IntArray_combination(" + rc_co + ", " + compile_arg0_as_int(nid) + ");")
+        emit("  SP_GC_ROOT(" + combos_co + ");")
+        emit("  for (mrb_int " + iter_co + " = 0; " + iter_co + " < " + combos_co + "->len; " + iter_co + "++) {")
+        emit("    sp_IntArray * lv_" + bp_co + " = (sp_IntArray *)" + combos_co + "->data[" + iter_co + "];")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_co, "int_array")
+        compile_stmts_body(@nd_body[@nd_block[nid]])
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        @in_loop = old_co
+        return 1
+      end
+    end
+
+ # `reverse_each` on a typed array: walk indices backwards.
+    if mname == "reverse_each" && @nd_block[nid] >= 0 && recv >= 0
+      rt_re = infer_type(recv)
+      pfx_re = ""
+      ety_re = ""
+      if rt_re == "int_array"
+        pfx_re = "IntArray"; ety_re = "int"
+      elsif rt_re == "str_array"
+        pfx_re = "StrArray"; ety_re = "string"
+      elsif rt_re == "float_array"
+        pfx_re = "FloatArray"; ety_re = "float"
+      elsif rt_re == "sym_array"
+        pfx_re = "SymArray"; ety_re = "symbol"
+        rt_re = "int_array"; pfx_re = "IntArray" # sym storage shares IntArray
+      end
+      if pfx_re != ""
+        old_re = @in_loop
+        @in_loop = 1
+        rc_re = compile_expr_gc_rooted(recv)
+        bp_re = get_block_param(nid, 0)
+        bp_re = "_x" if bp_re == ""
+        tmp_re = new_temp
+        emit("  for (mrb_int " + tmp_re + " = sp_" + pfx_re + "_length(" + rc_re + ") - 1; " + tmp_re + " >= 0; " + tmp_re + "--) {")
+        emit("    " + c_type(ety_re) + " lv_" + bp_re + " = sp_" + pfx_re + "_get(" + rc_re + ", " + tmp_re + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_re, ety_re)
+        compile_stmts_body(@nd_body[@nd_block[nid]])
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        @in_loop = old_re
+        return 1
       end
     end
 
@@ -31838,6 +34375,45 @@ class Compiler
         emit_redo_label(redo_label_ev)
         compile_stmts_body(@nd_body[@nd_block[nid]])
         pop_redo_label
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        return 1
+      end
+ # Issue #851: each_value on the common typed-hash variants.
+ # The shape is the same: walk h->order[i] and dispatch the
+ # variant's _get. Only int and string value parts here; the
+ # poly variants flow through the poly_poly_hash arm above
+ # already after boxing.
+      pfx_ev = ""
+      vty_ev = ""
+      vtag_ev = ""
+      if rt_ev == "sym_int_hash"
+        pfx_ev = "SymIntHash"; vty_ev = "mrb_int"; vtag_ev = "int"
+        @needs_sym_int_hash = 1
+      elsif rt_ev == "str_int_hash"
+        pfx_ev = "StrIntHash"; vty_ev = "mrb_int"; vtag_ev = "int"
+        @needs_str_int_hash = 1
+      elsif rt_ev == "int_str_hash"
+        pfx_ev = "IntStrHash"; vty_ev = "const char *"; vtag_ev = "string"
+      elsif rt_ev == "str_str_hash"
+        pfx_ev = "StrStrHash"; vty_ev = "const char *"; vtag_ev = "string"
+      elsif rt_ev == "sym_str_hash"
+        pfx_ev = "SymStrHash"; vty_ev = "const char *"; vtag_ev = "string"
+      end
+      if pfx_ev != ""
+        rc_ev2 = compile_expr_gc_rooted(recv)
+        bp_ev2 = get_block_param(nid, 0)
+        if bp_ev2 == ""
+          bp_ev2 = "_v"
+        end
+        tmp_ev2 = new_temp
+        emit("  for (mrb_int " + tmp_ev2 + " = 0; " + tmp_ev2 + " < " + rc_ev2 + "->len; " + tmp_ev2 + "++) {")
+        emit("    " + vty_ev + " lv_" + bp_ev2 + " = sp_" + pfx_ev + "_get(" + rc_ev2 + ", " + rc_ev2 + "->order[" + tmp_ev2 + "]);")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_ev2, vtag_ev)
+        compile_stmts_body(@nd_body[@nd_block[nid]])
         pop_scope
         @indent = @indent - 1
         emit("  }")
@@ -31928,22 +34504,35 @@ class Compiler
           if bp == ""
             bp = "_l"
           end
-          @needs_str_array = 1
-          tmp_arr = new_temp
-          tmp_i = new_temp
-          src = rc
+          src_el = rc
           if rt == "mutable_str"
-            src = rc + "->data"
+            src_el = rc + "->data"
           end
-          emit("  sp_StrArray *" + tmp_arr + " = sp_str_split(" + src + ", \"\\n\");")
-          emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " < " + tmp_arr + "->len; " + tmp_i + "++) {")
-          emit("    const char *lv_" + bp + " = " + tmp_arr + "->data[" + tmp_i + "];")
+          base_el = new_temp
+          start_el = new_temp
+          pos_el = new_temp
+          slen_el = new_temp
+          buf_el = new_temp
+          llen_el = new_temp
+          emit("  const char *" + base_el + " = " + src_el + ";")
+          emit("  mrb_int " + slen_el + " = sp_str_length(" + base_el + ");")
+          emit("  mrb_int " + start_el + " = 0;")
+          emit("  mrb_int " + pos_el + " = 0;")
+          emit("  while (" + start_el + " < " + slen_el + ") {")
+          emit("    while (" + pos_el + " < " + slen_el + " && " + base_el + "[" + pos_el + "] != '\\n') " + pos_el + "++;")
+          emit("    if (" + pos_el + " < " + slen_el + ") " + pos_el + "++;")
+          emit("    mrb_int " + llen_el + " = " + pos_el + " - " + start_el + ";")
+          emit("    char *" + buf_el + " = sp_str_alloc(" + llen_el + ");")
+          emit("    memcpy(" + buf_el + ", " + base_el + " + " + start_el + ", " + llen_el + ");")
+          emit("    " + buf_el + "[" + llen_el + "] = 0;")
+          emit("    const char *lv_" + bp + " = " + buf_el + ";")
           @indent = @indent + 1
           push_scope
           declare_var(bp, "string")
           compile_stmts_body(@nd_body[@nd_block[nid]])
           pop_scope
           @indent = @indent - 1
+          emit("    " + start_el + " = " + pos_el + ";")
           emit("  }")
           return 1
         end
@@ -32006,6 +34595,7 @@ class Compiler
       if @nd_block[nid] >= 0 && recv >= 0
         old = @in_loop
         @in_loop = 1
+        recv_t_step = infer_type(recv)
         rc = compile_expr_gc_rooted(recv)
         args_id = @nd_arguments[nid]
         limit_val = "0"
@@ -32017,6 +34607,22 @@ class Compiler
           end
           if aargs.length > 1
             step_val = compile_expr(aargs[1])
+          end
+        end
+ # Issue #870: float receiver / float step needs a mrb_float
+ # induction variable. Integer-typed `lv_x += 0.5` truncates to
+ # `+= 0` and loops forever.
+        is_float_step = 0
+        if recv_t_step == "float"
+          is_float_step = 1
+        end
+        if args_id >= 0
+          aargs_t = get_args(args_id)
+          if aargs_t.length > 0 && infer_type(aargs_t[0]) == "float"
+            is_float_step = 1
+          end
+          if aargs_t.length > 1 && infer_type(aargs_t[1]) == "float"
+            is_float_step = 1
           end
         end
         bp1 = get_block_param(nid, 0)
@@ -32031,10 +34637,16 @@ class Compiler
  # paramless `step` blocks appear in the same function.
         if synth == 1
           emit("  {")
-          emit("  mrb_int lv_" + bp1 + " = 0;")
+          if is_float_step == 1
+            emit("  mrb_float lv_" + bp1 + " = 0.0;")
+          else
+            emit("  mrb_int lv_" + bp1 + " = 0;")
+          end
         end
         bp_t_st = find_var_type(bp1)
-        if bp_t_st == "bigint"
+        if is_float_step == 1
+          emit("  for (lv_" + bp1 + " = " + rc + "; lv_" + bp1 + " <= " + limit_val + "; lv_" + bp1 + " += " + step_val + ") {")
+        elsif bp_t_st == "bigint"
           @needs_bigint = 1
           stmp_st = new_temp
           emit("  for (mrb_int " + stmp_st + " = " + rc + "; " + stmp_st + " <= " + limit_val + "; " + stmp_st + " += " + step_val + ") {")
@@ -32044,7 +34656,8 @@ class Compiler
         end
         @indent = @indent + 1
         push_scope
-        declare_var(bp1, bp_t_st == "bigint" ? "bigint" : "int")
+        bp_decl_t = is_float_step == 1 ? "float" : (bp_t_st == "bigint" ? "bigint" : "int")
+        declare_var(bp1, bp_decl_t)
         redo_label = push_redo_label
         emit_redo_label(redo_label)
         compile_stmts_body(@nd_body[@nd_block[nid]])
@@ -32646,7 +35259,7 @@ class Compiler
  # For nested lambdas, find their free vars and add them to OUR free vars
  # (they need to be captured transitively). Collect ALL formal params,
  # not just the first one .
-      inner_params = "".split(",")
+      inner_params = "".split(",", -1)
       inner_params_id = @nd_parameters[nid]
       if inner_params_id >= 0
         reqs = parse_id_list(@nd_requireds[inner_params_id])
@@ -32658,8 +35271,8 @@ class Compiler
       end
       inner_body = @nd_body[nid]
       if inner_body >= 0
-        inner_locals = "".split(",")
-        inner_free = "".split(",")
+        inner_locals = "".split(",", -1)
+        inner_free = "".split(",", -1)
         scan_lambda_free_vars(inner_body, inner_params, inner_locals, inner_free)
         inner_free.each { |vn|
           if not_in(vn, params) == 1
@@ -33120,7 +35733,7 @@ class Compiler
  # block below (it only handles single-arg lambdas with typed
  # captures); multi-arg flows through the sp_Val* path which now
  # honours `param_arr.length`.
-    param_arr = "".split(",")
+    param_arr = "".split(",", -1)
     params_id = @nd_parameters[nid]
     if params_id >= 0
       reqs = parse_id_list(@nd_requireds[params_id])
@@ -33137,8 +35750,8 @@ class Compiler
 
     body = @nd_body[nid]
  # Find free variables (captures)
-    free_vars = "".split(",")
-    locals = "".split(",")
+    free_vars = "".split(",", -1)
+    locals = "".split(",", -1)
     if body >= 0
       scan_lambda_free_vars(body, param_arr, locals, free_vars)
     end
@@ -33149,7 +35762,7 @@ class Compiler
     fname = "_lam_" + lam_id.to_s
 
  # Compute capture cell types (before body compilation)
-    cap_cell_types = "".split(",")
+    cap_cell_types = "".split(",", -1)
     k = 0
     while k < free_vars.length
       fv = free_vars[k]
@@ -33202,7 +35815,7 @@ class Compiler
         save_indent = @indent
         save_hp_names_len = @heap_promoted_names.length
         save_hp_cells_len = @heap_promoted_cells.length
-        @out_lines = "".split(",")
+        @out_lines = "".split(",", -1)
         @indent = 1
 
         push_scope
@@ -33233,12 +35846,12 @@ class Compiler
  # not part of analyze's exclusion, so filter them here so
  # captured-by-name vars stay outer-scoped instead of getting
  # a fresh lv_<name> shadow declaration.
-        lnames = "".split(",")
-        ltypes = "".split(",")
+        lnames = "".split(",", -1)
+        ltypes = "".split(",", -1)
         sn_lb = @nd_scope_names[body]
         if sn_lb != ""
-          raw_n = sn_lb.split("|")
-          raw_t = @nd_scope_types[body].split("|")
+          raw_n = sn_lb.split("|", -1)
+          raw_t = @nd_scope_types[body].split("|", -1)
           rk = 0
           while rk < raw_n.length
             keep = 1
@@ -33306,7 +35919,7 @@ class Compiler
         save_params = @lambda_params
         save_captures = @lambda_captures
         save_cell_types = @lambda_capture_cell_types
-        @out_lines = "".split(",")
+        @out_lines = "".split(",", -1)
         @lambda_params = param_arr
         @lambda_captures = free_vars
         @lambda_capture_cell_types = cap_cell_types
@@ -33438,7 +36051,7 @@ class Compiler
  # `lv_<bp>` locals — one `mrb_int lv_<bp> = args[<idx>];` line per
  # block param. Used at both proc-fn body emit sites (captures and
  # no-captures branches; identical shape).
-  def proc_fn_args_unpack(bps, pts = "".split(","))
+  def proc_fn_args_unpack(bps, pts = "".split(",", -1))
     s = ""
     bk = 0
     while bk < bps.length
@@ -33461,7 +36074,7 @@ class Compiler
     end
  # Collect every block param name. Single-param blocks fall through
  # to the existing `_unused` fallback for parameterless bodies.
-    bps = "".split(",")
+    bps = "".split(",", -1)
     pi = 0
     pn = get_block_param(nid, pi)
     while pn != ""
@@ -33483,15 +36096,15 @@ class Compiler
  # Detect captures (free variables that resolve in outer scope).
  # Every block param is in scope inside the body; only locals from
  # the outer scope read inside the body count as free.
-    free_vars = "".split(",")
+    free_vars = "".split(",", -1)
     if bbody >= 0
  # scan_lambda_free_vars treats `params` as read-only, so bps can
  # be passed directly without an intermediate copy.
-      proc_locals = "".split(",")
+      proc_locals = "".split(",", -1)
       scan_lambda_free_vars(bbody, bps, proc_locals, free_vars)
     end
-    captures = "".split(",")
-    capture_types = "".split(",")
+    captures = "".split(",", -1)
+    capture_types = "".split(",", -1)
     fk = 0
     while fk < free_vars.length
       fv = free_vars[fk]
@@ -33513,7 +36126,7 @@ class Compiler
  # done after body compile (so cells exist before they're referenced
  # in the cap struct allocation).
     save_out = @out_lines
-    @out_lines = "".split(",")
+    @out_lines = "".split(",", -1)
     saved_in_proc_body = @in_proc_body
     saved_proc_captures = @proc_captures
     saved_proc_capture_types = @proc_capture_types
@@ -33525,13 +36138,13 @@ class Compiler
       @proc_capture_types = capture_types
     else
       @in_proc_body = 0
-      @proc_captures = "".split(",")
-      @proc_capture_types = "".split(",")
+      @proc_captures = "".split(",", -1)
+      @proc_capture_types = "".split(",", -1)
     end
     push_scope
-    pts = "".split("|")
+    pts = "".split("|", -1)
     if blk_param_types != ""
-      pts = blk_param_types.split("|")
+      pts = blk_param_types.split("|", -1)
     end
     di = 0
     while di < bps.length
@@ -33556,16 +36169,16 @@ class Compiler
             if last_t == "LocalVariableWriteNode" || last_t == "LocalVariableOperatorWriteNode"
               compile_stmt(bs[k])
               body_stmts = @out_lines.join(10.chr) + 10.chr
-              @out_lines = "".split(",")
+              @out_lines = "".split(",", -1)
               bexpr = fiber_var_ref(@nd_name[bs[k]])
               bexpr_t_proc = find_var_type(@nd_name[bs[k]])
             elsif lt != "void"
               body_stmts = @out_lines.join(10.chr) + 10.chr
-              @out_lines = "".split(",")
+              @out_lines = "".split(",", -1)
               bexpr = compile_expr(bs[k])
               bexpr_t_proc = lt
               extra = @out_lines.join(10.chr) + 10.chr
-              @out_lines = "".split(",")
+              @out_lines = "".split(",", -1)
               body_stmts = body_stmts + extra
             else
               compile_stmt(bs[k])
@@ -33577,7 +36190,7 @@ class Compiler
         end
         if body_stmts == ""
           body_stmts = @out_lines.join(10.chr) + 10.chr
-          @out_lines = "".split(",")
+          @out_lines = "".split(",", -1)
         end
       end
     end
@@ -34137,10 +36750,10 @@ class Compiler
                 pt_ok_a = cls_imeth_override_ptypes_match(ovr_pairs_a, "[]=", base_pt_a)
                 if pt_ok_a == 1
                   emit("  switch (" + rc + "->cls_id) {")
-                  ovr_list_a = ovr_pairs_a.split(";")
+                  ovr_list_a = ovr_pairs_a.split(";", -1)
                   ol_a = 0
                   while ol_a < ovr_list_a.length
-                    p_a = ovr_list_a[ol_a].split(",")
+                    p_a = ovr_list_a[ol_a].split(",", -1)
                     cand_internal_a = p_a[0].to_i
                     cand_cid_a = cls_id_for_user_internal(cand_internal_a)
                     cand_owner_a = p_a[1].to_i
@@ -34301,6 +36914,47 @@ class Compiler
       emit("  { sp_SymIntHash *" + tt + " = " + rc + "; sp_sym " + ti + " = " + idx +
            "; sp_SymIntHash_set(" + tt + ", " + ti +
            ", sp_SymIntHash_get(" + tt + ", " + ti + ") " + op + " (" + val + ")); }")
+      return
+    end
+ # sym_str_hash / str_str_hash with `+= str` — string concat
+ # (the only sensible compound op for string-valued hashes).
+    if rt == "sym_str_hash" && op == "+"
+      tt = new_temp
+      ti = new_temp
+      emit("  { sp_SymStrHash *" + tt + " = " + rc + "; sp_sym " + ti + " = " + idx +
+           "; sp_SymStrHash_set(" + tt + ", " + ti +
+           ", sp_str_concat(sp_SymStrHash_get(" + tt + ", " + ti + "), " + val + ")); }")
+      return
+    end
+    if rt == "str_str_hash" && op == "+"
+      tt = new_temp
+      ti = new_temp
+      idx_s2 = compile_expr_as_string(arg_ids[0])
+      emit("  { sp_StrStrHash *" + tt + " = " + rc + "; const char *" + ti + " = " + idx_s2 +
+           "; sp_StrStrHash_set(" + tt + ", " + ti +
+           ", sp_str_concat(sp_StrStrHash_get(" + tt + ", " + ti + "), " + val + ")); }")
+      return
+    end
+ # sym_poly_hash / str_poly_hash with `+= int` — unbox the
+ # current sp_RbVal, run the op, re-box. Only int-valued slots
+ # are supported here; other op-arg shapes fall through.
+    if rt == "sym_poly_hash" && op == "+" && infer_type(@nd_expression[nid]) == "int"
+      @needs_rb_value = 1
+      tt = new_temp
+      ti = new_temp
+      emit("  { sp_SymPolyHash *" + tt + " = " + rc + "; sp_sym " + ti + " = " + idx +
+           "; sp_SymPolyHash_set(" + tt + ", " + ti +
+           ", sp_box_int(sp_SymPolyHash_get(" + tt + ", " + ti + ").v.i " + op + " (" + val + "))); }")
+      return
+    end
+    if rt == "str_poly_hash" && op == "+" && infer_type(@nd_expression[nid]) == "int"
+      @needs_rb_value = 1
+      tt = new_temp
+      ti = new_temp
+      idx_s3 = compile_expr_as_string(arg_ids[0])
+      emit("  { sp_StrPolyHash *" + tt + " = " + rc + "; const char *" + ti + " = " + idx_s3 +
+           "; sp_StrPolyHash_set(" + tt + ", " + ti +
+           ", sp_box_int(sp_StrPolyHash_get(" + tt + ", " + ti + ").v.i " + op + " (" + val + "))); }")
       return
     end
  # Poly recv + symbol idx: surfaces in `arr[i][:k] += v` (and the
@@ -34861,8 +37515,45 @@ class Compiler
       @needs_sym_int_hash = 1
       return "sp_SymIntHash_inspect(" + val + ")"
     end
+ # Issue #851: inspect for every typed-hash variant that ships
+ # an inspect helper in the runtime.
+    if at == "str_int_hash"
+      @needs_str_int_hash = 1
+      return "sp_StrIntHash_inspect(" + val + ")"
+    end
+    if at == "str_str_hash"
+      return "sp_StrStrHash_inspect(" + val + ")"
+    end
+    if at == "sym_str_hash"
+      return "sp_SymStrHash_inspect(" + val + ")"
+    end
+    if at == "int_str_hash"
+      return "sp_IntStrHash_inspect(" + val + ")"
+    end
+    if at == "int_int_hash"
+      return "sp_IntIntHash_inspect(" + val + ")"
+    end
+    if at == "str_poly_hash"
+      @needs_rb_value = 1
+      return "sp_StrPolyHash_inspect(" + val + ")"
+    end
+    if at == "sym_poly_hash"
+      @needs_rb_value = 1
+      return "sp_SymPolyHash_inspect(" + val + ")"
+    end
+    if at == "poly_poly_hash"
+      @needs_rb_value = 1
+      return "sp_PolyPolyHash_inspect(" + val + ")"
+    end
     if at == "time"
       return "sp_time_inspect_v(" + val + ")"
+    end
+ # Issues #840 #841: Complex / Rational value types.
+    if at == "complex"
+      return "sp_complex_inspect(" + val + ")"
+    end
+    if at == "rational"
+      return "sp_rational_inspect(" + val + ")"
     end
     ""
   end
@@ -34935,8 +37626,12 @@ class Compiler
     if at == "int?"
  # `puts nil` outputs an empty line in Ruby. The int? slot uses
  # SP_INT_NIL as the nil inhabitant; raw printf would emit
- # INT64_MIN's decimal instead.
-      emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
+ # INT64_MIN's decimal instead. Bind val to a temp first so
+ # the is_nil check and printf don't re-evaluate (#832: pop /
+ # shift mutate the receiver -- double-eval ate the wrong slot).
+      tmp_puts_int_opt = new_temp
+      emit("  mrb_int " + tmp_puts_int_opt + " = " + val + ";")
+      emit("  if (sp_int_is_nil(" + tmp_puts_int_opt + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + tmp_puts_int_opt + "); }")
       return
     end
     if at == "float"
@@ -34961,6 +37656,18 @@ class Compiler
     if at == "class"
       @needs_class_table = 1
       emit("  puts(sp_class_to_s(" + val + "));")
+      return
+    end
+    if at == "complex"
+      emit("  { const char *_cs = sp_complex_inspect(" + val + "); fputs(_cs, stdout); putchar('" + bsl_n + "'); }")
+      return
+    end
+    if at == "rational"
+      emit("  { const char *_rs = sp_rational_inspect(" + val + "); fputs(_rs, stdout); putchar('" + bsl_n + "'); }")
+      return
+    end
+    if at == "encoding"
+      emit("  puts(sp_encoding_name(" + val + "));")
       return
     end
     if at == "time"
@@ -35074,6 +37781,11 @@ class Compiler
         k = k + 1
         next
       end
+      if at == "encoding"
+        emit("  puts(sp_encoding_name(" + val + "));")
+        k = k + 1
+        next
+      end
  # `puts <exc>` -- print the message (CRuby calls to_s).
       if at == "exception"
         emit("  { const char *_ps = sp_exc_message(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
@@ -35090,8 +37802,11 @@ class Compiler
       elsif at == "int?"
  # `puts nil` outputs an empty line in Ruby. The int? slot uses
  # SP_INT_NIL as the nil inhabitant; raw printf would emit
- # INT64_MIN's decimal instead.
-        emit("  if (sp_int_is_nil(" + val + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + val + "); }")
+ # INT64_MIN's decimal instead. Bind to a temp so side-effecting
+ # exprs (e.g. a.pop on int_array) don't double-eval (#832).
+        tmp_pmsg_io = new_temp
+        emit("  mrb_int " + tmp_pmsg_io + " = " + val + ";")
+        emit("  if (sp_int_is_nil(" + tmp_pmsg_io + ")) { putchar('" + bsl_n + "'); } else { printf(\"%lld" + bsl_n + "\", (long long)" + tmp_pmsg_io + "); }")
       else
         if at == "float"
           emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
@@ -35120,6 +37835,29 @@ class Compiler
                   emit("  { sp_IntArray *_pa = " + val + "; for (mrb_int _pi = 0; _pi < _pa->len; _pi++) printf(\"%lld" + bsl_n + "\", (long long)_pa->data[_pa->start + _pi]); }")
                 elsif at == "float_array"
                   emit("  { sp_FloatArray *_pa = " + val + "; for (mrb_int _pi = 0; _pi < _pa->len; _pi++) { const char *_fs = sp_float_to_s(_pa->data[_pi]); fputs(_fs, stdout); putchar('" + bsl_n + "'); } }")
+                elsif is_tuple_type(at) == 1
+ # `puts tuple_val` splats Ruby Array elements one per line.
+ # Tuples emerge from partition/divmod/minmax and similar.
+ # Issue #854.
+                  arity_pt = tuple_arity(at)
+                  k_pt = 0
+                  tmp_pt_val = new_temp
+                  c_tuple_name = c_type(at)
+                  emit("  " + c_tuple_name + " " + tmp_pt_val + " = " + val + ";")
+                  while k_pt < arity_pt
+                    et_pt = tuple_elem_type_at(at, k_pt)
+                    field_pt = tmp_pt_val + "->_" + k_pt.to_s
+                    if et_pt == "string"
+                      emit("  { const char *_ps = (const char *)(" + field_pt + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
+                    elsif et_pt == "int"
+                      emit("  printf(\"%lld" + bsl_n + "\", (long long)" + field_pt + ");")
+                    elsif et_pt == "float"
+                      emit("  { const char *_fs = sp_float_to_s(" + field_pt + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
+                    else
+                      emit("  printf(\"%lld" + bsl_n + "\", (long long)(mrb_int)" + field_pt + ");")
+                    end
+                    k_pt = k_pt + 1
+                  end
                 else
                   emit("  printf(\"%lld" + bsl_n + "\", (long long)" + val + ");")
                 end
@@ -35145,6 +37883,8 @@ class Compiler
       val = compile_expr(arg_ids[k])
       if at == "string"
         emit("  fprintf(stderr, \"%s" + bsl_n + "\", " + val + ");")
+      elsif at == "encoding"
+        emit("  fprintf(stderr, \"%s" + bsl_n + "\", sp_encoding_name(" + val + "));")
       else
         emit("  fprintf(stderr, \"%lld" + bsl_n + "\", (long long)" + val + ");")
       end
@@ -35161,13 +37901,56 @@ class Compiler
     if arg_ids.length < 1
       return
     end
+ # Issue #751: cast int args as (long long) and rewrite integer format
+ # specifiers (%d/%i/%x/%X/%o/%u) to include the `ll` length so
+ # mrb_int (int64) isn't truncated to int. Same shape as the
+ # String#% literal-format rewrite (line ~17729).
     fmt_expr = compile_expr(arg_ids[0])
+    if @nd_type[arg_ids[0]] == "StringNode"
+      lit_pf = @nd_unescaped[arg_ids[0]]
+      if lit_pf == ""
+        lit_pf = @nd_content[arg_ids[0]]
+      end
+      rewritten_pf = ""
+      fi_pf = 0
+      while fi_pf < lit_pf.length
+        if lit_pf[fi_pf] == "%"
+          rewritten_pf = rewritten_pf + "%"
+          fi_pf = fi_pf + 1
+          while fi_pf < lit_pf.length
+            cp = lit_pf[fi_pf]
+            if cp == "-" || cp == "+" || cp == " " || cp == "#" || cp == "0" || (cp >= "1" && cp <= "9") || cp == "."
+              rewritten_pf = rewritten_pf + cp
+              fi_pf = fi_pf + 1
+            else
+              fi_pf = fi_pf  # exit inner loop
+              break
+            end
+          end
+          if fi_pf < lit_pf.length
+            cp = lit_pf[fi_pf]
+            if cp == "d" || cp == "i"
+              rewritten_pf = rewritten_pf + "lld"
+            elsif cp == "x" || cp == "X" || cp == "o" || cp == "u"
+              rewritten_pf = rewritten_pf + "ll" + cp
+            else
+              rewritten_pf = rewritten_pf + cp
+            end
+            fi_pf = fi_pf + 1
+          end
+        else
+          rewritten_pf = rewritten_pf + lit_pf[fi_pf]
+          fi_pf = fi_pf + 1
+        end
+      end
+      fmt_expr = c_string_literal(rewritten_pf)
+    end
     rest_args = ""
     k = 1
     while k < arg_ids.length
       at = infer_type(arg_ids[k])
       if at == "int"
-        rest_args = rest_args + ", (int)" + compile_expr(arg_ids[k])
+        rest_args = rest_args + ", (long long)" + compile_expr(arg_ids[k])
       else
         rest_args = rest_args + ", " + compile_expr(arg_ids[k])
       end
@@ -35206,6 +37989,11 @@ class Compiler
       end
       if at == "symbol"
         emit("  fputs(sp_sym_to_s(" + val + "), stdout);")
+        k = k + 1
+        next
+      end
+      if at == "encoding"
+        emit("  fputs(sp_encoding_name(" + val + "), stdout);")
         k = k + 1
         next
       end
@@ -35313,38 +38101,70 @@ class Compiler
     rt = infer_type(@nd_receiver[nid])
     rc = compile_expr_gc_rooted(@nd_receiver[nid])
     n = compile_arg0(nid)
-    bp1 = get_block_param(nid, 0)
-    if bp1 == ""
-      bp1 = "_cons"
+    pfx = array_c_prefix(rt)
+    elem_t_ec = elem_type_of_array(rt)
+    @needs_gc = 1
+
+ # Multi-param block on each_cons(k) — bind one block param
+ # per pair element instead of materialising a sub-array.
+ # Detect by counting RequiredParameter slots and matching
+ # against the literal numeric arg `k`.
+    blk_id_ec = @nd_block[nid]
+    n_int_ec = -1
+    args_id_ec = @nd_arguments[nid]
+    if args_id_ec >= 0
+      a_list_ec = get_args(args_id_ec)
+      if a_list_ec.length > 0 && @nd_type[a_list_ec[0]] == "IntegerNode"
+        n_int_ec = @nd_value[a_list_ec[0]].to_i
+      end
     end
+    bp_params_ec = blk_id_ec >= 0 ? @nd_parameters[blk_id_ec] : -1
+    inner_params_ec = bp_params_ec >= 0 ? @nd_parameters[bp_params_ec] : -1
+    reqs_ec = inner_params_ec >= 0 ? parse_id_list(@nd_requireds[inner_params_ec]) : []
+    can_destruct_ec = (n_int_ec > 0 && reqs_ec.length == n_int_ec && reqs_ec.length >= 2 && @nd_type[reqs_ec[0]] != "MultiTargetNode")
+
     tmp_i = new_temp
     tmp_j = new_temp
     tmp_len = new_temp
-    pfx = array_c_prefix(rt)
-    @needs_gc = 1
     emit("  mrb_int " + tmp_len + " = sp_" + pfx + "_length(" + rc + ");")
     emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " + " + n + " <= " + tmp_len + "; " + tmp_i + "++) {")
- # See compile_each_slice_block: shadow case needs a fresh typed slot with
- # its own GC root.
-    outer_t = find_var_type(bp1)
-    if outer_t != "" && outer_t != rt
-      emit("    SP_GC_SAVE();")
-      emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
-      emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+
+    if can_destruct_ec
+      push_scope
+      di_ec = 0
+      while di_ec < reqs_ec.length
+        bpn_ec = @nd_name[reqs_ec[di_ec]]
+        emit("    " + c_type(elem_t_ec) + " lv_" + bpn_ec + " = sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + di_ec.to_s + ");")
+        declare_var(bpn_ec, elem_t_ec)
+        di_ec = di_ec + 1
+      end
+      @indent = @indent + 1
+      compile_stmts_body(@nd_body[blk_id_ec])
+      @indent = @indent - 1
+      pop_scope
     else
-      emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      bp1 = get_block_param(nid, 0)
+      bp1 = "_cons" if bp1 == ""
+      outer_t = find_var_type(bp1)
+      if outer_t != "" && outer_t != rt
+        emit("    SP_GC_SAVE();")
+        emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
+        emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+      else
+        emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      end
+      emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
+      emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
+      @indent = @indent + 1
+      push_scope
+      declare_var(bp1, rt)
+      redo_label = push_redo_label
+      emit_redo_label(redo_label)
+      compile_stmts_body(@nd_body[blk_id_ec])
+      pop_redo_label
+      pop_scope
+      @indent = @indent - 1
     end
-    emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
-    emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
-    @indent = @indent + 1
-    push_scope
-    declare_var(bp1, rt)
-    redo_label = push_redo_label
-    emit_redo_label(redo_label)
-    compile_stmts_body(@nd_body[@nd_block[nid]])
-    pop_redo_label
-    pop_scope
-    @indent = @indent - 1
     emit("  }")
     @in_loop = old
   end
@@ -36589,6 +39409,42 @@ class Compiler
     tmp_res
   end
 
+ # Array#find_index { block } -- returns the FIRST index where
+ # the block is truthy, nil otherwise. Mirrors compile_array_find_block
+ # but captures the index instead of the element. Result is int?
+ # (SP_INT_NIL sentinel for nil). Issue #864.
+  def compile_array_find_index_block(nid, rc, recv_type)
+    bp1 = get_block_param(nid, 0)
+    if bp1 == ""
+      bp1 = "_x"
+    end
+    elem_type = iter_elem_type(recv_type)
+    tmp_res = new_temp
+    tmp_i = new_temp
+    emit("  mrb_int " + tmp_res + " = SP_INT_NIL;")
+    emit_iter_open(rc, recv_type, "lv_" + bp1, tmp_i)
+    push_scope
+    declare_var(bp1, elem_type)
+    blk = @nd_block[nid]
+    bbody = @nd_body[blk]
+    bexpr = "0"
+    if bbody >= 0
+      bs = get_stmts(bbody)
+      if bs.length > 0
+        k = 0
+        while k < bs.length - 1
+          compile_stmt(bs[k])
+          k = k + 1
+        end
+        bexpr = compile_expr(bs.last)
+      end
+    end
+    emit("    if (" + bexpr + ") { " + tmp_res + " = " + tmp_i + "; break; }")
+    pop_scope
+    emit("  }")
+    tmp_res
+  end
+
   def compile_array_predicate_block(nid, rc, recv_type, mname)
  # Implements any?/all?/none? with block by short-circuit loop
     bp1 = get_block_param(nid, 0)
@@ -36638,8 +39494,67 @@ class Compiler
     tmp_res
   end
 
+ # Per-variant lookup: returns a dispatch struct describing how to
+ # iterate a hash, read keys/values, declare block-param locals, and
+ # build a same-type result. Index [0]=ctor, [1]=getter, [2]=setter,
+ # [3]=key_type_label, [4]=val_type_label, [5]=key_iter_expr_fmt
+ # (where %RC% is the receiver and %I% the index var).
+ # Issue #802.
+  def hash_variant_info(ht)
+    if ht == "str_int_hash"
+      @needs_str_int_hash = 1
+      return ["sp_StrIntHash_new", "sp_StrIntHash_get", "sp_StrIntHash_set", "string", "int", "%RC%->order[%I%]"]
+    end
+    if ht == "str_str_hash"
+      @needs_str_str_hash = 1
+      return ["sp_StrStrHash_new", "sp_StrStrHash_get", "sp_StrStrHash_set", "string", "string", "%RC%->order[%I%]"]
+    end
+    if ht == "sym_int_hash"
+      @needs_sym_int_hash = 1
+      return ["sp_SymIntHash_new", "sp_SymIntHash_get", "sp_SymIntHash_set", "symbol", "int", "%RC%->order[%I%]"]
+    end
+    if ht == "sym_str_hash"
+      @needs_sym_str_hash = 1
+      return ["sp_SymStrHash_new", "sp_SymStrHash_get", "sp_SymStrHash_set", "symbol", "string", "%RC%->order[%I%]"]
+    end
+    if ht == "int_str_hash"
+      @needs_int_str_hash = 1
+      return ["sp_IntStrHash_new", "sp_IntStrHash_get", "sp_IntStrHash_set", "int", "string", "%RC%->order[%I%]"]
+    end
+    if ht == "str_poly_hash"
+      @needs_str_poly_hash = 1
+      @needs_rb_value = 1
+      return ["sp_StrPolyHash_new", "sp_StrPolyHash_get", "sp_StrPolyHash_set", "string", "poly", "%RC%->order[%I%]"]
+    end
+    if ht == "sym_poly_hash"
+      @needs_rb_value = 1
+      return ["sp_SymPolyHash_new", "sp_SymPolyHash_get", "sp_SymPolyHash_set", "symbol", "poly", "%RC%->order[%I%]"]
+    end
+    if ht == "poly_poly_hash"
+      @needs_poly_poly_hash = 1
+      @needs_rb_value = 1
+      return ["sp_PolyPolyHash_new", "sp_PolyPolyHash_get", "sp_PolyPolyHash_set", "poly", "poly", "%RC%->keys[%RC%->order[%I%]]"]
+    end
+    nil
+  end
+
+  def hash_key_iter_expr(info, rc, itmp)
+    fmt = info[5]
+    fmt = fmt.gsub("%RC%", rc)
+    fmt = fmt.gsub("%I%", itmp)
+    fmt
+  end
+
   def compile_hash_select_reject(nid, hash_type, rc, mname)
- # Build a new hash by filtering entries using the block
+ # Build a new hash by filtering entries using the block. Block
+ # params (lv_<k>, lv_<v>) are re-declared scope-locally inside
+ # the for body so the C type matches this variant's key/value
+ # ABI even when the same Ruby block-param name was used earlier
+ # at a different variant (the function-level decl picks one).
+    info = hash_variant_info(hash_type)
+    if info.nil?
+      return "0"
+    end
     bp1 = get_block_param(nid, 0)
     bp2 = get_block_param(nid, 1)
     if bp1 == ""
@@ -36648,32 +39563,21 @@ class Compiler
     if bp2 == ""
       bp2 = "_v"
     end
-    ctor = ""
-    getter = ""
-    setter = ""
-    val_type = ""
-    if hash_type == "str_int_hash"
-      ctor = "sp_StrIntHash_new"
-      getter = "sp_StrIntHash_get"
-      setter = "sp_StrIntHash_set"
-      val_type = "int"
-      @needs_str_int_hash = 1
-    else
-      ctor = "sp_StrStrHash_new"
-      getter = "sp_StrStrHash_get"
-      setter = "sp_StrStrHash_set"
-      val_type = "string"
-      @needs_str_str_hash = 1
-    end
+    ctor = info[0]
+    getter = info[1]
+    setter = info[2]
+    key_type = info[3]
+    val_type = info[4]
     @needs_gc = 1
     tmp = new_temp
     itmp = new_temp
     emit("  " + c_type(hash_type) + tmp + " = " + ctor + "();")
     emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + rc + "->len; " + itmp + "++) {")
-    emit("    lv_" + bp1 + " = " + rc + "->order[" + itmp + "];")
-    emit("    lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
+    key_expr = hash_key_iter_expr(info, rc, itmp)
+    emit("    " + c_type(key_type) + " lv_" + bp1 + " = " + key_expr + ";")
+    emit("    " + c_type(val_type) + " lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
     push_scope
-    declare_var(bp1, "string")
+    declare_var(bp1, key_type)
     declare_var(bp2, val_type)
     blk = @nd_block[nid]
     bbody = @nd_body[blk]
@@ -36681,7 +39585,6 @@ class Compiler
     if bbody >= 0
       bs = get_stmts(bbody)
       if bs.length > 0
- # Emit all but last as stmts
         k = 0
         while k < bs.length - 1
           compile_stmt(bs[k])
@@ -36701,6 +39604,10 @@ class Compiler
   end
 
   def compile_hash_block_predicate(nid, hash_type, rc, mname)
+    info = hash_variant_info(hash_type)
+    if info.nil?
+      return "0"
+    end
     bp1 = get_block_param(nid, 0)
     bp2 = get_block_param(nid, 1)
     if bp1 == ""
@@ -36709,38 +39616,23 @@ class Compiler
     if bp2 == ""
       bp2 = "_v"
     end
-    val_type = "int"
-    getter = "sp_StrIntHash_get"
-    if hash_type == "str_str_hash"
-      val_type = "string"
-      getter = "sp_StrStrHash_get"
-    end
+    getter = info[1]
+    key_type = info[3]
+    val_type = info[4]
     push_scope
-    declare_var(bp1, "string")
+    declare_var(bp1, key_type)
     declare_var(bp2, val_type)
     itmp = new_temp
- # Compile block expression
+    key_expr = hash_key_iter_expr(info, rc, itmp)
     blk = @nd_block[nid]
     bbody = @nd_body[blk]
     bexpr = "0"
-    blk_stmts = "".split(",")
-    if bbody >= 0
-      bs = get_stmts(bbody)
-      if bs.length > 0
-        k = 0
-        while k < bs.length - 1
-          blk_stmts.push(bs[k].to_s)
-          k = k + 1
-        end
-        bexpr = "PLACEHOLDER"
-      end
-    end
     if mname == "count"
       tmp_c = new_temp
       emit("  mrb_int " + tmp_c + " = 0;")
       emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + rc + "->len; " + itmp + "++) {")
-      emit("    lv_" + bp1 + " = " + rc + "->order[" + itmp + "];")
-      emit("    lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
+      emit("    " + c_type(key_type) + " lv_" + bp1 + " = " + key_expr + ";")
+      emit("    " + c_type(val_type) + " lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
       if bbody >= 0
         bs = get_stmts(bbody)
         k = 0
@@ -36761,8 +39653,8 @@ class Compiler
       tmp_r = new_temp
       emit("  mrb_bool " + tmp_r + " = FALSE;")
       emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + rc + "->len; " + itmp + "++) {")
-      emit("    lv_" + bp1 + " = " + rc + "->order[" + itmp + "];")
-      emit("    lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
+      emit("    " + c_type(key_type) + " lv_" + bp1 + " = " + key_expr + ";")
+      emit("    " + c_type(val_type) + " lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
       if bbody >= 0
         bs = get_stmts(bbody)
         k = 0
@@ -36783,8 +39675,8 @@ class Compiler
       tmp_r = new_temp
       emit("  mrb_bool " + tmp_r + " = TRUE;")
       emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + rc + "->len; " + itmp + "++) {")
-      emit("    lv_" + bp1 + " = " + rc + "->order[" + itmp + "];")
-      emit("    lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
+      emit("    " + c_type(key_type) + " lv_" + bp1 + " = " + key_expr + ";")
+      emit("    " + c_type(val_type) + " lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
       if bbody >= 0
         bs = get_stmts(bbody)
         k = 0
@@ -36801,13 +39693,21 @@ class Compiler
       pop_scope
       return tmp_r
     end
- # find / detect — return key of first match
+ # find / detect -- key-only result (CRuby returns [k,v] array;
+ # spinel emits the key for the str variants today, keep that
+ # shape for consistency. Restricted to string-keyed variants
+ # because the return type is currently committed to const char *
+ # by the analyzer.
     if mname == "find" || mname == "detect"
+      if key_type != "string"
+        pop_scope
+        return "0"
+      end
       tmp_r = new_temp
       emit("  const char *" + tmp_r + " = \"\";")
       emit("  for (mrb_int " + itmp + " = 0; " + itmp + " < " + rc + "->len; " + itmp + "++) {")
-      emit("    lv_" + bp1 + " = " + rc + "->order[" + itmp + "];")
-      emit("    lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
+      emit("    " + c_type(key_type) + " lv_" + bp1 + " = " + key_expr + ";")
+      emit("    " + c_type(val_type) + " lv_" + bp2 + " = " + getter + "(" + rc + ", lv_" + bp1 + ");")
       if bbody >= 0
         bs = get_stmts(bbody)
         k = 0
@@ -37049,11 +39949,13 @@ class Compiler
     ec_call_n = -1
     ec_with_index = 0
     ec_off_expr = "0"
+    ec_is_slice = 0
     if recv_n >= 0 && @nd_type[recv_n] == "CallNode" && @nd_name[recv_n] == "with_index" && @nd_block[recv_n] < 0
       wi_inner_n = @nd_receiver[recv_n]
-      if wi_inner_n >= 0 && @nd_type[wi_inner_n] == "CallNode" && @nd_name[wi_inner_n] == "each_cons" && @nd_block[wi_inner_n] < 0
+      if wi_inner_n >= 0 && @nd_type[wi_inner_n] == "CallNode" && (@nd_name[wi_inner_n] == "each_cons" || @nd_name[wi_inner_n] == "each_slice") && @nd_block[wi_inner_n] < 0
         ec_call_n = wi_inner_n
         ec_with_index = 1
+        ec_is_slice = (@nd_name[wi_inner_n] == "each_slice") ? 1 : 0
         wi_args_id = @nd_arguments[recv_n]
         if wi_args_id >= 0
           wi_aargs = get_args(wi_args_id)
@@ -37062,8 +39964,9 @@ class Compiler
           end
         end
       end
-    elsif recv_n >= 0 && @nd_type[recv_n] == "CallNode" && @nd_name[recv_n] == "each_cons" && @nd_block[recv_n] < 0
+    elsif recv_n >= 0 && @nd_type[recv_n] == "CallNode" && (@nd_name[recv_n] == "each_cons" || @nd_name[recv_n] == "each_slice") && @nd_block[recv_n] < 0
       ec_call_n = recv_n
+      ec_is_slice = (@nd_name[recv_n] == "each_slice") ? 1 : 0
     end
     if ec_call_n >= 0
       @needs_gc = 1
@@ -37080,7 +39983,7 @@ class Compiler
  # the inner RequiredParameterNode ids; their `name` field is
  # the local to bind. Without this, the block sees the window
  # as a sub-array.
-        ec_destruct_names = "".split(",")
+        ec_destruct_names = "".split(",", -1)
         ec_bp_node = -1
         if ec_blk_n >= 0
           ec_bp_node = @nd_parameters[ec_blk_n]
@@ -37099,6 +40002,28 @@ class Compiler
           while ec_li < ec_lefts.length
             ec_destruct_names.push(@nd_name[ec_lefts[ec_li]])
             ec_li = ec_li + 1
+          end
+        else
+ # Issue #829: auto-destructure when block params count matches
+ # the yielded sub-array's length. `n` from each_cons/each_slice
+ # decides; `|pair, i|` against each_cons(2).with_index (reqs=2,
+ # need n+1=3) stays a pair.
+          ec_n_int = -1
+          ec_args_n_id = @nd_arguments[ec_call_n]
+          if ec_args_n_id >= 0
+            ec_n_args_l = get_args(ec_args_n_id)
+            if ec_n_args_l.length > 0 && @nd_type[ec_n_args_l[0]] == "IntegerNode"
+              ec_n_int = @nd_value[ec_n_args_l[0]].to_i
+            end
+          end
+          ec_expected = ec_n_int + ec_with_index
+          if ec_n_int > 0 && ec_reqs.length == ec_expected && ec_reqs.length >= 2
+            ec_destruct_count = ec_n_int
+            ec_li2 = 0
+            while ec_li2 < ec_destruct_count
+              ec_destruct_names.push(@nd_name[ec_reqs[ec_li2]])
+              ec_li2 = ec_li2 + 1
+            end
           end
         end
  # Result accumulator type from body's last-expression type.
@@ -37156,7 +40081,12 @@ class Compiler
           emit("  mrb_int " + ec_idx_var + " = (" + ec_off_expr + ");")
         end
         emit("  mrb_int " + ec_len + " = sp_" + ec_inner_pfx + "_length(" + ec_inner_rc + ");")
-        emit("  for (mrb_int " + ec_i + " = 0; " + ec_i + " + " + ec_n_expr + " <= " + ec_len + "; " + ec_i + "++) {")
+ # Issue #829: each_slice steps by n (fixed chunks); each_cons
+ # slides one element at a time. Short tails are dropped — Ruby's
+ # each_slice yields them but typed-array destructure can't bind
+ # missing positions safely.
+        ec_step = (ec_is_slice == 1) ? ec_n_expr : "1"
+        emit("  for (mrb_int " + ec_i + " = 0; " + ec_i + " + " + ec_n_expr + " <= " + ec_len + "; " + ec_i + " += " + ec_step + ") {")
         push_scope
         ec_pair_bp = ""
         if ec_destruct_names.length > 0
@@ -37492,7 +40422,7 @@ class Compiler
                 cn2 = @nd_name[stmts2[k2]]
                 fmi2 = find_method_idx(cn2)
                 if fmi2 >= 0
-                  fpt2 = @meth_param_types[fmi2].split(",")
+                  fpt2 = @meth_param_types[fmi2].split(",", -1)
                   if fpt2.length > 0
                     if fpt2[0] == "lambda"
                       bp_is_lambda = 1
@@ -37694,6 +40624,37 @@ class Compiler
             emit("  sp_IntArray_push(" + tmp_arr + ", " + val + ");")
           else
             emit_map_default_push(tmp_arr, "int_array")
+          end
+        end
+        @indent = @indent - 1
+        emit("  }")
+        pop_scope
+        return tmp_arr
+      end
+ # Issue #830: str_array.map { |s| <float expr> } -- the
+ # canonical shape is `str.split.map(&:to_f)` which lowers
+ # to `{ |s| s.to_f }`. Without this branch the accumulator
+ # is sp_StrArray and the push attempts to store a double
+ # into a const char * slot.
+      if block_ret == "float"
+        emit("  sp_FloatArray *" + tmp_arr + " = sp_FloatArray_new();")
+        emit("  SP_GC_ROOT(" + tmp_arr + ");")
+        emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " < sp_StrArray_length(" + rc + "); " + tmp_i + "++) {")
+        emit("    const char *lv_" + bp1 + " = sp_StrArray_get(" + rc + ", " + tmp_i + ");")
+        @indent = @indent + 1
+        if blk >= 0
+          body3 = @nd_body[blk]
+          stmts3 = body3 >= 0 ? get_stmts(body3) : []
+          if stmts3.length > 0
+            k = 0
+            while k < stmts3.length - 1
+              compile_stmt(stmts3[k])
+              k = k + 1
+            end
+            val = compile_expr(stmts3.last)
+            emit("  sp_FloatArray_push(" + tmp_arr + ", " + val + ");")
+          else
+            emit_map_default_push(tmp_arr, "float_array")
           end
         end
         @indent = @indent - 1
@@ -38455,7 +41416,7 @@ class Compiler
     end
     saved_setjmp_depth = @setjmp_depth
     @setjmp_depth = 0
-    popped = "".split(",")
+    popped = "".split(",", -1)
     while @ensure_stack.length > 0
       ec_str = @ensure_stack.pop
       popped.push(ec_str)
@@ -38594,16 +41555,16 @@ class Compiler
 
   def compile_yield_stmt(nid)
     args_id = @nd_arguments[nid]
-    emitted = "".split(",")
+    emitted = "".split(",", -1)
  # Per-position projected block param types from analyze. When the
  # slot is "bigint", coerce int args to sp_bigint_new_int so the
  # call matches the widened `_block(sp_Bigint *, ...)` sig emitted
  # by yield_params_suffix. Symmetric int<-bigint coerce covers
  # methods whose projection didn't widen but a body site emitted
  # a bigint expression.
-    bpt_arr = "".split(",")
+    bpt_arr = "".split(",", -1)
     if @current_method_blk_param_types != ""
-      bpt_arr = @current_method_blk_param_types.split("|")
+      bpt_arr = @current_method_blk_param_types.split("|", -1)
     end
     if args_id >= 0
       aids = get_args(args_id)
@@ -38664,7 +41625,7 @@ class Compiler
     end
 
  # Get block params
-    bp_names = "".split(",")
+    bp_names = "".split(",", -1)
     bp = @nd_parameters[blk]
     if bp >= 0
       inner = @nd_parameters[bp]
@@ -38685,13 +41646,13 @@ class Compiler
     end
 
  # Declare and set the function's params as new temp vars
-    pnames = @meth_param_names[mi].split(",")
-    ptypes = @meth_param_types[mi].split(",")
+    pnames = @meth_param_names[mi].split(",", -1)
+    ptypes = @meth_param_types[mi].split(",", -1)
  # Create unique temp names for function params to avoid collision
     @block_counter = @block_counter + 1
     suffix = "_y" + @block_counter.to_s
-    param_map_from = "".split(",")
-    param_map_to = "".split(",")
+    param_map_from = "".split(",", -1)
+    param_map_to = "".split(",", -1)
     k = 0
     while k < pnames.length
       pt = "int"
@@ -38725,12 +41686,12 @@ class Compiler
  # Also need to declare the function's local vars
     bid = @meth_body_ids[mi]
     if bid >= 0
-      flocals_n = "".split(",")
-      flocals_t = "".split(",")
+      flocals_n = "".split(",", -1)
+      flocals_t = "".split(",", -1)
       sn_f = @nd_scope_names[bid]
       if sn_f != ""
-        flocals_n = sn_f.split("|")
-        flocals_t = @nd_scope_types[bid].split("|")
+        flocals_n = sn_f.split("|", -1)
+        flocals_t = @nd_scope_types[bid].split("|", -1)
       end
       k = 0
       while k < flocals_n.length
@@ -38784,7 +41745,7 @@ class Compiler
     if blk < 0
       return "0"
     end
-    bp_names = "".split(",")
+    bp_names = "".split(",", -1)
     bp = @nd_parameters[blk]
     if bp >= 0
       inner = @nd_parameters[bp]
@@ -38802,12 +41763,12 @@ class Compiler
     if args_id_yc >= 0
       arg_ids_yc = get_args(args_id_yc)
     end
-    pnames = @meth_param_names[mi].split(",")
-    ptypes = @meth_param_types[mi].split(",")
+    pnames = @meth_param_names[mi].split(",", -1)
+    ptypes = @meth_param_types[mi].split(",", -1)
     @block_counter = @block_counter + 1
     suffix = "_y" + @block_counter.to_s
-    param_map_from = "".split(",")
-    param_map_to = "".split(",")
+    param_map_from = "".split(",", -1)
+    param_map_to = "".split(",", -1)
     kp = 0
     while kp < pnames.length
       pt_yc = "int"
@@ -38835,12 +41796,12 @@ class Compiler
     end
     bid = @meth_body_ids[mi]
     if bid >= 0
-      flocals_n = "".split(",")
-      flocals_t = "".split(",")
+      flocals_n = "".split(",", -1)
+      flocals_t = "".split(",", -1)
       sn_yc = @nd_scope_names[bid]
       if sn_yc != ""
-        flocals_n = sn_yc.split("|")
-        flocals_t = @nd_scope_types[bid].split("|")
+        flocals_n = sn_yc.split("|", -1)
+        flocals_t = @nd_scope_types[bid].split("|", -1)
       end
       kf = 0
       while kf < flocals_n.length
@@ -39677,7 +42638,7 @@ class Compiler
     if blk < 0
       return
     end
-    bp_names = "".split(",")
+    bp_names = "".split(",", -1)
     bp = @nd_parameters[blk]
     if bp >= 0
       inner = @nd_parameters[bp]
@@ -39700,7 +42661,7 @@ class Compiler
       rc = compile_expr_gc_rooted(recv)
     end
 
-    bodies = @cls_meth_bodies[cci].split(";")
+    bodies = @cls_meth_bodies[cci].split(";", -1)
     bid = -1
     if midx < bodies.length
       bid = bodies[midx].to_i
@@ -39739,8 +42700,8 @@ class Compiler
     pnames = cls_meth_pnames_get(cci, midx)
     ptypes = cls_meth_ptypes_get(cci, midx)
 
-    map_from = "".split(",")
-    map_to = "".split(",")
+    map_from = "".split(",", -1)
+    map_to = "".split(",", -1)
 
  # Map self to the receiver expression
     map_from.push("_self_")
@@ -39792,12 +42753,12 @@ class Compiler
 
  # Declare function locals
     if bid >= 0
-      flocals_n = "".split(",")
-      flocals_t = "".split(",")
+      flocals_n = "".split(",", -1)
+      flocals_t = "".split(",", -1)
       sn_f = @nd_scope_names[bid]
       if sn_f != ""
-        flocals_n = sn_f.split("|")
-        flocals_t = @nd_scope_types[bid].split("|")
+        flocals_n = sn_f.split("|", -1)
+        flocals_t = @nd_scope_types[bid].split("|", -1)
       end
       k = 0
       while k < flocals_n.length
@@ -39846,7 +42807,7 @@ class Compiler
     if call_blk < 0
       return
     end
-    cb_names = "".split(",")
+    cb_names = "".split(",", -1)
     cb_params = @nd_parameters[call_blk]
     if cb_params >= 0
       cb_inner = @nd_parameters[cb_params]
@@ -39863,8 +42824,8 @@ class Compiler
  # currently-inlined scope so they go through compile_expr_remap. The
  # callee's locals get a unique suffix to avoid colliding with outer
  # scope names (e.g. `lv_x` both from `inner` body and `outer`).
-    pnames_n = @meth_param_names[callee_mi].split(",")
-    ptypes_n = @meth_param_types[callee_mi].split(",")
+    pnames_n = @meth_param_names[callee_mi].split(",", -1)
+    ptypes_n = @meth_param_types[callee_mi].split(",", -1)
     args_id_n = @nd_arguments[nid]
     arg_ids_n = []
     if args_id_n >= 0
@@ -39872,8 +42833,8 @@ class Compiler
     end
     @block_counter = @block_counter + 1
     suffix_n = "_n" + @block_counter.to_s
-    nested_from = "".split(",")
-    nested_to = "".split(",")
+    nested_from = "".split(",", -1)
+    nested_to = "".split(",", -1)
     kp_n = 0
     while kp_n < pnames_n.length
       pt_n = "int"
@@ -39898,12 +42859,12 @@ class Compiler
  # the value lookup in compile_stmt_with_block lands on the right name.
     bid_n = @meth_body_ids[callee_mi]
     if bid_n >= 0
-      flocals_n = "".split(",")
-      flocals_t = "".split(",")
+      flocals_n = "".split(",", -1)
+      flocals_t = "".split(",", -1)
       sn_n = @nd_scope_names[bid_n]
       if sn_n != ""
-        flocals_n = sn_n.split("|")
-        flocals_t = @nd_scope_types[bid_n].split("|")
+        flocals_n = sn_n.split("|", -1)
+        flocals_t = @nd_scope_types[bid_n].split("|", -1)
       end
       kf_n = 0
       while kf_n < flocals_n.length
@@ -40328,6 +43289,8 @@ class Compiler
     elsif base_type(return_type) == "int" && last_t_cbi == "bigint"
       @needs_bigint = 1
       expr = "sp_bigint_to_int((sp_Bigint *)" + expr + ")"
+    elsif base_type(return_type) == "poly" && last_t_cbi != "poly" && last_t_cbi != ""
+      expr = box_value_to_poly(last_t_cbi, expr)
     end
     emit("  " + ret_tmp + " = " + expr + ";")
   end
@@ -41168,6 +44131,9 @@ class Compiler
  # gets the bootstrap pipeline running end to end.
 
 
+ # Issue #771: return -1 for non-hex chars so ir_unescape can detect
+ # a malformed `%XX` and pass the bytes through verbatim instead of
+ # silently injecting a NUL byte into the decoded type string.
   def ir_hex_digit(c)
     if c == "0" then return 0 end
     if c == "1" then return 1 end
@@ -41191,7 +44157,7 @@ class Compiler
     if c == "d" then return 13 end
     if c == "e" then return 14 end
     if c == "f" then return 15 end
-    0
+    -1
   end
 
   def ir_unescape(s)
@@ -41201,9 +44167,18 @@ class Compiler
     while i < n
       ch = s[i]
       if ch == "%" && i + 2 < n
-        v = ir_hex_digit(s[i + 1]) * 16 + ir_hex_digit(s[i + 2])
-        result = result + v.chr
-        i = i + 3
+        d1 = ir_hex_digit(s[i + 1])
+        d2 = ir_hex_digit(s[i + 2])
+        if d1 >= 0 && d2 >= 0
+          v = d1 * 16 + d2
+          result = result + v.chr
+          i = i + 3
+        else
+ # Malformed escape -- pass `%` through verbatim, advance one
+ # char, and let the next iteration handle the following byte.
+          result = result + ch
+          i = i + 1
+        end
       else
         result = result + ch
         i = i + 1
@@ -41361,17 +44336,17 @@ class Compiler
  # `[]` (n==0) from `[""]` (n==1, body=="") so empty string elements
  # round-trip correctly.
   def ir_split_strs_n(s, n)
-    result = "".split(",")
+    result = "".split(",", -1)
     if n == 0
       return result
     end
-    parts = s.split("|")
+    parts = s.split("|", -1)
     i = 0
     while i < parts.length
       result.push(ir_unescape(parts[i]))
       i = i + 1
     end
- # `"".split("|")` returns [], so a single empty element appears
+ # `"".split("|", -1)` returns [], so a single empty element appears
  # as length 0. Pad up to the recorded count with empty strings.
     while result.length < n
       result.push("")
@@ -41384,7 +44359,7 @@ class Compiler
     if n == 0
       return result
     end
-    parts = s.split(",")
+    parts = s.split(",", -1)
     i = 0
     while i < parts.length
       result.push(parts[i].to_i)
@@ -41465,10 +44440,6 @@ class Compiler
       @cls_cmeth_live = val
     elsif name == "@cls_meth_live"
       @cls_meth_live = val
-    elsif name == "@meth_blk_param_types"
-      @meth_blk_param_types = val.split("|")
-    elsif name == "@cls_cmeth_blk_param_types"
-      @cls_cmeth_blk_param_types = val.split("|")
     end
   end
 
@@ -41513,6 +44484,8 @@ class Compiler
       @cls_meth_defaults = val
     elsif name == "@cls_meth_ptypes_empty"
       @cls_meth_ptypes_empty = val
+    elsif name == "@cls_meth_prep_chain"
+      @cls_meth_prep_chain = val
     elsif name == "@cls_attr_readers"
       @cls_attr_readers = val
     elsif name == "@cls_attr_writers"
@@ -41637,6 +44610,12 @@ class Compiler
       @ieval_extra_param_names = val
     elsif name == "@cls_with_internal_ieval_lift"
       @cls_with_internal_ieval_lift = val
+ # Issue #750: blk_param_types arrays moved from STR to SA so
+ # the inner `|` separator survives the round-trip.
+    elsif name == "@meth_blk_param_types"
+      @meth_blk_param_types = val
+    elsif name == "@cls_cmeth_blk_param_types"
+      @cls_cmeth_blk_param_types = val
     end
   end
 

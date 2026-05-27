@@ -1,55 +1,8 @@
 # Spinel lib: strscan
 #
-# StringScanner — sequential string scanning with regexp.
-# Type definitions for Spinel. C implementation in lib/strscan.c.
-#
-# Link with: cc app.c lib/strscan.c -lonig -lm -o app
-
-class StringScanner
-  def initialize(str)
-    @source = str
-    @pos = 0
-    @matched = ""
-    @last_pos = 0
-  end
-
-  def scan(pattern)
-    @matched
-  end
-
-  def check(pattern)
-    @matched
-  end
-
-  def scan_until(pattern)
-    @matched
-  end
-
-  def matched
-    @matched
-  end
-
-  def pos
-    @pos
-  end
-
-  def eos?
-    @pos >= @source.length
-  end
-
-  def getch
-    @matched
-  end
-
-  def peek(n)
-    @matched
-  end
-
-  def unscan
-    self
-  end
-
-  def rest
-    @source
-  end
-end
+# StringScanner is a builtin class — methods are intercepted in
+# codegen and dispatched to the sp_StringScanner_* helpers in
+# lib/sp_strscan.c (linked from libspinel_rt.a). This file is
+# intentionally empty so spinel doesn't try to emit a struct
+# for the class. `require "strscan"` still has to find the file
+# (the parser includes it via resolve_plain_requires).

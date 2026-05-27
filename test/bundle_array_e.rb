@@ -13,16 +13,16 @@ def t_array_at_append_string_chomp_bang
   # Method aliases / shapes from #619 puzzles 8 / 9 / 10:
   #   Array#at(n)      -> Array#[n]
   #   Array#append(x)  -> Array#push(x), returning self (the array)
-  #   String#chomp!    -> String#chomp (matches the changed-case;
-  #                       the Ruby `nil if no change` mutator semantic
-  #                       isn't preserved since spinel strings are
-  #                       immutable)
-  # Pre-fix all three lowered to the unresolved-call fallback "emit 0"
-  # and the comparison surfaces returned false.
-  
+  #   String#chomp!    -> mutates in place on mutable_str; raises
+  #                       FrozenError on a frozen string literal
+  #                       (#859 / #886). Test exercises the
+  #                       mutable_str path.
+
   p([1, 2, 3].at(1) == 2)
   p(%w[a].append("b") == %w[a b])
-  p("ab\n".chomp! == "ab")
+  s = String.new("ab\n")
+  s.chomp!
+  p(s.to_s == "ab")
 end
 t_array_at_append_string_chomp_bang
 

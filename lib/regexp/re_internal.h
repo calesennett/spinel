@@ -109,8 +109,22 @@ typedef struct mrb_regexp_pattern {
 #define MRB_REGEXP_STEP_LIMIT 1000000
 #endif
 
-/* Maximum captures */
-#define RE_MAX_CAPTURES 32
+/* Recursion depth ceiling for bt_match. Backtracking SPLIT/SAVE
+   recursion can otherwise drive the C stack to overflow on patterns
+   like long alternation chains or backref + many quantifier
+   iterations. 10000 frames covers realistic workloads while staying
+   well under a default 8 MB stack (~40 bytes per frame). Issue #777. */
+#ifndef MRB_REGEXP_DEPTH_LIMIT
+#define MRB_REGEXP_DEPTH_LIMIT 10000
+#endif
+
+/* Maximum captures. Sized for realistic code: complex parsers rarely
+   exceed ~50-100 capture groups. Pathological inputs like depth-500
+   `((((...((a))...))))` raise RegexpError, which is the same
+   "fail-gracefully on absurd input" stance as MRB_REGEXP_DEPTH_LIMIT
+   above. Runtime memory scales with actual ncap per regex (see
+   re_exec.c comment) so this is purely a compile-time cap. */
+#define RE_MAX_CAPTURES 128
 
 /* Thread struct for Pike VM. `sp` is the input position the thread is
    waiting for; the outer loop only dispatches a thread when its sp
@@ -130,6 +144,12 @@ mrb_regexp_pattern* re_compile(const char *pattern, mrb_int len, uint32_t flags)
 
 /* Free a compiled pattern */
 void re_free(mrb_regexp_pattern *pat);
+
+/* Issue #781: install a callback that handles regex compile errors.
+   The callback receives a formatted message and is expected NOT to
+   return (typically it wraps sp_raise_cls via longjmp). Unset by
+   default; the library falls back to fprintf + exit. */
+void sp_re_set_error_handler(void (*fn)(const char *msg));
 
 /* Execute a match.
    Returns number of captures filled (0 = no match).

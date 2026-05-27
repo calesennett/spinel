@@ -272,9 +272,17 @@ build/sp_crypto.o: lib/sp_crypto.c lib/sp_crypto.h
 	@mkdir -p build
 	$(CC) -c -O2 -Wno-all $(SEC_FLAGS) -Ilib lib/sp_crypto.c -o build/sp_crypto.o
 
+build/sp_pack.o: lib/sp_pack.c lib/mruby_shim.h
+	@mkdir -p build
+	$(CC) -c -O2 -Wno-all $(SEC_FLAGS) -Ilib lib/sp_pack.c -o build/sp_pack.o
+
+build/sp_strscan.o: lib/sp_strscan.c lib/mruby_shim.h
+	@mkdir -p build
+	$(CC) -c -O2 -Wno-all $(SEC_FLAGS) -Ilib -Ilib/regexp lib/sp_strscan.c -o build/sp_strscan.o
+
 SP_RT_LIB = lib/libspinel_rt.a
 
-$(SP_RT_LIB): $(RE_OBJ) build/sp_bigint.o build/sp_crypto.o
+$(SP_RT_LIB): $(RE_OBJ) build/sp_bigint.o build/sp_crypto.o build/sp_pack.o build/sp_strscan.o
 	ar rcs $@ $^
 
 regexp: $(SP_RT_LIB)
@@ -476,13 +484,21 @@ EXPECTED_FILES := $(patsubst test/%.rb,test/%.rb.expected,$(TESTS))
 regen-expected: $(EXPECTED_FILES)
 
 test/%.rb.expected: test/%.rb
-	@$(TIMEOUT10) $(REF_RUBY) $< >$@.tmp 2>/dev/null; \
+	@args=""; \
+	if [ -f "$<.args" ]; then args=$$(cat "$<.args"); fi; \
+	$(TIMEOUT10) $(REF_RUBY) $< $$args >$@.tmp 2>/dev/null; \
 	rc=$$?; \
 	if [ $$rc -ne 0 ] && [ "$(REF_RUBY)" != "ruby" ]; then \
-	  $(TIMEOUT10) ruby $< >$@.tmp 2>/dev/null; \
+	  $(TIMEOUT10) ruby $< $$args >$@.tmp 2>/dev/null; \
+	  rc=$$?; \
 	fi; \
-	LC_ALL=C sed 's/\r$$//' $@.tmp > $@; \
-	rm -f $@.tmp
+	if [ $$rc -ne 0 ]; then \
+	  echo "regen-expected: $< failed (rc=$$rc); skipping" >&2; \
+	  rm -f $@.tmp; \
+	else \
+	  LC_ALL=C sed 's/\r$$//' $@.tmp > $@; \
+	  rm -f $@.tmp; \
+	fi
 
 bench: spinel_parse$(EXE) $(SP_RT_LIB) spinel_analyze$(EXE) spinel_codegen$(EXE)
 	@if [ -z "$(TIMEOUT_BIN)" ]; then echo "Note: no 'timeout' command found; running without time limits."; fi

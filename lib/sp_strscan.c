@@ -1,0 +1,263 @@
+/*
+ * sp_strscan.c — StringScanner for Spinel
+ *
+ * Implements the StringScanner methods: scan, check, scan_until,
+ * matched, matched?, pos, eos?, getch, peek, unscan, rest,
+ * terminate, pre_match, post_match, string. Uses spinel's
+ * internal regex engine (re_compile / re_exec — see lib/regexp/)
+ * rather than oniguruma; the existing lib/strscan.c is an
+ * oniguruma-based draft the rest of the build doesn't link.
+ *
+ * Matching semantics: scan / check are anchored at the current
+ * position (re_exec is run with start=pos and the result is
+ * accepted only when caps[0] == pos). scan_until returns text
+ * from pos through the end of the next match anywhere ahead.
+ *
+ * The scanner struct is GC-allocated via the sp_ext_* shim so
+ * the lifetime tracks the main file's heap instead of leaking.
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+#include "mruby_shim.h"
+
+/* Forward decl mirrors lib/regexp/re_internal.h's public API. */
+typedef struct mrb_regexp_pattern mrb_regexp_pattern;
+extern int re_exec(const mrb_regexp_pattern *pat, const char *str, int64_t len, int64_t start, int *captures, int captures_size);
+
+/* GC shim provided by sp_runtime.h. */
+extern char *sp_ext_str_alloc(size_t n);
+extern void  sp_ext_str_set_len(char *s, size_t n);
+extern const char *sp_ext_str_empty(void);
+extern size_t sp_ext_str_byte_len(const char *s);
+extern void *sp_ext_gc_alloc(size_t sz, void (*fin)(void *), void (*scan)(void *));
+extern void  sp_ext_mark_string(const char *s);
+
+/* The scanner struct lives in spinel's GC heap. `source` /
+   `matched` are GC-tracked strings; the scan function below
+   marks them so they survive collection. */
+typedef struct {
+  const char *source;
+  const char *matched;
+  int64_t     pos;
+  int64_t     last_pos;
+  int         matched_p; /* int (not mrb_bool) — keep the layout
+                            compact; FALSE=0, TRUE=1 */
+} sp_StringScanner;
+
+static void sp_StringScanner_scan_gc(void *p) {
+  sp_StringScanner *sc = (sp_StringScanner *)p;
+  if (sc->source) sp_ext_mark_string(sc->source);
+  if (sc->matched) sp_ext_mark_string(sc->matched);
+}
+
+sp_StringScanner *sp_StringScanner_new(const char *str) {
+  sp_StringScanner *sc = (sp_StringScanner *)sp_ext_gc_alloc(sizeof(sp_StringScanner), NULL, sp_StringScanner_scan_gc);
+  sc->source = str ? str : sp_ext_str_empty();
+  sc->matched = sp_ext_str_empty();
+  sc->pos = 0;
+  sc->last_pos = 0;
+  sc->matched_p = 0;
+  return sc;
+}
+
+/* Anchored match: succeed only when re_exec finds a match
+   starting at exactly `pos`. Returns matched length, or -1. */
+static int64_t sc_match_at_pos(const mrb_regexp_pattern *pat, const char *str, int64_t slen, int64_t pos) {
+  int caps[2];
+  int n = re_exec(pat, str, slen, pos, caps, 2);
+  if (n <= 0 || caps[0] != pos) return -1;
+  return caps[1] - caps[0];
+}
+
+/* Forward-search match: returns offset of first match at or
+   after pos, and writes matched length to *mlen. -1 on miss. */
+static int64_t sc_match_forward(const mrb_regexp_pattern *pat, const char *str, int64_t slen, int64_t pos, int64_t *mlen) {
+  int caps[2];
+  int n = re_exec(pat, str, slen, pos, caps, 2);
+  if (n <= 0 || caps[0] < 0) return -1;
+  *mlen = caps[1] - caps[0];
+  return caps[0];
+}
+
+static char *sc_substr(const char *src, int64_t start, int64_t len) {
+  char *out = sp_ext_str_alloc((size_t)len);
+  memcpy(out, src + start, (size_t)len);
+  out[len] = 0;
+  sp_ext_str_set_len(out, (size_t)len);
+  return out;
+}
+
+const char *sp_StringScanner_scan(sp_StringScanner *sc, mrb_regexp_pattern *pat) {
+  if (!sc || !pat) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t mlen = sc_match_at_pos(pat, sc->source, slen, sc->pos);
+  if (mlen < 0) {
+    sc->matched = sp_ext_str_empty();
+    sc->matched_p = 0;
+    return sp_ext_str_empty();
+  }
+  char *m = sc_substr(sc->source, sc->pos, mlen);
+  sc->last_pos = sc->pos;
+  sc->matched = m;
+  sc->matched_p = 1;
+  sc->pos += mlen;
+  return m;
+}
+
+const char *sp_StringScanner_check(sp_StringScanner *sc, mrb_regexp_pattern *pat) {
+  if (!sc || !pat) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t mlen = sc_match_at_pos(pat, sc->source, slen, sc->pos);
+  if (mlen < 0) {
+    sc->matched = sp_ext_str_empty();
+    sc->matched_p = 0;
+    return sp_ext_str_empty();
+  }
+  char *m = sc_substr(sc->source, sc->pos, mlen);
+  sc->matched = m;
+  sc->matched_p = 1;
+  return m;
+}
+
+const char *sp_StringScanner_scan_until(sp_StringScanner *sc, mrb_regexp_pattern *pat) {
+  if (!sc || !pat) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t mlen = 0;
+  int64_t mstart = sc_match_forward(pat, sc->source, slen, sc->pos, &mlen);
+  if (mstart < 0) {
+    sc->matched = sp_ext_str_empty();
+    sc->matched_p = 0;
+    return sp_ext_str_empty();
+  }
+  int64_t consumed = (mstart + mlen) - sc->pos;
+  char *taken = sc_substr(sc->source, sc->pos, consumed);
+  char *m = sc_substr(sc->source, mstart, mlen);
+  sc->last_pos = sc->pos;
+  sc->matched = m;
+  sc->matched_p = 1;
+  sc->pos = mstart + mlen;
+  return taken;
+}
+
+const char *sp_StringScanner_matched(sp_StringScanner *sc) {
+  if (!sc) return sp_ext_str_empty();
+  return sc->matched ? sc->matched : sp_ext_str_empty();
+}
+
+mrb_bool sp_StringScanner_matched_p(sp_StringScanner *sc) {
+  if (!sc) return FALSE;
+  return sc->matched_p ? TRUE : FALSE;
+}
+
+mrb_int sp_StringScanner_pos(sp_StringScanner *sc) {
+  if (!sc) return 0;
+  return (mrb_int)sc->pos;
+}
+
+mrb_int sp_StringScanner_pos_set(sp_StringScanner *sc, mrb_int p) {
+  if (!sc) return 0;
+  sc->pos = (int64_t)p;
+  return p;
+}
+
+mrb_bool sp_StringScanner_eos_p(sp_StringScanner *sc) {
+  if (!sc) return TRUE;
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  return (sc->pos >= slen) ? TRUE : FALSE;
+}
+
+const char *sp_StringScanner_getch(sp_StringScanner *sc) {
+  if (!sc) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  if (sc->pos >= slen) {
+    sc->matched = sp_ext_str_empty();
+    sc->matched_p = 0;
+    return sp_ext_str_empty();
+  }
+  char *c = sc_substr(sc->source, sc->pos, 1);
+  sc->last_pos = sc->pos;
+  sc->matched = c;
+  sc->matched_p = 1;
+  sc->pos += 1;
+  return c;
+}
+
+const char *sp_StringScanner_peek(sp_StringScanner *sc, mrb_int n) {
+  if (!sc) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t avail = slen - sc->pos;
+  int64_t take = n < avail ? n : avail;
+  if (take < 0) take = 0;
+  return sc_substr(sc->source, sc->pos, take);
+}
+
+sp_StringScanner *sp_StringScanner_unscan(sp_StringScanner *sc) {
+  if (!sc) return sc;
+  sc->pos = sc->last_pos;
+  sc->matched = sp_ext_str_empty();
+  sc->matched_p = 0;
+  return sc;
+}
+
+const char *sp_StringScanner_rest(sp_StringScanner *sc) {
+  if (!sc) return sp_ext_str_empty();
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t rem = slen - sc->pos;
+  if (rem <= 0) return sp_ext_str_empty();
+  return sc_substr(sc->source, sc->pos, rem);
+}
+
+mrb_int sp_StringScanner_rest_size(sp_StringScanner *sc) {
+  if (!sc) return 0;
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t rem = slen - sc->pos;
+  return rem < 0 ? 0 : (mrb_int)rem;
+}
+
+mrb_bool sp_StringScanner_rest_p(sp_StringScanner *sc) {
+  if (!sc) return FALSE;
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  return (sc->pos < slen) ? TRUE : FALSE;
+}
+
+sp_StringScanner *sp_StringScanner_terminate(sp_StringScanner *sc) {
+  if (!sc) return sc;
+  sc->pos = (int64_t)sp_ext_str_byte_len(sc->source);
+  sc->matched = sp_ext_str_empty();
+  sc->matched_p = 0;
+  return sc;
+}
+
+const char *sp_StringScanner_string(sp_StringScanner *sc) {
+  if (!sc) return sp_ext_str_empty();
+  return sc->source ? sc->source : sp_ext_str_empty();
+}
+
+const char *sp_StringScanner_pre_match(sp_StringScanner *sc) {
+  if (!sc) return sp_ext_str_empty();
+  if (sc->last_pos <= 0) return sp_ext_str_empty();
+  return sc_substr(sc->source, 0, sc->last_pos);
+}
+
+const char *sp_StringScanner_post_match(sp_StringScanner *sc) {
+  if (!sc || !sc->matched_p) return sp_ext_str_empty();
+  int64_t mlen = (int64_t)sp_ext_str_byte_len(sc->matched);
+  int64_t start = sc->last_pos + mlen;
+  int64_t slen = (int64_t)sp_ext_str_byte_len(sc->source);
+  int64_t rem = slen - start;
+  if (rem <= 0) return sp_ext_str_empty();
+  return sc_substr(sc->source, start, rem);
+}
+
+sp_StringScanner *sp_StringScanner_reset(sp_StringScanner *sc) {
+  if (!sc) return sc;
+  sc->pos = 0;
+  sc->last_pos = 0;
+  sc->matched = sp_ext_str_empty();
+  sc->matched_p = 0;
+  return sc;
+}

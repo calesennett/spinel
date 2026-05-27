@@ -20,11 +20,21 @@ typedef struct {
     int64_t last_pos;    /* position before last scan (for unscan) */
     char *matched;       /* last matched string (heap-allocated) */
     int64_t matched_len;
+    /* Issue #813: cache the peek buffer so repeated peek() calls
+       don't leak. Reallocated on demand when n grows. */
+    char *peek_buf;
+    int64_t peek_buf_cap;
 } sp_StringScanner;
 
-/* Constructor */
+/* Constructor.
+   Issue #811: NULL str used to segfault at strlen(NULL); treat as
+   the empty string. CRuby raises TypeError -- spinel can't easily
+   raise from a typed-string constructor here, so the safer fallback
+   is empty-string behaviour. */
 sp_StringScanner *sp_StringScanner_new(const char *str) {
+    if (!str) str = "";
     sp_StringScanner *sc = (sp_StringScanner *)calloc(1, sizeof(sp_StringScanner));
+    if (!sc) return NULL;
     sc->source = str;
     sc->source_len = (int64_t)strlen(str);
     sc->pos = 0;
@@ -123,6 +133,12 @@ const char *sp_StringScanner_matched(sp_StringScanner *sc) {
     return sc->matched ? sc->matched : "";
 }
 
+/* Issue #814: matched? -- true when the last scan succeeded. */
+int sp_StringScanner_matched_p(sp_StringScanner *sc) {
+    if (!sc) return 0;
+    return sc->matched != NULL ? 1 : 0;
+}
+
 /* pos — current position */
 int64_t sp_StringScanner_pos(sp_StringScanner *sc) {
     return sc->pos;
@@ -147,15 +163,26 @@ const char *sp_StringScanner_getch(sp_StringScanner *sc) {
     return sc->matched;
 }
 
-/* peek(n) — look ahead n characters without advancing */
+/* peek(n) — look ahead n characters without advancing.
+   Issue #813: reuse the cached peek buffer across calls so a
+   tight peek() loop doesn't leak one heap allocation per call.
+   Grow the cap on demand. */
 const char *sp_StringScanner_peek(sp_StringScanner *sc, int64_t n) {
-    if (sc->pos >= sc->source_len) return "";
+    if (!sc || sc->pos >= sc->source_len) return "";
     int64_t remaining = sc->source_len - sc->pos;
     if (n > remaining) n = remaining;
-    char *buf = (char *)malloc(n + 1);
-    memcpy(buf, sc->source + sc->pos, n);
-    buf[n] = '\0';
-    return buf;
+    if (n < 0) n = 0;
+    if (n + 1 > sc->peek_buf_cap) {
+        int64_t nc = sc->peek_buf_cap ? sc->peek_buf_cap : 16;
+        while (nc < n + 1) nc *= 2;
+        char *nb = (char *)realloc(sc->peek_buf, (size_t)nc);
+        if (!nb) return "";
+        sc->peek_buf = nb;
+        sc->peek_buf_cap = nc;
+    }
+    memcpy(sc->peek_buf, sc->source + sc->pos, n);
+    sc->peek_buf[n] = '\0';
+    return sc->peek_buf;
 }
 
 /* unscan — revert to position before last scan */

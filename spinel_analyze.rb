@@ -16,7 +16,7 @@ class Compiler
 
 
   def initialize
-    @out_lines = "".split(",")
+    @out_lines = "".split(",", -1)
     @out = ""
     @deferred_tuple = ""
     @deferred_lambda = ""
@@ -30,16 +30,16 @@ class Compiler
     @cur_writer_body = -1
 
  # ---- AST node storage (parallel arrays by node ID) ----
- # Use "".split(",") for StrArray init (v1 infers StrArray from split)
-    @nd_type = "".split(",")
-    @nd_name = "".split(",")
+ # Use "".split(",", -1) for StrArray init (v1 infers StrArray from split)
+    @nd_type = "".split(",", -1)
+    @nd_name = "".split(",", -1)
     @nd_value = []
-    @nd_content = "".split(",")
+    @nd_content = "".split(",", -1)
     @nd_flags = []
-    @nd_operator = "".split(",")
-    @nd_binop = "".split(",")
-    @nd_callop = "".split(",")
-    @nd_unescaped = "".split(",")
+    @nd_operator = "".split(",", -1)
+    @nd_binop = "".split(",", -1)
+    @nd_callop = "".split(",", -1)
+    @nd_unescaped = "".split(",", -1)
 
  # Node references (integer node IDs, -1 = nil)
     @nd_receiver = []
@@ -68,29 +68,29 @@ class Compiler
     @nd_collection = []
 
  # Node array fields: stored as comma-separated ID strings
-    @nd_stmts = "".split(",")
-    @nd_args = "".split(",")
-    @nd_requireds = "".split(",")
-    @nd_optionals = "".split(",")
-    @nd_keywords = "".split(",")
-    @nd_elements = "".split(",")
-    @nd_parts = "".split(",")
-    @nd_conditions = "".split(",")
-    @nd_exceptions = "".split(",")
-    @nd_targets = "".split(",")
-    @nd_rights = "".split(",")
+    @nd_stmts = "".split(",", -1)
+    @nd_args = "".split(",", -1)
+    @nd_requireds = "".split(",", -1)
+    @nd_optionals = "".split(",", -1)
+    @nd_keywords = "".split(",", -1)
+    @nd_elements = "".split(",", -1)
+    @nd_parts = "".split(",", -1)
+    @nd_conditions = "".split(",", -1)
+    @nd_exceptions = "".split(",", -1)
+    @nd_targets = "".split(",", -1)
+    @nd_rights = "".split(",", -1)
  # ParametersNode#posts -- required params after the splat
  # (def f(*r, x, y) → posts = [x, y]). Currently unused by codegen
  # (post-rest parameters aren't observed in test/), but the parser
  # emits the field so future tests get a proper AST.
-    @nd_posts = "".split(",")
+    @nd_posts = "".split(",", -1)
  # AliasMethodNode / AliasGlobalVariableNode -- parallel ref slots
  # for the new and old names (SymbolNode for methods, GlobalVariableReadNode
  # for globals).
     @nd_new_name = []
     @nd_old_name = []
  # UndefNode -- comma-separated child ids for the SymbolNode names.
-    @nd_names = "".split(",")
+    @nd_names = "".split(",", -1)
 
  # Per-node inferred type, parallel to the other @nd_* arrays.
  # Empty string means "not yet annotated"; node_type falls back to
@@ -98,7 +98,7 @@ class Compiler
  # `freeze_analysis` runs, every reachable node gets a non-empty
  # entry so the codegen path becomes O(1) per node lookup instead
  # of recursively re-walking the subtree on every infer_type call.
-    @nd_inferred_type = "".split(",")
+    @nd_inferred_type = "".split(",", -1)
  # Scratch state used by promote_reinfer_array_returns +
  # walk_reinfer_lv_writes. Self-host can't capture block params
  # across closures yet, so the helpers thread per-walk parameters
@@ -110,6 +110,14 @@ class Compiler
  # type each bound LV with the enclosing CaseMatchNode's scrutinee
  # element type. Issue #669.
     @scan_case_match_pred_elem = ""
+ # Sibling channel for CapturePatternNode (`pat => var`) and
+ # bare LocalVariableTargetNode in InNode (`case x in n`). Holds
+ # the scrutinee's full type so the target LV gets the right slot.
+ # Issues #884 #905.
+    @scan_case_match_pred_type = ""
+ # Sibling side-channel for HashPatternNode: the hash's value type.
+ # Issue #805.
+    @scan_case_match_pred_val_t = ""
  # 1 once analysis has converged and freeze_analysis has filled
  # @nd_inferred_type. Switches infer_type to consult the cache
  # first; analysis iterations themselves keep recomputing because
@@ -124,29 +132,32 @@ class Compiler
  # @nd_scope_names[bid] means "no precomputed scope decls for this
  # bid"; codegen falls back to its own scan_locals path in that
  # case (block-iteration bodies, ad-hoc temp scopes, etc.).
-    @nd_scope_names = "".split(",")
-    @nd_scope_types = "".split(",")
+    @nd_scope_names = "".split(",", -1)
+    @nd_scope_types = "".split(",", -1)
+ # Issue #841: RationalNode literal slots.
+    @nd_rat_num = "".split(",", -1)
+    @nd_rat_den = "".split(",", -1)
 
     @nd_count = 0
     @root_id = 0
 
  # Issue: unresolved-call warnings deduped by "<mname>:<recv_type>"
  # so a hot call site that fails to resolve emits one warning, not N.
-    @unresolved_call_warnings = "".split(",")
+    @unresolved_call_warnings = "".split(",", -1)
 
  # ---- Top-level methods (parallel arrays) ----
-    @meth_names = "".split(",")
-    @meth_param_names = "".split(",")
-    @meth_param_types = "".split(",")
+    @meth_names = "".split(",", -1)
+    @meth_param_names = "".split(",", -1)
+    @meth_param_types = "".split(",", -1)
  # Per-param "deferred element" flag: "1" means at least one caller
  # passed an empty `[]` literal (or a local that itself was assigned
  # an empty literal). Used by the param body-push promotion pass
  # to decide whether the param's int_array can be safely
  # promoted to a concrete typed-array based on body usage.
-    @meth_param_empty = "".split(",")
-    @meth_return_types = "".split(",")
+    @meth_param_empty = "".split(",", -1)
+    @meth_return_types = "".split(",", -1)
     @meth_body_ids = []
-    @meth_has_defaults = "".split(",")
+    @meth_has_defaults = "".split(",", -1)
     @meth_rest_index = []
  # Position of the **kwrest param in @meth_param_names (-1 if no
  # kwrest). Lets call-site arg-packing detect the slot that should
@@ -154,14 +165,14 @@ class Compiler
     @meth_kwrest_index = []
 
  # ---- Classes (parallel arrays) ----
-    @cls_names = "".split(",")
-    @cls_parents = "".split(",")
+    @cls_names = "".split(",", -1)
+    @cls_parents = "".split(",", -1)
  # per-class list of included module
  # names, semicolon-separated. Modules live in @module_names so
  # the resolution from name -> id is deferred to codegen time.
-    @cls_includes = "".split(",")
-    @cls_ivar_names = "".split(",")
-    @cls_ivar_types = "".split(",")
+    @cls_includes = "".split(",", -1)
+    @cls_ivar_names = "".split(",", -1)
+    @cls_ivar_types = "".split(",", -1)
  # Per-ivar flag: was the ivar's first scanned write a definite
  # literal (IntegerNode / FloatNode / StringNode / ...)? Used to
  # distinguish concrete-literal writes from best-guess inference
@@ -169,7 +180,7 @@ class Compiler
  # definite — non-recognized CallNodes default to "int" through
  # infer_ivar_init_type and a naive trust of that produces
  # spurious disagreement.
-    @cls_ivar_init_definite = "".split(",")
+    @cls_ivar_init_definite = "".split(",", -1)
  # Per-(class, ivar) accumulator of distinct concrete writer
  # types observed by scan_writer_calls. After all writer-scan
  # iterations finish, slots with 2+ distinct entries widen to
@@ -181,7 +192,7 @@ class Compiler
  # comma-separated list of distinct types per ivar; the outer
  # dimension is semicolon-separated and parallel to
  # `@cls_ivar_names[ci]`.
-    @cls_ivar_observed_types = "".split(",")
+    @cls_ivar_observed_types = "".split(",", -1)
  # Per-class shadow of `@cls_ivar_types`, populated only by
  # `apply_rbs_seeds`. Each entry mirrors `@cls_ivar_names[ci]`'s
  # `;`-separated layout: an RBS-pinned slot carries its declared
@@ -189,7 +200,7 @@ class Compiler
  # `arbitrate_rbs_vs_inferred_ivars` after the iterative inference
  # loop -- when inference and RBS disagree, this table is what
  # we restore the slot to. Issue #626 sub-issue 2.
-    @cls_ivar_rbs_types = "".split(",")
+    @cls_ivar_rbs_types = "".split(",", -1)
  # Per-class set of ivar names that are read with a nil predicate
  # somewhere in the program — `<ivar>.nil?`, `<ivar> == nil`,
  # `<ivar> != nil`. Gates nil-scalar widening to poly so an ivar
@@ -199,7 +210,7 @@ class Compiler
  # widening cascaded `@freq` / `@timer` / `@step` to poly and broke
  # the int math emit). Populated by scan_ivar_nil_predicates before
  # the iter loop; semicolon-joined names parallel to @cls_ivar_names.
-    @cls_ivar_nil_checked = "".split(",")
+    @cls_ivar_nil_checked = "".split(",", -1)
  # Memoization for `find_lv_ivar_alias_in_ast`. Keyed by
  # `"<class_idx>:<lv_name>"`, value is the resolved ivar name (or
  # `""` when the LV has multiple sources / non-ivar writes).
@@ -225,21 +236,21 @@ class Compiler
     @cls_ivar_type_cache_version = 0
  # Single-slot caches for the outer "|" split of joined per-class
  # method/param fields. cls_meth_ptypes_get / cls_meth_pnames_get /
- # cls_cmeth_*_get all do `field[ci].split("|")` then
- # `[midx].split(",")` — the outer split is repeated for every
+ # cls_cmeth_*_get all do `field[ci].split("|", -1)` then
+ # `[midx].split(",", -1)` — the outer split is repeated for every
  # (ci, midx) pair. Cache one ci's outer split per field;
  # consecutive calls with the same ci skip the outer split.
     @cmp_outer_ci = -1
-    @cmp_outer_split = "".split(",")
+    @cmp_outer_split = "".split(",", -1)
     @cmp_outer_version = 0
     @cmn_outer_ci = -1
-    @cmn_outer_split = "".split(",")
+    @cmn_outer_split = "".split(",", -1)
     @cmn_outer_version = 0
     @ccmp_outer_ci = -1
-    @ccmp_outer_split = "".split(",")
+    @ccmp_outer_split = "".split(",", -1)
     @ccmp_outer_version = 0
     @ccmn_outer_ci = -1
-    @ccmn_outer_split = "".split(",")
+    @ccmn_outer_split = "".split(",", -1)
     @ccmn_outer_version = 0
     @cls_meth_ptypes_version = 0
     @cls_meth_params_version = 0
@@ -247,25 +258,39 @@ class Compiler
     @cls_cmeth_params_version = 0
  # Top-level (script-scope) ivars. Lowered to `static` file-scope
  # globals because `main()` / top-level `def` bodies have no `self`.
-    @toplevel_ivar_names = "".split(",")
-    @toplevel_ivar_types = "".split(",")
-    @cls_meth_names = "".split(",")
-    @cls_meth_params = "".split(",")
-    @cls_meth_ptypes = "".split(",")
-    @cls_meth_returns = "".split(",")
-    @cls_meth_bodies = "".split(",")
-    @cls_meth_defaults = "".split(",")
+    @toplevel_ivar_names = "".split(",", -1)
+    @toplevel_ivar_types = "".split(",", -1)
+    @cls_meth_names = "".split(",", -1)
+    @cls_meth_params = "".split(",", -1)
+    @cls_meth_ptypes = "".split(",", -1)
+    @cls_meth_returns = "".split(",", -1)
+    @cls_meth_bodies = "".split(",", -1)
+    @cls_meth_defaults = "".split(",", -1)
  # Mirror of @meth_param_empty for class methods. Pipe-separated by
  # method, comma-separated by param. .
-    @cls_meth_ptypes_empty = "".split(",")
-    @cls_attr_readers = "".split(",")
-    @cls_attr_writers = "".split(",")
-    @cls_cmeth_names = "".split(",")
-    @cls_cmeth_params = "".split(",")
-    @cls_cmeth_ptypes = "".split(",")
-    @cls_cmeth_returns = "".split(",")
-    @cls_cmeth_bodies = "".split(",")
-    @cls_cmeth_defaults = "".split(",")
+    @cls_meth_ptypes_empty = "".split(",", -1)
+ # Per-class prepend chain table. Issue #720 follow-up: when
+ # `prepend M` overrides C's existing method `m`, the original
+ # body is registered as a synthetic shadow method on C named
+ # `__prep_<sanitize(m)>_<idx>` (idx = insertion order, 0 = first
+ # snapshot taken). The chain table stores per-class entries of
+ # the form `<mname>:<idx0>,<idx1>,...;<mname2>:...` so that
+ # super-from-prepended dispatch can locate the next shadow in
+ # the chain. Higher idx = closer to the active method; super
+ # from active calls highest idx, super from shadow at idx k
+ # calls k-1, super from idx 0 falls to the parent chain.
+    @cls_meth_prep_chain = "".split(",", -1)
+ # When 1, append_cls_meth suppresses its redefinition warning
+ # (the overwrite is the explicit semantics of `prepend M`).
+    @prep_overwrite_in_progress = 0
+    @cls_attr_readers = "".split(",", -1)
+    @cls_attr_writers = "".split(",", -1)
+    @cls_cmeth_names = "".split(",", -1)
+    @cls_cmeth_params = "".split(",", -1)
+    @cls_cmeth_ptypes = "".split(",", -1)
+    @cls_cmeth_returns = "".split(",", -1)
+    @cls_cmeth_bodies = "".split(",", -1)
+    @cls_cmeth_defaults = "".split(",", -1)
  # RBS shadow tables for method ptypes / returns (#626 sub-issue 2
  # phase 2). Hash-keyed lookups -- RBS info is sparse compared to
  # the dense per-class method tables, so we don't bother mirroring
@@ -289,8 +314,8 @@ class Compiler
  # ";" indexes by cmj (mirrors @cls_cmeth_bodies); inner
  # separator "|" matches @nd_scope_names' format so the codegen
  # consumer can split into the same (lnames, ltypes) pair.
-    @cls_cmeth_scope_names = "".split(",")
-    @cls_cmeth_scope_types = "".split(",")
+    @cls_cmeth_scope_names = "".split(",", -1)
+    @cls_cmeth_scope_types = "".split(",", -1)
     @cls_is_value_type = []
  # SRA (scalar replacement of aggregates) eligibility flag per class.
  # Classes marked here can have their non-escaping instances replaced
@@ -299,8 +324,8 @@ class Compiler
     @cls_is_sra = []
 
  # ---- Constants (parallel arrays) ----
-    @const_names = "".split(",")
-    @const_types = "".split(",")
+    @const_names = "".split(",", -1)
+    @const_types = "".split(",", -1)
 
  # ---- Class variables (@@var) ----
  # Per-(class,name) parallel arrays. Storage is a per-class C global
@@ -310,16 +335,16 @@ class Compiler
  # are a known footgun (mame, ko1, et al. publicly disrecommend
  # them); the simpler per-class semantics fit Spinel's compile-time
  # storage model better. Documented in the test fixtures.
-    @cvar_names = "".split(",")
-    @cvar_types = "".split(",")
+    @cvar_names = "".split(",", -1)
+    @cvar_types = "".split(",", -1)
  # Compile-time literal initializer per cvar, if the class-body
  # write was `@@x = <literal>`. "" means "use type-default". This
  # is necessary because Spinel doesn't run class-body statements
  # at startup, so any initializer that's not a fold-able literal
  # leaves the cvar at its type-default until first write.
-    @cvar_init_values = "".split(",")
+    @cvar_init_values = "".split(",", -1)
     @const_expr_ids = []
-    @const_scope_names = "".split(",")
+    @const_scope_names = "".split(",", -1)
  # Parallel to @const_names: when const `<X>`'s init RHS is the
  # canonical `<Class>.new(...)` shape, record `<Class>` here so
  # codegen can emit the per-const in-progress flag + read-side
@@ -327,27 +352,27 @@ class Compiler
  # initialized slot during the same RHS evaluation. Empty string
  # means "no guard needed" (other init shape — literal, helper-
  # built, etc.). Issue #646.
-    @const_init_class = "".split(",")
+    @const_init_class = "".split(",", -1)
 
  # `redo` -- labeled-goto target stack. Each loop emitter pushes
  # a fresh label name when entering an iteration body and pops on
  # exit; a `redo` jumps to the top of the innermost label.
-    @redo_label_stack = "".split(",")
+    @redo_label_stack = "".split(",", -1)
     @redo_label_counter = 0
 
  # `alias $copy $orig` -- maps new gvar name to its target.
  # Populated by collect_all from AliasGlobalVariableNode
  # statements; consulted by sanitize_gvar / scan_features /
  # infer_type so $copy and $orig share storage.
-    @galias_new = "".split(",")
-    @galias_old = "".split(",")
+    @galias_new = "".split(",", -1)
+    @galias_old = "".split(",", -1)
 
  # `undef foo` -- per-(class, method-name) registry of removed
  # methods. Recorded by collect_class_method_undef; compile-time
  # enforcement of "call after undef fails" is currently a
  # documented out-of-scope.
     @undef_class_idx = []
-    @undef_method = "".split(",")
+    @undef_method = "".split(",", -1)
 
  # `BEGIN { ... }` bodies, in source-encounter order. Hoisted to
  # the top of main() during emit_main.
@@ -360,15 +385,15 @@ class Compiler
     @post_execution_blocks = []
 
  # ---- Scope stack for local variables ----
-    @scope_names = "".split(",")
-    @scope_types = "".split(",")
+    @scope_names = "".split(",", -1)
+    @scope_types = "".split(",", -1)
  # Parallel to `@scope_names`: when a local was assigned directly
  # from an ivar read (`lv = @ivar`), record the ivar name here so
  # later sites that need ivar-side metadata (notably the
  # `<poly>[k]` narrowing in `compile_poly_method_call`) can
  # resolve through the alias. Empty string when the local has no
  # such alias (or had a non-ivar write since).
-    @scope_ivar_alias = "".split(",")
+    @scope_ivar_alias = "".split(",", -1)
 
  # Type-narrow stack for `is_a?`/`kind_of?` guards. While walking
  # the then-arm of `if v.is_a?(Hash)` or the truthy branch of
@@ -376,8 +401,8 @@ class Compiler
  # narrowed_type)` is pushed here; find_var_type's top-down
  # lookup picks it up so infer_type / scan / codegen see the
  # narrowed type without per-pass plumbing.
-    @type_narrow_names = "".split(",")
-    @type_narrow_types = "".split(",")
+    @type_narrow_names = "".split(",", -1)
+    @type_narrow_types = "".split(",", -1)
 
     @current_class_idx = -1
     @current_method_name = ""
@@ -414,7 +439,7 @@ class Compiler
 
  # Yield/block tracking (parallel with meth_names / cls_meth_names)
     @meth_has_yield = []
-    @cls_meth_has_yield = "".split(",")
+    @cls_meth_has_yield = "".split(",", -1)
 
  # Block function accumulator (emitted before forward decls)
     @block_funcs = ""
@@ -425,7 +450,7 @@ class Compiler
     @needs_system = 0
     @needs_int_array = 0
     @needs_float_array = 0
-    @tuple_types = "".split(",")
+    @tuple_types = "".split(",", -1)
     @needs_str_array = 0
     @needs_str_int_hash = 0
     @needs_str_str_hash = 0
@@ -438,15 +463,15 @@ class Compiler
  # emitted at the top of each rescue body. A bare `raise` inside a
  # rescue body re-raises with the snapshotted class+message rather
  # than fabricating a fresh RuntimeError. Empty outside any rescue.
-    @rescue_cls_stack = "".split(",")
-    @rescue_msg_stack = "".split(",")
+    @rescue_cls_stack = "".split(",", -1)
+    @rescue_msg_stack = "".split(",", -1)
     @rescue_depth = 0
  # Stack of ensure-clause node IDs (encoded as strings) currently in
  # scope. Each entry corresponds to an enclosing `begin..ensure..end`
  # whose body is being compiled. When `return` is emitted from inside
  # the body, each ensure body is replayed (innermost-first) before
  # the C `return`, so writebacks in `ensure` execute on early return.
-    @ensure_stack = "".split(",")
+    @ensure_stack = "".split(",", -1)
  # Number of `sp_exc_top++` pushes emitted along the static
  # fall-through path leading to the current emit point but not
  # yet matched by an emitted `sp_exc_top--`. An early `return`
@@ -462,15 +487,15 @@ class Compiler
     @needs_rb_value = 0
     @needs_regexp = 0
     @needs_rand = 0
-    @regexp_patterns = "".split(",")
-    @regexp_flags = "".split(",")
+    @regexp_patterns = "".split(",", -1)
+    @regexp_flags = "".split(",", -1)
  # Dynamic-regex (InterpolatedRegularExpressionNode) call-site cache.
  # Each AST node gets a unique idx so the emitter can produce one
  # `sp_re_dyn_<idx>` helper per source location with its own
  # function-scope cache (string key + compiled pattern). Collected
  # in scan_features so indexes are stable across compile_expr visits.
     @dyn_regex_node_ids = []
-    @dyn_regex_flags = "".split(",")
+    @dyn_regex_flags = "".split(",", -1)
  # `var = /lit/` resolution. Parallel arrays: `@local_regex_names`
  # holds the local-variable name; `@local_regex_idx` holds the
  # corresponding `@regexp_patterns` index (-1 when the LV is
@@ -478,7 +503,7 @@ class Compiler
  # holds the AST node id of a single-write `Regexp.new(<dyn>)`
  # right-hand side (-1 otherwise), so the read-site dyn-cache emit
  # can locate the call. Multi-write resets both to -1 / -1.
-    @local_regex_names = "".split(",")
+    @local_regex_names = "".split(",", -1)
     @local_regex_idx = []
     @local_regex_call_nids = []
 
@@ -513,28 +538,28 @@ class Compiler
     @needs_sym_poly_hash = 0
     @cls_cmeth_live = ""
     @cls_meth_live = ""
-    @multi_const_inits = "".split(",")
+    @multi_const_inits = "".split(",", -1)
 
  # Lambda support
     @needs_lambda = 0
     @lambda_counter = 0
     @lambda_funcs = ""
-    @lambda_params = "".split(",")
-    @lambda_captures = "".split(",")
-    @lambda_capture_cell_types = "".split(",")
-    @lambda_var_ret_names = "".split(",")
-    @lambda_var_ret_types = "".split(",")
+    @lambda_params = "".split(",", -1)
+    @lambda_captures = "".split(",", -1)
+    @lambda_capture_cell_types = "".split(",", -1)
+    @lambda_var_ret_names = "".split(",", -1)
+    @lambda_var_ret_types = "".split(",", -1)
     @last_lambda_ret_type = ""
  # `Klass.method(:cls_meth)` generates an adapter trampoline so the
  # Method object's `(void *self, mrb_int...)` ABI fits a class
  # method's no-self C signature. Tracks emitted (Klass, method)
  # pairs to avoid duplicate definitions.
-    @cls_method_adapters = "".split(",")
+    @cls_method_adapters = "".split(",", -1)
 
  # Proc closure support (Phase 2)
     @in_proc_body = 0
-    @proc_captures = "".split(",")
-    @proc_capture_types = "".split(",")
+    @proc_captures = "".split(",", -1)
+    @proc_capture_types = "".split(",", -1)
 
  # Fiber support
     @needs_fiber = 0
@@ -548,34 +573,34 @@ class Compiler
     @fiber_counter = 0
     @fiber_funcs = ""
     @in_fiber_body = 0
-    @fiber_captures = "".split(",")
-    @fiber_capture_types = "".split(",")
-    @heap_promoted_names = "".split(",")
-    @heap_promoted_cells = "".split(",")
+    @fiber_captures = "".split(",", -1)
+    @fiber_capture_types = "".split(",", -1)
+    @heap_promoted_names = "".split(",", -1)
+    @heap_promoted_cells = "".split(",", -1)
 
  # Global variables ($x)
-    @gvar_names = "".split(",")
-    @gvar_types = "".split(",")
+    @gvar_names = "".split(",", -1)
+    @gvar_types = "".split(",", -1)
 
  # Poly tracking: functions with params called with different types
-    @poly_funcs = "".split(",")
-    @poly_param_types = "".split(",")
+    @poly_funcs = "".split(",", -1)
+    @poly_param_types = "".split(",", -1)
 
  # Method reference tracking: var_name -> method_name
-    @method_ref_vars = "".split(",")
-    @method_ref_names = "".split(",")
+    @method_ref_vars = "".split(",", -1)
+    @method_ref_names = "".split(",", -1)
 
  # Open class tracking for built-in types
-    @open_class_names = "".split(",")
+    @open_class_names = "".split(",", -1)
 
  # Module tracking: module_name -> body node id
-    @module_names = "".split(",")
+    @module_names = "".split(",", -1)
     @module_body_ids = []
  # `@module_includes[mi]`: `;`-separated list of names the module
  # introduced by row `mi` itself includes. Modules can re-open, so
  # each row tracks its own block's `include` calls; const lookup
  # walks every row matching the module name.
-    @module_includes = "".split(",")
+    @module_includes = "".split(",", -1)
  # Module-level singleton accessors :
  # `class << self; attr_accessor :foo; end` inside `module M`.
  # `@module_acc_consts[i]` is a `;`-separated list of distinct
@@ -583,46 +608,46 @@ class Compiler
  # inline; Stage 2: multiple names → runtime sentinel switch).
  # Empty string means at least one write was non-constant — the
  # slot falls through to the un-folded path.
-    @module_acc_keys = "".split(",")
-    @module_acc_consts = "".split(",")
+    @module_acc_keys = "".split(",", -1)
+    @module_acc_consts = "".split(",", -1)
 
  # ---- FFI state (parallel arrays, populated by scan_ffi_decl) ----
  # Per-module registry:
-    @ffi_modules = "".split(",")          # module names that declared FFI
-    @ffi_module_libs = "".split(",")      # ";"-joined -l names
-    @ffi_module_cflags = "".split(",")    # ";"-joined cc flag strings
+    @ffi_modules = "".split(",", -1)          # module names that declared FFI
+    @ffi_module_libs = "".split(",", -1)      # ";"-joined -l names
+    @ffi_module_cflags = "".split(",", -1)    # ";"-joined cc flag strings
  # Function registry (one entry per ffi_func decl):
-    @ffi_func_modules = "".split(",")     # owning module name
-    @ffi_func_names = "".split(",")       # C symbol name
-    @ffi_func_arg_types = "".split(",")   # ";"-joined Spinel type tokens
-    @ffi_func_ret_types = "".split(",")   # single Spinel type token
-    @ffi_func_arg_specs = "".split(",")   # ";"-joined original specs (uint32, str, …)
-    @ffi_func_ret_specs = "".split(",")   # original return spec
+    @ffi_func_modules = "".split(",", -1)     # owning module name
+    @ffi_func_names = "".split(",", -1)       # C symbol name
+    @ffi_func_arg_types = "".split(",", -1)   # ";"-joined Spinel type tokens
+    @ffi_func_ret_types = "".split(",", -1)   # single Spinel type token
+    @ffi_func_arg_specs = "".split(",", -1)   # ";"-joined original specs (uint32, str, …)
+    @ffi_func_ret_specs = "".split(",", -1)   # original return spec
  # Buffer registry (one entry per ffi_buffer decl):
-    @ffi_buf_modules = "".split(",")
-    @ffi_buf_names = "".split(",")
+    @ffi_buf_modules = "".split(",", -1)
+    @ffi_buf_names = "".split(",", -1)
     @ffi_buf_sizes = []                   # int sizes in bytes
  # Reader registry (one entry per ffi_read_* decl):
-    @ffi_reader_modules = "".split(",")
-    @ffi_reader_names = "".split(",")
-    @ffi_reader_kinds = "".split(",")     # "u32", "i32", "ptr"
+    @ffi_reader_modules = "".split(",", -1)
+    @ffi_reader_names = "".split(",", -1)
+    @ffi_reader_kinds = "".split(",", -1)     # "u32", "i32", "ptr"
     @ffi_reader_offsets = []              # int byte offsets
 
     @pending_method_ref = ""
     @lambda_counter = 0
     @lambda_funcs = ""
-    @lambda_params = "".split(",")
-    @lambda_captures = "".split(",")
+    @lambda_params = "".split(",", -1)
+    @lambda_captures = "".split(",", -1)
     @lambda_insert_pos = 0
-    @cls_method_adapters = "".split(",")
+    @cls_method_adapters = "".split(",", -1)
 
  # Proc closure support (Phase 2)
     @in_proc_body = 0
-    @proc_captures = "".split(",")
-    @proc_capture_types = "".split(",")
+    @proc_captures = "".split(",", -1)
+    @proc_capture_types = "".split(",", -1)
 
  # Symbol type Phase 2 Step 1: intern table (infrastructure only; unused yet).
-    @sym_names = "".split(",")
+    @sym_names = "".split(",", -1)
 
  # instance_eval block hoisting: parallel arrays indexed by synthetic
  # function id N. Each lifted block becomes a file-scope static
@@ -634,23 +659,23 @@ class Compiler
     @ieval_counter = 0
     @ieval_class_idxs = []
     @ieval_body_ids = []
-    @ieval_return_types = "".split(",")
+    @ieval_return_types = "".split(",", -1)
  # Self-bound block-param name per lift (empty for the no-param
  # forms). emit_ieval_func seeds it via `lv_<name> = self;`.
-    @ieval_self_param_names = "".split(",")
+    @ieval_self_param_names = "".split(",", -1)
  # Extra required block-param names (";"-joined) beyond the
  # self-bound first. CRuby binds these to nil (arity tolerance);
  # precompute_all_scope_decls declares them as nil-typed locals.
-    @ieval_extra_param_names = "".split(",")
+    @ieval_extra_param_names = "".split(",", -1)
  # Receiver classes flagged out of value-type / SRA promotion so
  # the lifted sp_ieval_<N>'s self-pointer signature can mutate.
-    @cls_with_internal_ieval_lift = "".split(",")
+    @cls_with_internal_ieval_lift = "".split(",", -1)
 
  # RBS-derived seed lines. Populated by load_rbs_seeds before
  # analyze_phase; consumed by apply_rbs_seeds after collect_all
  # has built the class/method tables. Empty when no seed file was
  # passed -- inference behaves exactly as before.
-    @rbs_seed_lines = "".split(",")
+    @rbs_seed_lines = "".split(",", -1)
  # Set of "ci_midx" tokens for class instance methods whose ptypes
  # were RBS-seeded. Heuristic narrowing passes (notably the
  # `narrow_param_hash_types_from_body_writes` Option-B fallback
@@ -658,7 +683,7 @@ class Compiler
  # when no concrete writes signal a value type) consult this set
  # and skip the narrowing -- the explicit RBS declaration is
  # authoritative over heuristic inference. Issue #613.
-    @rbs_seeded_cls_meth = "".split(";")
+    @rbs_seeded_cls_meth = "".split(";", -1)
   end
 
   def rbs_mark_cls_meth_seeded(ci, midx)
@@ -730,7 +755,7 @@ class Compiler
 
  # Returns the body node id for class ci's midx'th method, or -1
  # if midx is out of range or the body id is invalid. Centralises
- # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
+ # the @cls_meth_bodies[ci].split(";", -1)[midx].to_i parse so detectors
  # don't have to inline it.
 
  # Returns the name of the class method's single proc-typed param
@@ -992,7 +1017,7 @@ class Compiler
     if incs_str == ""
       return ""
     end
-    incs = incs_str.split(";")
+    incs = incs_str.split(";", -1)
     ii = 0
     while ii < incs.length
       inc = incs[ii]
@@ -1199,6 +1224,9 @@ class Compiler
     end
     if cname == "Range"
       return "range"
+    end
+    if cname == "Encoding"
+      return "encoding"
     end
  # User-defined class: narrow to obj_<C> when the class is
  # registered. Otherwise return "" — narrow is a no-op.
@@ -1422,7 +1450,7 @@ class Compiler
       return "0"
     end
     f = @nd_flags[nid]
-    parts = "".split(",")
+    parts = "".split(",", -1)
     if f & 4 != 0
       parts.push("1")
     end
@@ -1660,7 +1688,7 @@ class Compiler
 
  # Find method in class (search parent chain)
   def cls_find_method(ci, mname)
-    names = @cls_meth_names[ci].split(";")
+    names = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < names.length
       if names[j] == mname
@@ -1714,7 +1742,7 @@ class Compiler
     if ci < 0
       return -1
     end
-    cmnames = @cls_cmeth_names[ci].split(";")
+    cmnames = @cls_cmeth_names[ci].split(";", -1)
     cj = 0
     while cj < cmnames.length
       if cmnames[cj] == mname
@@ -1766,8 +1794,8 @@ class Compiler
     if owner < 0
       return ""
     end
-    cmnames = @cls_cmeth_names[owner].split(";")
-    cm_returns = @cls_cmeth_returns[owner].split(";")
+    cmnames = @cls_cmeth_names[owner].split(";", -1)
+    cm_returns = @cls_cmeth_returns[owner].split(";", -1)
     cj = 0
     while cj < cmnames.length
       if cmnames[cj] == mname
@@ -1786,8 +1814,8 @@ class Compiler
     if @cls_meth_return_cache.key?(ck)
       return @cls_meth_return_cache[ck]
     end
-    names = @cls_meth_names[ci].split(";")
-    returns = @cls_meth_returns[ci].split(";")
+    names = @cls_meth_names[ci].split(";", -1)
+    returns = @cls_meth_returns[ci].split(";", -1)
     j = 0
     while j < names.length
       if names[j] == mname
@@ -1822,8 +1850,8 @@ class Compiler
     if @cls_ivar_type_cache.key?(ck)
       return @cls_ivar_type_cache[ck]
     end
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     own_t = ""
     j = 0
     while j < names.length
@@ -1931,13 +1959,28 @@ class Compiler
  # returns. Walk to the parent's `find_method_owner`-resolved
  # method and read its return type.
       if @current_class_idx >= 0 && @current_method_name != ""
+ # Prepend chain redirect (issue #720). When inside a prepended
+ # method on C, super calls the next shadow on C; when inside a
+ # shadow, super calls the next-older shadow (lower index) or
+ # falls to the parent walk at index 0.
+        prep_target = prep_super_target(@current_class_idx, @current_method_name)
+        if prep_target != ""
+          ret_pt = cls_method_return(@current_class_idx, prep_target)
+          if ret_pt != ""
+            return ret_pt
+          end
+        end
         parent_name_st = @cls_parents[@current_class_idx]
         if parent_name_st != ""
           parent_ci_st = find_class_idx(parent_name_st)
           if parent_ci_st >= 0
-            owner_st = find_method_owner(parent_ci_st, @current_method_name)
+ # When inside a shadow whose chain index is 0 (deepest), the
+ # super walks past the synthetic and reads the parent's method
+ # under the *original* user mname, not the synthetic name.
+            super_mname = prep_super_parent_mname(@current_class_idx, @current_method_name)
+            owner_st = find_method_owner(parent_ci_st, super_mname)
             if owner_st != ""
-              ret_st = cls_method_return(find_class_idx(owner_st), @current_method_name)
+              ret_st = cls_method_return(find_class_idx(owner_st), super_mname)
               if ret_st != ""
                 return ret_st
               end
@@ -1953,6 +1996,12 @@ class Compiler
     if t == "FloatNode"
       return "float"
     end
+ # Issue #868: regex literal as a value (`/x/.source` etc.).
+ # Without this the bare literal infers as int (unresolved default)
+ # and accessor methods fall through to the int dispatch.
+    if t == "RegularExpressionNode"
+      return "regexp"
+    end
     if t == "StringNode"
       return "string"
     end
@@ -1960,7 +2009,7 @@ class Compiler
       return "string"
     end
     if t == "SourceEncodingNode"
-      return "string"
+      return "encoding"
     end
     if t == "SymbolNode"
       return "symbol"
@@ -2064,7 +2113,7 @@ class Compiler
  # this arm spinel falls back to int (the default), and string-
  # returning rescue bodies fail C compilation when the ret_tmp
  # slot's type doesn't match the value being assigned.
-      types_b = "".split(",")
+      types_b = "".split(",", -1)
       bodies_b = begin_node_arm_bodies(nid)
       bi = 0
       while bi < bodies_b.length
@@ -2096,6 +2145,18 @@ class Compiler
       vt = find_var_type(@nd_name[nid])
       if vt != ""
         return vt
+      end
+      return infer_type(@nd_expression[nid])
+    end
+    if t == "LocalVariableOrWriteNode" || t == "LocalVariableAndWriteNode"
+ # `var ||= expr` / `var &&= expr` as expression value lowers to
+ # the slot's type after widening (which scan_locals already did
+ # via the merge rules below). Falling back to the rhs type made
+ # the surrounding LV slot type for `y = (x ||= 7)` mismatch
+ # when scan_locals widened x to poly. Issue #702.
+      vt_oa = find_var_type(@nd_name[nid])
+      if vt_oa != ""
+        return vt_oa
       end
       return infer_type(@nd_expression[nid])
     end
@@ -2146,6 +2207,11 @@ class Compiler
  # arrive here. All map to the matched-string view spinel exposes
  # via sp_re_match_* C globals (there's no MatchData wrapper).
       if gname == "$~" || gname == "$&" || gname == "$`" || gname == "$'"
+        return "string"
+      end
+ # Issue #831: $! is the currently-rescued exception. Read as
+ # the rescue message string (NULL outside rescue → .inspect = "nil").
+      if gname == "$!" || gname == "$;" || gname == "$," || gname == "$/"
         return "string"
       end
       gi = 0
@@ -2216,9 +2282,20 @@ class Compiler
  # is a string.
       return infer_type(@nd_expression[nid])
     end
+    if t == "ImaginaryNode"
+      return "complex"
+    end
+    if t == "RationalNode"
+      return "rational"
+    end
     if t == "ConstantReadNode"
       if @nd_name[nid] == "ARGV"
         return "argv"
+      end
+ # Issue #890: RUBY_VERSION / RUBY_PLATFORM / RUBY_ENGINE are
+ # built-in string constants provided by the runtime.
+      if @nd_name[nid] == "RUBY_VERSION" || @nd_name[nid] == "RUBY_PLATFORM" || @nd_name[nid] == "RUBY_ENGINE"
+        return "string"
       end
       rname = resolve_const_read_name(@nd_name[nid])
       ci = find_const_idx(rname)
@@ -2284,6 +2361,13 @@ class Compiler
         if rname == "Math"
           return "float"
         end
+ # Issue #891: File::SEPARATOR / ALT_SEPARATOR / PATH_SEPARATOR.
+        if rname == "File"
+          nn_file = @nd_name[nid]
+          if nn_file == "SEPARATOR" || nn_file == "ALT_SEPARATOR" || nn_file == "PATH_SEPARATOR"
+            return "string"
+          end
+        end
       end
       return "int"
     end
@@ -2315,7 +2399,7 @@ class Compiler
           else_type = infer_type(sub)
         end
       end
-      types = "".split(",")
+      types = "".split(",", -1)
       types.push(then_type)
       types.push(else_type)
       return unify_return_type(types)
@@ -2340,13 +2424,13 @@ class Compiler
           end
         end
       end
-      types = "".split(",")
+      types = "".split(",", -1)
       types.push(then_type)
       types.push(else_type)
       return unify_return_type(types)
     end
     if t == "CaseMatchNode"
-      types = "".split(",")
+      types = "".split(",", -1)
       conds = parse_id_list(@nd_conditions[nid])
       k = 0
       while k < conds.length
@@ -2378,7 +2462,7 @@ class Compiler
       return "int"
     end
     if t == "CaseNode"
-      types = "".split(",")
+      types = "".split(",", -1)
       conds = parse_id_list(@nd_conditions[nid])
       k = 0
       while k < conds.length
@@ -2866,6 +2950,18 @@ class Compiler
  # shape, so `lv_s = sp_M_cls_greet()` mis-typed an `const char *`
  # return. Mirror new cases in both functions, in the same order, with
  # the same recogniser logic.
+ # Static return-type table for StringScanner runtime methods.
+ # Empty string for an unknown method (caller falls through to
+ # the standard class-method inference path). For methods that
+ # "return self" the table reports "stringscanner".
+  def strscan_return_type(mname)
+    return "string" if mname == "scan" || mname == "check" || mname == "scan_until" || mname == "matched" || mname == "getch" || mname == "peek" || mname == "rest" || mname == "string" || mname == "pre_match" || mname == "post_match"
+    return "bool" if mname == "matched?" || mname == "eos?" || mname == "rest?"
+    return "int" if mname == "pos" || mname == "pos=" || mname == "rest_size"
+    return "stringscanner" if mname == "unscan" || mname == "terminate" || mname == "reset"
+    ""
+  end
+
   def infer_call_type(nid)
     mname = @nd_name[nid]
     recv = @nd_receiver[nid]
@@ -2874,6 +2970,25 @@ class Compiler
       if recv < 0 || (recv >= 0 && @nd_type[recv] == "SelfNode")
         return "bool"
       end
+    end
+
+ # StringScanner method return types — the methods are
+ # implemented in lib/sp_strscan.c (libspinel_rt.a). Mirror the
+ # C return types of the sp_StringScanner_* helpers. Gate the
+ # recv infer on the method name first (infer_type can be a
+ # heavy walk through cached LV slots — fast-path-bail on names
+ # outside the StringScanner table).
+    if recv >= 0
+      ss_t = strscan_return_type(mname)
+      if ss_t != ""
+        rt_ss = infer_type(recv)
+        return ss_t if rt_ss == "stringscanner"
+      end
+    end
+ # `StringScanner.new(s)` constructs an sp_StringScanner * — return
+ # the primitive type, not the (non-existent) user-class type.
+    if mname == "new" && recv >= 0 && @nd_type[recv] == "ConstantReadNode" && @nd_name[recv] == "StringScanner"
+      return "stringscanner"
     end
 
  # `Regexp.new(<arg>)` / `Regexp.compile(<arg>)` returns a compiled
@@ -2905,7 +3020,11 @@ class Compiler
             return "string"
           end
           if mname == "backtrace"
-            return "nil"
+ # Issue #895: spinel doesn't track per-exception frames;
+ # return an empty str_array (callers can call .first / .length
+ # safely). Documented limitation.
+            @needs_str_array = 1
+            return "str_array"
           end
           if mname == "is_a?" || mname == "kind_of?" || mname == "instance_of?"
             return "bool"
@@ -2955,7 +3074,7 @@ class Compiler
         if module_name_exists(mod_name) == 1
           rconsts = module_acc_resolved(mod_name, inner_mname)
           if rconsts != "" && rconsts != "?"
-            cands = rconsts.split(";")
+            cands = rconsts.split(";", -1)
             common = ""
             cands.each { |cn|
               mi = find_method_idx(cn + "_cls_" + mname)
@@ -3135,8 +3254,8 @@ class Compiler
           end
           cci_cm = find_class_idx(owning_cm)
           if cci_cm >= 0
-            cmnames_cm = @cls_cmeth_names[cci_cm].split(";")
-            cmreturns_cm = @cls_cmeth_returns[cci_cm].split(";")
+            cmnames_cm = @cls_cmeth_names[cci_cm].split(";", -1)
+            cmreturns_cm = @cls_cmeth_returns[cci_cm].split(";", -1)
             cmidx_cm = 0
             while cmidx_cm < cmnames_cm.length
               if cmnames_cm[cmidx_cm] == mname && cmidx_cm < cmreturns_cm.length
@@ -3148,8 +3267,8 @@ class Compiler
         end
       end
       if @current_class_idx >= 0 && @current_method_has_self == 0
-        cmnames_cm_r = @cls_cmeth_names[@current_class_idx].split(";")
-        cmreturns_cm_r = @cls_cmeth_returns[@current_class_idx].split(";")
+        cmnames_cm_r = @cls_cmeth_names[@current_class_idx].split(";", -1)
+        cmreturns_cm_r = @cls_cmeth_returns[@current_class_idx].split(";", -1)
         cmidx_cm_r = 0
         while cmidx_cm_r < cmnames_cm_r.length
           if cmnames_cm_r[cmidx_cm_r] == mname && cmidx_cm_r < cmreturns_cm_r.length
@@ -3519,6 +3638,50 @@ class Compiler
  # Negation of `=~`: bool. Issue #732.
       return "bool"
     end
+    if mname == "value?" || mname == "has_value?"
+ # Hash#value?(v) -- returns bool. Issue #738.
+      if recv >= 0
+        rt_hv = infer_type(recv)
+        if is_hash_type(rt_hv) == 1
+          return "bool"
+        end
+      end
+    end
+    if mname == "invert"
+ # Hash#invert -- swap keys and values. str_str_hash inverts to
+ # itself (same shape); other variants go to poly_poly_hash since
+ # the inverted key/value type combinations don't all have
+ # dedicated variants. Issue #738.
+      if recv >= 0
+        rt_iv = infer_type(recv)
+        if rt_iv == "str_str_hash"
+          return "str_str_hash"
+        end
+        if is_hash_type(rt_iv) == 1
+          return "poly_poly_hash"
+        end
+      end
+    end
+    if mname == "values_at"
+ # `arr.values_at(...)` returns an array of the same element
+ # type. Issue #742.
+      if recv >= 0
+        rt_va = infer_type(recv)
+        if is_array_type(rt_va) == 1
+          return rt_va
+        end
+      end
+    end
+    if mname == "combination" || mname == "permutation"
+ # `int_array.combination(k)` returns a PtrArray of IntArrays.
+ # Issue #742.
+      if recv >= 0
+        rt_cb = infer_type(recv)
+        if rt_cb == "int_array" || rt_cb == "sym_array"
+          return "int_array_ptr_array"
+        end
+      end
+    end
     if mname == "<<"
       if recv >= 0
         if lt == "mutable_str"
@@ -3634,7 +3797,7 @@ class Compiler
   def any_user_class_defines_imeth(mname)
     ck = 0
     while ck < @cls_names.length
-      names = @cls_meth_names[ck].split(";")
+      names = @cls_meth_names[ck].split(";", -1)
       kk = 0
       while kk < names.length
         if names[kk] == mname
@@ -3669,7 +3832,7 @@ class Compiler
     if is_primitive_shared_method(mname) == 1
       return 1
     end
-    if mname == "Integer" || mname == "Float"
+    if mname == "Integer" || mname == "Float" || mname == "String"
       return 1
     end
     if mname == "delete_prefix" || mname == "delete_suffix"
@@ -3681,13 +3844,22 @@ class Compiler
     if mname == "allbits?" || mname == "anybits?" || mname == "nobits?"
       return 1
     end
-    if mname == "gcd" || mname == "lcm" || mname == "ceildiv" || mname == "div" || mname == "clamp"
+    if mname == "gcd" || mname == "lcm" || mname == "gcdlcm" || mname == "ceildiv" || mname == "div" || mname == "clamp"
+      return 1
+    end
+    if mname == "magnitude" || mname == "modulo" || mname == "remainder" || mname == "size"
+      return 1
+    end
+    if mname == "nonzero?"
+      return 1
+    end
+    if mname == "quo"
       return 1
     end
     if mname == "itself" || mname == "then" || mname == "yield_self"
       return 1
     end
-    if mname == "getbyte" || mname == "setbyte" || mname == "__method__"
+    if mname == "getbyte" || mname == "setbyte" || mname == "__method__" || mname == "__dir__"
       return 1
     end
     if mname == "slice!" || mname == "intern"
@@ -3799,13 +3971,48 @@ class Compiler
       end
       return "string"
     end
+ # Issue #868: Regexp#source returns the pattern string;
+ # Regexp#options returns the engine flag bitmask as int.
+    if mname == "source" && recv >= 0 && @nd_type[recv] == "RegularExpressionNode"
+      return "string"
+    end
+    if mname == "options" && recv >= 0 && @nd_type[recv] == "RegularExpressionNode"
+      return "int"
+    end
     if mname == "inspect"
       return "string"
+    end
+ # NilClass coercion methods. Issue #871. to_c / to_r / to_h
+ # skipped: Complex / Rational unsupported, Hash needs typed
+ # element judgement.
+    if recv >= 0
+      recv_t_nil = infer_type(recv)
+      if recv_t_nil == "nil"
+        if mname == "to_i"
+          return "int"
+        end
+        if mname == "to_f"
+          return "float"
+        end
+        if mname == "to_a"
+          @needs_int_array = 1
+          return "int_array"
+        end
+        if mname == "&"
+          return "bool"
+        end
+        if mname == "|" || mname == "^"
+          return "bool"
+        end
+      end
     end
  # Class#name -- the class's source name as
  # a string. Aliases `.to_s` at the runtime helper level
  # (sp_class_to_s), so the return type is the same.
     if mname == "name"
+      if recv >= 0 && infer_type(recv) == "encoding"
+        return "string"
+      end
       if recv >= 0 && infer_type(recv) == "class"
         return "string"
       end
@@ -3916,12 +4123,13 @@ class Compiler
           return "class"
         end
  # Primitive .class -- Integer / Float / String / Symbol /
- # NilClass / TrueClass / FalseClass / Range / Time / Array /
- # Hash / Proc -- all return a `class` value. Issue #715.
+ # NilClass / TrueClass / FalseClass / Range / Time / Encoding /
+ # Array / Hash / Proc -- all return a `class` value. Issue #715.
         bt_pc = base_type(rt)
         if bt_pc == "int" || bt_pc == "bigint" || bt_pc == "float" ||
            bt_pc == "string" || bt_pc == "mutable_str" || bt_pc == "symbol" ||
            bt_pc == "bool" || bt_pc == "nil" || bt_pc == "range" || bt_pc == "time" ||
+           bt_pc == "encoding" ||
            is_array_type(bt_pc) == 1 || is_hash_type(bt_pc) == 1 ||
            bt_pc == "proc" || bt_pc == "lambda"
           return "class"
@@ -3944,8 +4152,8 @@ class Compiler
           if inner_ci >= 0
             owner = cls_cmethod_owner(inner_ci, mname)
             if owner >= 0
-              cmnames = @cls_cmeth_names[owner].split(";")
-              cmreturns = @cls_cmeth_returns[owner].split(";")
+              cmnames = @cls_cmeth_names[owner].split(";", -1)
+              cmreturns = @cls_cmeth_returns[owner].split(";", -1)
               base_rt = ""
               cmidx = 0
               while cmidx < cmnames.length
@@ -3970,8 +4178,8 @@ class Compiler
                   if ck != inner_ci && cls_is_descendant(ck, inner_ci) == 1
                     own = cls_cmethod_owner(ck, mname)
                     if own == ck
-                      ck_cmnames = @cls_cmeth_names[ck].split(";")
-                      ck_cmreturns = @cls_cmeth_returns[ck].split(";")
+                      ck_cmnames = @cls_cmeth_names[ck].split(";", -1)
+                      ck_cmreturns = @cls_cmeth_returns[ck].split(";", -1)
                       ki = 0
                       while ki < ck_cmnames.length
                         if ck_cmnames[ki] == mname && ki < ck_cmreturns.length
@@ -4007,6 +4215,10 @@ class Compiler
     if recv < 0 && mname == "Float"
       return "float"
     end
+ # Kernel#String() returns string. Issue #879.
+    if recv < 0 && mname == "String"
+      return "string"
+    end
  # Float#ceil(n)/floor(n)/round(n)/truncate(n) with n given return
  # Float; zero-arg / Integer#ceil etc. return Integer. (truncate's arm
  # used to live next to nan?/infinite? — folded in here for one place
@@ -4041,6 +4253,27 @@ class Compiler
     if mname == "delete_prefix" || mname == "delete_suffix"
       return "string"
     end
+    if mname == "dump"
+      return "string"
+    end
+    if mname == "scrub"
+      return "string"
+    end
+    if mname == "crypt"
+      return "string"
+    end
+    if mname == "delete_prefix!" || mname == "delete_suffix!"
+ # Bang variants mutate self in place. When recv is mutable_str
+ # the call returns the same mutable_str; on a frozen literal
+ # the codegen path would already FrozenError before this fires.
+      if recv >= 0
+        rt_dpb = infer_type(recv)
+        if rt_dpb == "mutable_str"
+          return "mutable_str"
+        end
+      end
+      return "string"
+    end
     if mname == "eql?"
       return "bool"
     end
@@ -4073,12 +4306,10 @@ class Compiler
  # the shortest collision target; struct field accessors etc.
  # commonly take that single-letter shape).
     if mname == "encoding"
- # spinel doesn't model Encoding objects; treat the return as a
- # plain string label (`"UTF-8"`). Issue #723.
       if recv >= 0
         rt_enc = infer_type(recv)
         if rt_enc == "string" || rt_enc == "mutable_str"
-          return "string"
+          return "encoding"
         end
       end
     end
@@ -4104,6 +4335,12 @@ class Compiler
       return "bool"
     end
     if mname == "cover?"
+      return "bool"
+    end
+    if mname == "const_defined?"
+      return "bool"
+    end
+    if mname == "overlap?"
       return "bool"
     end
     if mname == "==="
@@ -4152,6 +4389,13 @@ class Compiler
       return "int"
     end
     if mname == "clamp"
+ # Issue #899: clamp on string receiver returns string.
+      if recv >= 0
+        rt_clamp = infer_type(recv)
+        if rt_clamp == "string" || rt_clamp == "mutable_str"
+          return "string"
+        end
+      end
       return "int"
     end
     if mname == "itself" || mname == "tap"
@@ -4163,7 +4407,7 @@ class Compiler
  # String#each_byte returns the receiver per CRuby. The block-bearing
  # form is handled in compile_string_method_expr; the inference rule
  # here is what makes `ret = "hi".each_byte { ... }` typed as string.
-    if mname == "each_byte"
+    if mname == "each_byte" || mname == "each_char"
       if recv >= 0 && @nd_block[nid] >= 0
         rt = infer_type(recv)
         if rt == "string" || rt == "mutable_str"
@@ -4223,11 +4467,32 @@ class Compiler
     if mname == "__method__"
       return "string"
     end
+ # Issue #878: Kernel#__dir__ -- compile-time string.
+    if mname == "__dir__" && recv < 0
+      return "string"
+    end
     if mname == "join"
       return "string"
     end
     if mname == "pack"
       return "string"
+    end
+    if mname == "assoc" || mname == "rassoc"
+      return "poly_array"
+    end
+    if mname == "product"
+      return "int_array_ptr_array"
+    end
+    if mname == "slice_when" || mname == "chunk_while" || mname == "slice_before" || mname == "slice_after"
+      return "int_array_ptr_array"
+    end
+    if mname == "chunk"
+      return "poly_array"
+    end
+ # Issue #889: String#unpack returns Array of mixed-type elements;
+ # spinel boxes through poly_array.
+    if mname == "unpack"
+      return "poly_array"
     end
     if mname == "uniq"
       if recv >= 0
@@ -4304,7 +4569,7 @@ class Compiler
     if mname == "nil?"
       return "bool"
     end
-    if mname == "abs"
+    if mname == "abs" || mname == "magnitude"
       if recv >= 0
         lt = infer_type(recv)
         if lt == "float"
@@ -4312,6 +4577,45 @@ class Compiler
         end
       end
       return "int"
+    end
+    if mname == "modulo" || mname == "remainder"
+      if recv >= 0
+        lt = infer_type(recv)
+        if lt == "float"
+          return "float"
+        end
+      end
+      return "int"
+    end
+ # Integer#quo returns Rational. Issue #872.
+    if mname == "quo" && recv >= 0
+      rt_quo = infer_type(recv)
+      if rt_quo == "int"
+        return "rational"
+      end
+    end
+ # Integer#size: bytes used to represent the int. Spinel
+ # mrb_int is always 64-bit, so it's a constant 8. Issue #860.
+    if mname == "size" && recv >= 0
+      rt_sz = infer_type(recv)
+      if rt_sz == "int"
+        return "int"
+      end
+    end
+ # Integer#nonzero? returns nil when receiver is 0, self otherwise.
+ # Surfaces as int? (nullable int) so downstream .nil? and
+ # arithmetic handling stay on the integer path. Issue #874.
+    if mname == "nonzero?" && recv >= 0
+      rt_nz = infer_type(recv)
+      if rt_nz == "int"
+        return "int?"
+      end
+    end
+ # Integer#gcdlcm returns [gcd, lcm] as a tuple value. Issue #894.
+    if mname == "gcdlcm"
+      tt_gl_inf = "tuple:int,int"
+      register_tuple_type(tt_gl_inf)
+      return "tuple:int,int"
     end
     if mname == "**" || mname == "pow"
       if recv >= 0
@@ -4452,7 +4756,7 @@ class Compiler
     if mname == "capitalize"
       return "string"
     end
-    if mname == "tr"
+    if mname == "tr" || mname == "tr_s"
       return "string"
     end
     if mname == "delete"
@@ -4460,6 +4764,15 @@ class Compiler
         rt = infer_type(recv)
         if rt == "string"
           return "string"
+        end
+        if rt == "sym_int_hash" || rt == "str_int_hash"
+          return "int"
+        end
+        if rt == "sym_str_hash" || rt == "str_str_hash" || rt == "int_str_hash"
+          return "string"
+        end
+        if rt == "sym_poly_hash" || rt == "str_poly_hash" || rt == "poly_poly_hash"
+          return "poly"
         end
       end
     end
@@ -4482,6 +4795,10 @@ class Compiler
       return "str_array"
     end
     if mname == "bytes"
+      return "int_array"
+    end
+ # Issue #903: String#codepoints returns an int_array of codepoints.
+    if mname == "codepoints"
       return "int_array"
     end
     if mname == "hex"
@@ -4677,17 +4994,8 @@ class Compiler
       end
       return "tuple:int_array,int_array"
     end
-    if mname == "to_a"
-      if recv >= 0
-        rt = infer_type(recv)
-        if rt == "str_int_hash"
-          return "tuple:string,int_ptr_array"
-        end
-        if rt == "str_str_hash"
-          return "tuple:string,string_ptr_array"
-        end
-      end
-    end
+    # Hash#to_a is handled by the later to_a arm (returns poly_array
+    # of [key, value] pairs). Issue #738.
  # `to_h` on a Hash variant is identity. Surface so the caller
  # gets the recv's exact type rather than an unresolved fallback.
     if mname == "to_h"
@@ -4708,8 +5016,10 @@ class Compiler
       return "int"
     end
     if mname == "tally"
-      if recv >= 0 && infer_type(recv) == "sym_array"
-        return "sym_int_hash"
+      if recv >= 0
+        rt_ta = infer_type(recv)
+        return "sym_int_hash" if rt_ta == "sym_array"
+        return "int_int_hash" if rt_ta == "int_array"
       end
       return "str_int_hash"
     end
@@ -4753,7 +5063,8 @@ class Compiler
         if rt_clr == "int_array" || rt_clr == "sym_array" ||
            rt_clr == "str_array" || rt_clr == "float_array" ||
            rt_clr == "poly_array" || is_ptr_array_type(rt_clr) == 1 ||
-           rt_clr == "string" || rt_clr == "mutable_str"
+           rt_clr == "string" || rt_clr == "mutable_str" ||
+           is_hash_type(rt_clr) == 1
           return rt_clr
         end
       end
@@ -4766,6 +5077,10 @@ class Compiler
         end
         if rt == "sym_array"
           return "symbol"
+        end
+ # Issue #832: int_array pop returns int? (SP_INT_NIL on empty).
+        if rt == "int_array"
+          return "int?"
         end
       end
       return "int"
@@ -4781,6 +5096,10 @@ class Compiler
         end
         if rt == "float_array"
           return "float"
+        end
+ # Issue #832: int_array shift returns int? on empty.
+        if rt == "int_array"
+          return "int?"
         end
       end
       return "int"
@@ -4837,7 +5156,7 @@ class Compiler
       end
       return "int_array"
     end
-    if mname == "first" || mname == "last"
+    if mname == "first" || mname == "last" || mname == "begin" || mname == "end"
       if recv >= 0
         rt = infer_type(recv)
  # Literal `[nil, ...].first` / `.last`: every element is nil so
@@ -4903,6 +5222,10 @@ class Compiler
         if rt == "float_array"
           return "float"
         end
+ # Issue #832: int_array min/max return int? on empty.
+        if rt == "int_array"
+          return "int?"
+        end
  # ptr_array of arrays: `.max` / `.min` returns one of the
  # inner arrays per Array#<=> ordering. Element type tracks
  # the ptr_array's elem so downstream `[i]` / `.length` etc.
@@ -4942,7 +5265,13 @@ class Compiler
     end
     if mname == "flatten"
       if recv >= 0
-        return infer_type(recv)
+        rt_fl = infer_type(recv)
+ # int_array_ptr_array (typed-array-of-int_array, common shape
+ # from `[[1,2],[3,4]]`) flattens to int_array. Issue #739.
+        if rt_fl == "int_array_ptr_array"
+          return "int_array"
+        end
+        return rt_fl
       end
       return "int_array"
     end
@@ -4985,10 +5314,25 @@ class Compiler
       end
       return "int_array"
     end
-    if mname == "min_by"
-      return "int"
-    end
-    if mname == "max_by"
+    if mname == "min_by" || mname == "max_by"
+ # Result is an *element* of the receiver array (Ruby:
+ # `[1,2,3].max_by{|x| -x} == 1`). Strip the `_array` suffix to
+ # recover the element type when receiver is typed.
+      if recv >= 0
+        rt_mb = infer_type(recv)
+        if rt_mb == "int_array"
+          return "int"
+        end
+        if rt_mb == "str_array"
+          return "string"
+        end
+        if rt_mb == "float_array"
+          return "float"
+        end
+        if rt_mb == "sym_array"
+          return "symbol"
+        end
+      end
       return "int"
     end
     if mname == "unshift"
@@ -5081,7 +5425,7 @@ class Compiler
         end
         if heterogeneous == 1 || multi_arg == 1
  # Build tuple type: receiver elem + each arg elem
-          parts = "".split(",")
+          parts = "".split(",", -1)
           parts.push(elem_type_of_array(rt))
           aargs2 = get_args(args_id)
           k2 = 0
@@ -5373,6 +5717,15 @@ class Compiler
           end
           return tuple_elem_type_at(rt, 0)
         end
+ # Issue #833: *StrHash get now returns NULL for missing keys
+ # (was sp_str_empty). *IntHash analyze widening to int? is
+ # deferred -- body-usage widening cascades the change through
+ # declare_var et al., crashing the self-host build. The current
+ # change ships NULL for missing string keys (already nullable
+ # C-side) and SP_INT_NIL for int keys at the runtime level;
+ # int values surface as "int" at analyze, so `h[k].inspect`
+ # of a missing int key prints INT64_MIN's decimal until the
+ # follow-up phase that widens the LV slot.
         if rt == "str_int_hash"
           return "int"
         end
@@ -5673,6 +6026,9 @@ class Compiler
           if mname == "clock_gettime"
             return "float"
           end
+          if mname == "pid" || mname == "ppid"
+            return "int"
+          end
         end
         if rcname == "Time"
           if mname == "now"
@@ -5708,7 +6064,7 @@ class Compiler
           if mname == "join"
             return "string"
           end
-          if mname == "basename"
+          if mname == "basename" || mname == "dirname" || mname == "extname"
             return "string"
           end
         end
@@ -5721,7 +6077,7 @@ class Compiler
           end
         end
         if rcname == "Dir"
-          if mname == "home"
+          if mname == "home" || mname == "pwd" || mname == "getwd"
             return "string"
           end
         end
@@ -5885,8 +6241,31 @@ class Compiler
         if rt == "poly_array"
           return "poly_array"
         end
+ # Issue #742: combination/permutation result is
+ # int_array_ptr_array; .to_a is identity.
+        if is_ptr_array_type(rt) == 1
+          return rt
+        end
+        if rt == "str_array" || rt == "sym_array" || rt == "float_array"
+          return rt
+        end
+ # Issue #738: hash.to_a returns poly_array of [key, value] pairs
+ # (each pair is itself a poly_array, boxed via sp_box_poly_array).
+        if is_hash_type(rt) == 1
+          return "poly_array"
+        end
       end
       return "int_array"
+    end
+ # `(a..b).step(n)` (no block) -- returns an int_array of stepped
+ # values. Issue #731.
+    if mname == "step"
+      if recv >= 0
+        rt_step = infer_type(recv)
+        if rt_step == "range"
+          return "int_array"
+        end
+      end
     end
     ""
   end
@@ -5927,7 +6306,7 @@ class Compiler
  # that the dispatch site source-level can't reach (mirrors
  # codegen-side narrow). Issue #549.
         args_id_pdrt = @nd_arguments[nid]
-        arg_types_pdrt = "".split(",")
+        arg_types_pdrt = "".split(",", -1)
         if args_id_pdrt >= 0
           a_ids_pdrt = get_args(args_id_pdrt)
           kp_pdrt = 0
@@ -5989,8 +6368,8 @@ class Compiler
         ci = 0
         while ci < @cls_names.length
  # Check zero-arg methods (getters)
-          ci2_mnames = @cls_meth_names[ci].split(";")
-          ci2_mparams = @cls_meth_params[ci].split("|")
+          ci2_mnames = @cls_meth_names[ci].split(";", -1)
+          ci2_mparams = @cls_meth_params[ci].split("|", -1)
           mi2 = 0
           while mi2 < ci2_mnames.length
             if ci2_mnames[mi2] == mname
@@ -6174,7 +6553,7 @@ class Compiler
   end
 
   def tuple_elem_type_at(t, idx)
-    parts = tuple_elem_types_str(t).split(",")
+    parts = tuple_elem_types_str(t).split(",", -1)
     if idx < parts.length
       return parts[idx]
     end
@@ -6209,7 +6588,7 @@ class Compiler
 
  # Build "tuple:T0,T1,..." from a list of element node ids and register it.
   def tuple_type_from_elems(elems)
-    parts = "".split(",")
+    parts = "".split(",", -1)
     k = 0
     while k < elems.length
       parts.push(infer_type(elems[k]))
@@ -6532,7 +6911,7 @@ class Compiler
     if ci < 0
       return 0
     end
-    writers = @cls_attr_writers[ci].split(";")
+    writers = @cls_attr_writers[ci].split(";", -1)
     wi = 0
     while wi < writers.length
       if writers[wi] == bname
@@ -6761,7 +7140,7 @@ class Compiler
                   if arg_ids.length > 0 && @nd_type[arg_ids[0]] == "ConstantReadNode"
                     rhs_name = @nd_name[arg_ids[0]]
                     cur = @module_acc_consts[idx]
-                    cur_list = cur.split(";")
+                    cur_list = cur.split(";", -1)
                     if not_in(rhs_name, cur_list) == 1
                       if cur == ""
                         @module_acc_consts[idx] = rhs_name
@@ -6836,19 +7215,19 @@ class Compiler
   def propagate_inherited_class_methods
     ci = 0
     while ci < @cls_names.length
-      seen = @cls_cmeth_names[ci].split(";")
+      seen = @cls_cmeth_names[ci].split(";", -1)
       cur_parent = @cls_parents[ci]
       while cur_parent != ""
         pi = find_class_idx(cur_parent)
         if pi < 0
           cur_parent = ""
         else
-          p_cmnames = @cls_cmeth_names[pi].split(";")
-          p_cmreturns = @cls_cmeth_returns[pi].split(";")
-          p_cmbodies = @cls_cmeth_bodies[pi].split(";")
-          p_cmparams = @cls_cmeth_params[pi].split("|")
-          p_cmptypes = @cls_cmeth_ptypes[pi].split("|")
-          p_cmdefaults = @cls_cmeth_defaults[pi].split("|")
+          p_cmnames = @cls_cmeth_names[pi].split(";", -1)
+          p_cmreturns = @cls_cmeth_returns[pi].split(";", -1)
+          p_cmbodies = @cls_cmeth_bodies[pi].split(";", -1)
+          p_cmparams = @cls_cmeth_params[pi].split("|", -1)
+          p_cmptypes = @cls_cmeth_ptypes[pi].split("|", -1)
+          p_cmdefaults = @cls_cmeth_defaults[pi].split("|", -1)
           pj = 0
           while pj < p_cmnames.length
             mname = p_cmnames[pj]
@@ -6888,7 +7267,7 @@ class Compiler
   def detect_circular_inheritance
     i = 0
     while i < @cls_names.length
-      visited = "".split(",")
+      visited = "".split(",", -1)
       visited.push(@cls_names[i])
       cur = @cls_parents[i]
       while cur != ""
@@ -7102,10 +7481,10 @@ class Compiler
  # from analyze get appended to instead of replaced.
     @ieval_class_idxs = []
     @ieval_body_ids = []
-    @ieval_return_types = "".split(",")
-    @ieval_self_param_names = "".split(",")
-    @ieval_extra_param_names = "".split(",")
-    @cls_with_internal_ieval_lift = "".split(",")
+    @ieval_return_types = "".split(",", -1)
+    @ieval_self_param_names = "".split(",", -1)
+    @ieval_extra_param_names = "".split(",", -1)
+    @cls_with_internal_ieval_lift = "".split(",", -1)
  # Widen class-method ptypes through obj-typed receivers before the
  # walk so a method-param receiver (e.g. `def configure(app);
  # app.instance_eval { } end` invoked as `cfg.configure(routes)`)
@@ -7148,7 +7527,7 @@ class Compiler
     ci = 0
     while ci < @cls_names.length
       @current_class_idx = ci
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       bj = 0
       while bj < bodies.length
         bid = bodies[bj].to_i
@@ -7169,8 +7548,8 @@ class Compiler
  # infer_all_returns does in its class-methods preamble
  # (Pass 3). Pulls in `routes = Routes.new` with type
  # obj_Routes when the RHS is statically classifiable.
-          lnames = "".split(",")
-          ltypes = "".split(",")
+          lnames = "".split(",", -1)
+          ltypes = "".split(",", -1)
           scan_locals_first_type(bid, lnames, ltypes, pnames)
           lk = 0
           while lk < lnames.length
@@ -7337,7 +7716,7 @@ class Compiler
  # needing extra args at the call boundary (opts/posts/rest/kw/
  # kwrest/&blk) or on `_2`+ numbered params.
     self_param_name = ""
-    extra_param_names = "".split(",")
+    extra_param_names = "".split(",", -1)
     bp = @nd_parameters[blk]
     if bp >= 0
       if @nd_type[bp] == "NumberedParametersNode"
@@ -7618,7 +7997,7 @@ class Compiler
   end
 
  # built-in class / module names that
- # get a reserved cls_id (0..20). Kept in sync with
+ # get a reserved cls_id. Kept in sync with
  # spinel_codegen.rb's @builtin_class_names array.
   def is_builtin_class_const_name(name)
     if name == "BasicObject" || name == "Object" || name == "Kernel" || name == "Comparable" || name == "Enumerable"
@@ -7661,6 +8040,9 @@ class Compiler
       return 1
     end
     if name == "LocalJumpError" || name == "FiberError"
+      return 1
+    end
+    if name == "Encoding"
       return 1
     end
     0
@@ -7899,6 +8281,21 @@ class Compiler
               end
             end
           end
+ # `prepend M` -- spinel doesn't model the full MRO, so this
+ # behaves like `include M` (M's instance methods become
+ # callable on the class). super resolution to the original
+ # method isn't implemented here. Issue #720.
+          if @nd_name[sid] == "prepend"
+            pre_args = @nd_arguments[sid]
+            if pre_args >= 0
+              pre_ids = get_args(pre_args)
+              pk = 0
+              while pk < pre_ids.length
+                prepend_module_on_class(ci, pre_ids[pk], module_prefix)
+                pk = pk + 1
+              end
+            end
+          end
         end
       }
  # Pin lexical scope while collecting ivars. See longer comment
@@ -7912,7 +8309,7 @@ class Compiler
 
     parent = ""
     sp = @nd_superclass[nid]
-    struct_fields = "".split(",")
+    struct_fields = "".split(",", -1)
     if sp >= 0
       if @nd_type[sp] == "CallNode"
         if @nd_name[sp] == "new"
@@ -8074,6 +8471,7 @@ class Compiler
     end
     @cls_attr_readers.push(attr_readers)
     @cls_attr_writers.push(attr_writers)
+    @cls_meth_prep_chain.push("")
     @cls_cmeth_names.push("")
     @cls_cmeth_params.push("")
     @cls_cmeth_ptypes.push("")
@@ -8127,7 +8525,11 @@ class Compiler
       end
       if @nd_type[sid] == "CallNode"
         cn = @nd_name[sid]
-        if cn != "include"
+        if cn == "define_method"
+ # Issue #718: define_method(:name) { ... } in a class body
+ # registers an instance method on the surrounding class.
+          collect_define_method_in_class(ci, sid)
+        elsif cn != "include"
           if cn != "private"
             collect_attr_call(ci, sid)
           end
@@ -8174,6 +8576,19 @@ class Compiler
             while ek < ext_ids.length
               extend_module_on_class(ci, ext_ids[ek], module_prefix)
               ek = ek + 1
+            end
+          end
+        end
+ # `prepend M` -- M's instance methods take precedence over the
+ # class's own. Issue #720.
+        if @nd_name[sid] == "prepend"
+          pre_args2 = @nd_arguments[sid]
+          if pre_args2 >= 0
+            pre_ids2 = get_args(pre_args2)
+            pk2 = 0
+            while pk2 < pre_ids2.length
+              prepend_module_on_class(ci, pre_ids2[pk2], module_prefix)
+              pk2 = pk2 + 1
             end
           end
         end
@@ -8251,11 +8666,11 @@ class Compiler
       $stderr.puts "Spinel: alias `" + new_name + "` -> `" + old_name + "`: source method not found in class " + @cls_names[ci]
       exit(1)
     end
-    pnames_all = @cls_meth_params[ci].split("|")
-    ptypes_all = @cls_meth_ptypes[ci].split("|")
-    rets_all   = @cls_meth_returns[ci].split(";")
-    bodies_all = @cls_meth_bodies[ci].split(";")
-    defs_all   = @cls_meth_defaults[ci].split("|")
+    pnames_all = @cls_meth_params[ci].split("|", -1)
+    ptypes_all = @cls_meth_ptypes[ci].split("|", -1)
+    rets_all   = @cls_meth_returns[ci].split(";", -1)
+    bodies_all = @cls_meth_bodies[ci].split(";", -1)
+    defs_all   = @cls_meth_defaults[ci].split("|", -1)
     params  = pnames_all[src] || ""
     ptypes  = ptypes_all[src] || ""
     ret     = rets_all[src] || "int"
@@ -8279,7 +8694,7 @@ class Compiler
  # then walks to the parent (or returns -1), so `c.meth` after
  # `undef meth` raises NoMethodError just like CRuby. Issue #717.
     if @cls_meth_names[ci] != ""
-      cur_names_u = @cls_meth_names[ci].split(";")
+      cur_names_u = @cls_meth_names[ci].split(";", -1)
       hit_u = -1
       ki_u = 0
       while ki_u < cur_names_u.length
@@ -8291,12 +8706,12 @@ class Compiler
         end
       end
       if hit_u >= 0
-        cur_params_u = @cls_meth_params[ci].split("|")
-        cur_ptypes_u = @cls_meth_ptypes[ci].split("|")
-        cur_returns_u = @cls_meth_returns[ci].split(";")
-        cur_bodies_u = @cls_meth_bodies[ci].split(";")
-        cur_defaults_u = @cls_meth_defaults[ci].split("|")
-        cur_pempty_u = @cls_meth_ptypes_empty[ci].split("|")
+        cur_params_u = @cls_meth_params[ci].split("|", -1)
+        cur_ptypes_u = @cls_meth_ptypes[ci].split("|", -1)
+        cur_returns_u = @cls_meth_returns[ci].split(";", -1)
+        cur_bodies_u = @cls_meth_bodies[ci].split(";", -1)
+        cur_defaults_u = @cls_meth_defaults[ci].split("|", -1)
+        cur_pempty_u = @cls_meth_ptypes_empty[ci].split("|", -1)
         while cur_pempty_u.length < cur_names_u.length
           cur_pempty_u.push("")
         end
@@ -8362,7 +8777,7 @@ class Compiler
     end
     cur = @cls_includes[ci]
  # Dedup: a re-included module shouldn't duplicate in ancestors.
-    parts = cur.split(";")
+    parts = cur.split(";", -1)
     pk = 0
     while pk < parts.length
       if parts[pk] == mod_name
@@ -8455,6 +8870,315 @@ class Compiler
     end
   end
 
+ # `prepend M` -- M's instance methods take precedence over the
+ # class's own. For each method M defines that C already has,
+ # snapshot C's existing slot into a synthetic shadow method
+ # (`__prep_<n>`) on the same class before letting M's body
+ # overwrite the active slot. The shadow is registered as a
+ # regular instance method on C so inference, ivar resolution,
+ # and codegen emission all pick it up for free. super dispatch
+ # (compile_super_expr / infer_type's SuperNode arm) consults
+ # @cls_meth_prep_chain to route super calls through the chain.
+ # Multi-prepend stacks: each call extends the chain. Issue #720.
+  def prepend_module_on_class(ci, inc_nid, module_prefix)
+    inc_t = @nd_type[inc_nid]
+    if inc_t != "ConstantReadNode" && inc_t != "ConstantPathNode"
+      return
+    end
+    mod_name = const_ref_flat_name(inc_nid)
+    if mod_name == ""
+      return
+    end
+    effective_prefix = module_prefix
+    if const_ref_is_relative(inc_nid) == 0
+      effective_prefix = ""
+    end
+    resolved_mod_name = resolve_include_module_name(mod_name, effective_prefix)
+    record_class_include(ci, resolved_mod_name)
+    mi = 0
+    while mi < @module_names.length
+      if @module_names[mi] == resolved_mod_name
+        mbody = @module_body_ids[mi]
+        if mbody >= 0
+          mstmts = get_stmts(mbody)
+          mk = 0
+          while mk < mstmts.length
+            sid = mstmts[mk]
+            if @nd_type[sid] == "DefNode"
+              is_cls_def_p = 0
+              if @nd_receiver[sid] >= 0 && @nd_type[@nd_receiver[sid]] == "SelfNode"
+                is_cls_def_p = 1
+              end
+              if is_cls_def_p == 0
+ # Snapshot the existing method (if any) as a shadow before
+ # overwrite. prep_snapshot_active is a no-op when there's
+ # nothing to snapshot.
+                prep_snapshot_active(ci, @nd_name[sid])
+                @prep_overwrite_in_progress = 1
+                collect_class_method(ci, sid)
+                @prep_overwrite_in_progress = 0
+              end
+            end
+            mk = mk + 1
+          end
+        end
+      end
+      mi = mi + 1
+    end
+  end
+
+ # Snapshot class ci's existing method `mname` as a synthetic
+ # shadow `__prep_<n>` and record the (mname -> shadow) link in
+ # @cls_meth_prep_chain[ci]. No-op if ci has no existing method
+ # named `mname`. Synthetic names use a numeric suffix (no source
+ # mname encoded) so they don't need C-name sanitization;
+ # @cls_meth_prep_chain is the authoritative mapping. Issue #720.
+  def prep_snapshot_active(ci, mname)
+    existing_mi = cls_find_method_direct(ci, mname)
+    if existing_mi < 0
+      return
+    end
+    cur_names = @cls_meth_names[ci].split(";", -1)
+    cur_params = @cls_meth_params[ci].split("|", -1)
+    cur_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+    cur_returns = @cls_meth_returns[ci].split(";", -1)
+    cur_bodies = @cls_meth_bodies[ci].split(";", -1)
+    cur_defaults = @cls_meth_defaults[ci].split("|", -1)
+    cur_hy = @cls_meth_has_yield[ci].split(";", -1)
+    snap_params = ""
+    snap_ptypes = ""
+    snap_ret = "int"
+    snap_body = -1
+    snap_defs = ""
+    snap_hy = "0"
+    if existing_mi < cur_params.length
+      snap_params = cur_params[existing_mi]
+    end
+    if existing_mi < cur_ptypes.length
+      snap_ptypes = cur_ptypes[existing_mi]
+    end
+    if existing_mi < cur_returns.length
+      snap_ret = cur_returns[existing_mi]
+    end
+    if existing_mi < cur_bodies.length
+      snap_body = cur_bodies[existing_mi].to_i
+    end
+    if existing_mi < cur_defaults.length
+      snap_defs = cur_defaults[existing_mi]
+    end
+    if existing_mi < cur_hy.length
+      snap_hy = cur_hy[existing_mi]
+    end
+    syn_name = prep_alloc_syn_name(ci)
+ # Register the shadow as a normal instance method on ci.
+ # Use raw append (not append_cls_meth) to avoid the redefinition
+ # path -- the synthetic name is guaranteed unique by allocator.
+    if @cls_meth_names[ci] != ""
+      @cls_meth_names[ci] = @cls_meth_names[ci] + ";" + syn_name
+      @cls_meth_params[ci] = @cls_meth_params[ci] + "|" + snap_params
+      @cls_meth_ptypes[ci] = @cls_meth_ptypes[ci] + "|" + snap_ptypes
+      @cls_meth_returns[ci] = @cls_meth_returns[ci] + ";" + snap_ret
+      @cls_meth_bodies[ci] = @cls_meth_bodies[ci] + ";" + snap_body.to_s
+      @cls_meth_defaults[ci] = @cls_meth_defaults[ci] + "|" + snap_defs
+      @cls_meth_ptypes_empty[ci] = @cls_meth_ptypes_empty[ci] + "|"
+    else
+      @cls_meth_names[ci] = syn_name
+      @cls_meth_params[ci] = snap_params
+      @cls_meth_ptypes[ci] = snap_ptypes
+      @cls_meth_returns[ci] = snap_ret
+      @cls_meth_bodies[ci] = snap_body.to_s
+      @cls_meth_defaults[ci] = snap_defs
+      @cls_meth_ptypes_empty[ci] = ""
+    end
+    if @cls_meth_has_yield[ci] != ""
+      @cls_meth_has_yield[ci] = @cls_meth_has_yield[ci] + ";" + snap_hy
+    else
+      @cls_meth_has_yield[ci] = snap_hy
+    end
+    @cls_meth_params_version = @cls_meth_params_version + 1
+    @cls_meth_ptypes_version = @cls_meth_ptypes_version + 1
+    @cls_meth_idx_cache = {}
+    @cls_meth_return_cache = {}
+ # Append (mname, syn_name) to the chain. Chain entry shape:
+ # `<mname>=<syn0>,<syn1>,...` joined by `;` across mnames.
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      @cls_meth_prep_chain[ci] = mname + "=" + syn_name
+    else
+      entries = chain_str.split(";", -1)
+      found = 0
+      ei = 0
+      while ei < entries.length
+        eq_pos = entries[ei].index("=")
+        if eq_pos != nil
+          em = entries[ei][0, eq_pos]
+          if em == mname
+            entries[ei] = entries[ei] + "," + syn_name
+            found = 1
+            ei = entries.length
+          end
+        end
+        ei = ei + 1
+      end
+      if found == 0
+        entries.push(mname + "=" + syn_name)
+      end
+      @cls_meth_prep_chain[ci] = entries.join(";")
+    end
+  end
+
+ # Allocate a synthetic shadow name unique on class ci. Probes
+ # `__prep_0`, `__prep_1`, ... for the first free slot.
+  def prep_alloc_syn_name(ci)
+    seq = 0
+    while seq < 4096
+      cand = "__prep_" + seq.to_s
+      if cls_find_method_direct(ci, cand) < 0
+        return cand
+      end
+      seq = seq + 1
+    end
+    "__prep_overflow"
+  end
+
+ # Return the list of synthetic shadow names (in chain order:
+ # index 0 = oldest = closest to parent, last index = newest =
+ # next super target from active) for (ci, mname). [] if no
+ # prepends.
+  def prep_chain_syn_names(ci, mname)
+    result = "".split(",", -1)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return result
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return result
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        em = entries[ei][0, eq_pos]
+        if em == mname
+          syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+          return syns_str.split(",", -1)
+        end
+      end
+      ei = ei + 1
+    end
+    result
+  end
+
+ # Determine the on-class super target for (ci, current_mname).
+ # Returns the synthetic name to call (always a method on ci) or
+ # "" if super should fall through to the parent class chain.
+ #
+ # - current is an active prepended method (chain non-empty):
+ #     -> highest-index (newest) shadow
+ # - current is a shadow `__prep_<n>` at chain index k > 0:
+ #     -> shadow at index k - 1
+ # - current is a shadow at chain index 0 or not prepended:
+ #     -> "" (caller falls to parent)
+  def prep_super_target(ci, cur_mname)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return ""
+    end
+    if @cls_meth_prep_chain[ci] == ""
+      return ""
+    end
+    pos = prep_syn_position(ci, cur_mname)
+    if pos >= 0
+      if pos > 0
+        src_mname = prep_syn_source_mname(ci, cur_mname)
+        syns = prep_chain_syn_names(ci, src_mname)
+        if pos - 1 < syns.length
+          return syns[pos - 1]
+        end
+      end
+      return ""
+    end
+    syns = prep_chain_syn_names(ci, cur_mname)
+    if syns.length > 0
+      return syns[syns.length - 1]
+    end
+    ""
+  end
+
+ # When super from a shadow falls past the synthetic to the
+ # parent class, the parent-side lookup must use the *original*
+ # user-visible mname, not the synthetic. Returns the user mname
+ # for a shadow, or cur_mname unchanged for non-shadows.
+  def prep_super_parent_mname(ci, cur_mname)
+    src = prep_syn_source_mname(ci, cur_mname)
+    if src != ""
+      return src
+    end
+    cur_mname
+  end
+
+ # Source user mname for a synthetic shadow on class ci. "" if
+ # syn_name is not a shadow. Scalar return -- callers can plug
+ # the result directly into string-typed contexts.
+  def prep_syn_source_mname(ci, syn_name)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return ""
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return ""
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        em = entries[ei][0, eq_pos]
+        syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+        syns = syns_str.split(",", -1)
+        si = 0
+        while si < syns.length
+          if syns[si] == syn_name
+            return em
+          end
+          si = si + 1
+        end
+      end
+      ei = ei + 1
+    end
+    ""
+  end
+
+ # Chain position (0 = oldest, deepest from active) for a
+ # synthetic shadow on ci. -1 if syn_name is not a shadow.
+  def prep_syn_position(ci, syn_name)
+    if ci < 0 || ci >= @cls_meth_prep_chain.length
+      return -1
+    end
+    chain_str = @cls_meth_prep_chain[ci]
+    if chain_str == ""
+      return -1
+    end
+    entries = chain_str.split(";", -1)
+    ei = 0
+    while ei < entries.length
+      eq_pos = entries[ei].index("=")
+      if eq_pos != nil
+        syns_str = entries[ei][eq_pos + 1, entries[ei].length - eq_pos - 1]
+        syns = syns_str.split(",", -1)
+        si = 0
+        while si < syns.length
+          if syns[si] == syn_name
+            return si
+          end
+          si = si + 1
+        end
+      end
+      ei = ei + 1
+    end
+    -1
+  end
+
  # `extend M` -- copy M's instance methods (`def X`) onto the
  # extending class as class methods (`def self.X`). Module class
  # methods (`def self.X` on the module) are skipped: those stay on
@@ -8491,7 +9215,7 @@ class Compiler
                 mname_e = @nd_name[sid]
  # Only add if this class doesn't already have a class
  # method with that name.
-                cm_names_e = @cls_cmeth_names[ci].split(";")
+                cm_names_e = @cls_cmeth_names[ci].split(";", -1)
                 already_e = 0
                 ki_e = 0
                 while ki_e < cm_names_e.length
@@ -8541,7 +9265,7 @@ class Compiler
       includes_str = @cls_includes[ci]
       if includes_str != ""
         before_meths = @cls_meth_names[ci]
-        names = includes_str.split(";")
+        names = includes_str.split(";", -1)
         ni = 0
         while ni < names.length
           if names[ni] != ""
@@ -8925,14 +9649,16 @@ class Compiler
  # (matches class reopen for adding new methods) and warn so the
  # user can spot the divergence from CRuby's intermediate-version
  # behaviour.
-        $stderr.puts "warning: method '" + name + "' on " + @cls_names[ci] + " is being redefined; spinel uses last-def-wins semantics (calls before the redefinition won't see the original body — subset limitation)"
-        cur_names = @cls_meth_names[ci].split(";")
-        cur_params = @cls_meth_params[ci].split("|")
-        cur_ptypes = @cls_meth_ptypes[ci].split("|")
-        cur_returns = @cls_meth_returns[ci].split(";")
-        cur_bodies = @cls_meth_bodies[ci].split(";")
-        cur_defaults = @cls_meth_defaults[ci].split("|")
-        cur_pempty = @cls_meth_ptypes_empty[ci].split("|")
+        if @prep_overwrite_in_progress == 0
+          $stderr.puts "warning: method '" + name + "' on " + @cls_names[ci] + " is being redefined; spinel uses last-def-wins semantics (calls before the redefinition won't see the original body — subset limitation)"
+        end
+        cur_names = @cls_meth_names[ci].split(";", -1)
+        cur_params = @cls_meth_params[ci].split("|", -1)
+        cur_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+        cur_returns = @cls_meth_returns[ci].split(";", -1)
+        cur_bodies = @cls_meth_bodies[ci].split(";", -1)
+        cur_defaults = @cls_meth_defaults[ci].split("|", -1)
+        cur_pempty = @cls_meth_ptypes_empty[ci].split("|", -1)
         while cur_pempty.length < cur_names.length
           cur_pempty.push("")
         end
@@ -8997,7 +9723,7 @@ class Compiler
  # Class re-open semantics for `def self.<m>` (#489).
  # Last-definition-wins, same shape as append_cls_meth above.
     if @cls_cmeth_names[ci] != ""
-      cm_names_re = @cls_cmeth_names[ci].split(";")
+      cm_names_re = @cls_cmeth_names[ci].split(";", -1)
       existing_cmi = 0
       found_cmi = -1
       while existing_cmi < cm_names_re.length
@@ -9009,11 +9735,11 @@ class Compiler
         end
       end
       if found_cmi >= 0
-        cur_cm_params = @cls_cmeth_params[ci].split("|")
-        cur_cm_ptypes = @cls_cmeth_ptypes[ci].split("|")
-        cur_cm_returns = @cls_cmeth_returns[ci].split(";")
-        cur_cm_bodies = @cls_cmeth_bodies[ci].split(";")
-        cur_cm_defaults = @cls_cmeth_defaults[ci].split("|")
+        cur_cm_params = @cls_cmeth_params[ci].split("|", -1)
+        cur_cm_ptypes = @cls_cmeth_ptypes[ci].split("|", -1)
+        cur_cm_returns = @cls_cmeth_returns[ci].split(";", -1)
+        cur_cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+        cur_cm_defaults = @cls_cmeth_defaults[ci].split("|", -1)
         cm_names_re[found_cmi] = name
         if found_cmi < cur_cm_params.length
           cur_cm_params[found_cmi] = params
@@ -9112,7 +9838,7 @@ class Compiler
 
   def collect_ivars(ci)
  # Scan all methods for ivar writes
-    meths = @cls_meth_bodies[ci].split(";")
+    meths = @cls_meth_bodies[ci].split(";", -1)
     j = 0
     while j < meths.length
       bid = meths[j].to_i
@@ -9122,7 +9848,7 @@ class Compiler
       j = j + 1
     end
  # Add ivars from attr_readers/writers that might not have explicit writes
-    readers = @cls_attr_readers[ci].split(";")
+    readers = @cls_attr_readers[ci].split(";", -1)
     j = 0
     while j < readers.length
       iname = "@" + readers[j]
@@ -9131,7 +9857,7 @@ class Compiler
       end
       j = j + 1
     end
-    writers = @cls_attr_writers[ci].split(";")
+    writers = @cls_attr_writers[ci].split(";", -1)
     j = 0
     while j < writers.length
       iname = "@" + writers[j]
@@ -9147,8 +9873,8 @@ class Compiler
  # already determined the new type is correct (e.g. promoting an
  # empty-hash default to a concrete hash type from a `[]=` write).
   def replace_ivar_type(ci, iname, new_type)
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -9169,8 +9895,8 @@ class Compiler
   end
 
   def update_ivar_type(ci, iname, new_type)
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -9256,7 +9982,14 @@ class Compiler
                 @cls_ivar_types_version = @cls_ivar_types_version + 1
               end
             elsif old == "nil" && is_nullable_pointer_type(new_type) == 1
-              types[k] = new_type + "?"
+ # Issue #804: if new_type already ends in '?', don't append a
+ # second one. e.g. `@x = nil` then `@x = val` where val is
+ # already nullable -> stay as "string?", not "string??".
+              if is_nullable_type(new_type) == 1
+                types[k] = new_type
+              else
+                types[k] = new_type + "?"
+              end
               @cls_ivar_types[ci] = types.join(";")
               @cls_ivar_types_version = @cls_ivar_types_version + 1
  # Same base, one nullable: keep / adopt the nullable form
@@ -9288,7 +10021,7 @@ class Compiler
   end
 
   def ivar_exists(ci, iname)
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -9360,8 +10093,8 @@ class Compiler
  # one per `<Class>.new(args)` callsite. Plain arrays instead of a Hash
  # because the empty-hash-literal default type would land on
  # str_int_hash and reject the string values.
-    ctor_class_idxs = "".split(",")
-    ctor_arg_csvs = "".split(",")
+    ctor_class_idxs = "".split(",", -1)
+    ctor_arg_csvs = "".split(",", -1)
     nid = 0
     n = @nd_type.length
     while nid < n
@@ -9399,7 +10132,7 @@ class Compiler
  # matching arg type as an observation.
     ci = 0
     while ci < @cls_names.length
-      callsites = "".split(",")
+      callsites = "".split(",", -1)
       ki = 0
       ci_str = ci.to_s
       while ki < ctor_class_idxs.length
@@ -9411,7 +10144,7 @@ class Compiler
       if callsites.length > 0
         init_midx = cls_find_method_direct(ci, "initialize")
         if init_midx >= 0
-          bodies = @cls_meth_bodies[ci].split(";")
+          bodies = @cls_meth_bodies[ci].split(";", -1)
           if init_midx < bodies.length
             init_body = bodies[init_midx].to_i
             if init_body >= 0
@@ -9488,7 +10221,7 @@ class Compiler
     if is_concrete == 0
       return
     end
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
  # Pad obs to names.length: split(";", -1) preserves trailing "" but
  # an entirely-empty storage gives a 0-length array. Walk by index
  # and treat missing entries as "".
@@ -9497,7 +10230,7 @@ class Compiler
     while k < names.length
       if names[k] == iname
  # Build an array of slots, one per ivar, defaulting empty.
-        slots = "".split(",")
+        slots = "".split(",", -1)
         ix = 0
         while ix < names.length
           slots.push("")
@@ -9511,7 +10244,7 @@ class Compiler
             px = px + 1
           end
         end
-        existing = slots[k].split(",")
+        existing = slots[k].split(",", -1)
         ex = 0
         while ex < existing.length
           if existing[ex] == at
@@ -9609,8 +10342,8 @@ class Compiler
   end
 
   def cls_ivar_definite_flag(ci, iname)
-    names = @cls_ivar_names[ci].split(";")
-    flags = @cls_ivar_init_definite[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    flags = @cls_ivar_init_definite[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -9641,7 +10374,7 @@ class Compiler
     if @cls_ivar_nil_checked[ci] == ""
       return 0
     end
-    names = @cls_ivar_nil_checked[ci].split(";")
+    names = @cls_ivar_nil_checked[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -10497,6 +11230,51 @@ class Compiler
     0
   end
 
+ # Issue #718: `define_method(:name) { ... }` inside a class body
+ # registers an instance method on that class. Mirrors
+ # collect_define_method (which handles the top-level form) but
+ # routes through append_cls_meth so the method participates in
+ # per-class dispatch.
+  def collect_define_method_in_class(ci, nid)
+    args_id = @nd_arguments[nid]
+    if args_id < 0
+      return
+    end
+    arg_ids = get_args(args_id)
+    if arg_ids.length < 1
+      return
+    end
+    mname = @nd_content[arg_ids[0]]
+    if mname == ""
+      mname = @nd_name[arg_ids[0]]
+    end
+    blk = @nd_block[nid]
+    if blk < 0
+      return
+    end
+    body_id = @nd_body[blk]
+    params_str = ""
+    ptypes_str = ""
+    bp = @nd_parameters[blk]
+    if bp >= 0
+      inner = @nd_parameters[bp]
+      if inner >= 0
+        reqs = parse_id_list(@nd_requireds[inner])
+        k = 0
+        while k < reqs.length
+          if params_str != ""
+            params_str = params_str + ","
+            ptypes_str = ptypes_str + ","
+          end
+          params_str = params_str + @nd_name[reqs[k]]
+          ptypes_str = ptypes_str + "int"
+          k = k + 1
+        end
+      end
+    end
+    append_cls_meth(ci, mname, params_str, ptypes_str, "int", body_id, "")
+  end
+
   def collect_define_method(nid)
  # define_method(:name) { |args| body }
     args_id = @nd_arguments[nid]
@@ -10590,7 +11368,7 @@ class Compiler
                 cur_incs = @module_includes[mi_for_includes]
                 already = 0
                 if cur_incs != ""
-                  parts = cur_incs.split(";")
+                  parts = cur_incs.split(";", -1)
                   pk = 0
                   while pk < parts.length
                     if parts[pk] == inc_name
@@ -10839,9 +11617,9 @@ class Compiler
                   (cur == "nil" && @nd_type[expr_id] == "NilNode")
  # Walk all class methods in the module looking for writes to
  # this ivar.
-      key_t_set = "".split(",")
-      val_t_set = "".split(",")
-      direct_t_set = "".split(",")
+      key_t_set = "".split(",", -1)
+      val_t_set = "".split(",", -1)
+      direct_t_set = "".split(",", -1)
       body_stmts.each { |sid2|
         next unless @nd_type[sid2] == "DefNode"
         bid = @nd_body[sid2]
@@ -10855,8 +11633,8 @@ class Compiler
         mi3 = find_method_idx(synth_name)
         push_scope
         if mi3 >= 0
-          pnames3 = @meth_param_names[mi3].split(",")
-          ptypes3 = @meth_param_types[mi3].split(",")
+          pnames3 = @meth_param_names[mi3].split(",", -1)
+          ptypes3 = @meth_param_types[mi3].split(",", -1)
           k3 = 0
           while k3 < pnames3.length
             pt3 = "int"
@@ -10874,8 +11652,8 @@ class Compiler
  # pick_array_class returns the same int_array we started
  # with. The ivar shape (`@slots[k] = v` where k/v are
  # params) only needs the params declared above.
-          local_names = "".split(",")
-          local_types = "".split(",")
+          local_names = "".split(",", -1)
+          local_types = "".split(",", -1)
           scan_locals(bid, local_names, local_types, pnames3)
           lk = 0
           while lk < local_names.length
@@ -11501,7 +12279,7 @@ class Compiler
       return
     end
     if @multi_const_inits == nil
-      @multi_const_inits = "".split(",")
+      @multi_const_inits = "".split(",", -1)
     end
     @multi_const_inits.push(scope_name + "|" + nid.to_s)
   end
@@ -11549,6 +12327,7 @@ class Compiler
     @cls_meth_ptypes_empty.push("")
     @cls_attr_readers.push("")
     @cls_attr_writers.push("")
+    @cls_meth_prep_chain.push("")
     @cls_cmeth_names.push("")
     @cls_cmeth_params.push("")
     @cls_cmeth_ptypes.push("")
@@ -11583,6 +12362,7 @@ class Compiler
     @cls_meth_ptypes_empty.push("")
     @cls_attr_readers.push("")
     @cls_attr_writers.push("")
+    @cls_meth_prep_chain.push("")
     @cls_cmeth_names.push("")
     @cls_cmeth_params.push("")
     @cls_cmeth_ptypes.push("")
@@ -11595,7 +12375,7 @@ class Compiler
 
  # Get field names from symbol args (skip keyword_init hash)
     args_id = @nd_arguments[call_nid]
-    field_names = "".split(",")
+    field_names = "".split(",", -1)
     if args_id >= 0
       aids = get_args(args_id)
       k = 0
@@ -11638,7 +12418,7 @@ class Compiler
 
  # Store struct info for synthetic constructor generation
  # We'll use a special marker in the body id (-2 = synthetic struct)
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if bodies.length > 0
       bodies[0] = "-2"
       @cls_meth_bodies[ci] = bodies.join(";")
@@ -11709,9 +12489,9 @@ class Compiler
     if @nd_type[@root_id] == "ProgramNode"
       tl_body = @nd_body[@root_id]
       if tl_body >= 0
-        empty_params = "".split(",")
-        tl_lnames = "".split(",")
-        tl_ltypes = "".split(",")
+        empty_params = "".split(",", -1)
+        tl_lnames = "".split(",", -1)
+        tl_ltypes = "".split(",", -1)
         scan_locals_first_type(tl_body, tl_lnames, tl_ltypes, empty_params)
         ti = 0
         while ti < tl_lnames.length
@@ -12146,9 +12926,9 @@ class Compiler
  # arg infers off the local's literal type. The same guard keeps
  # nested def/class/module bodies from leaking back out.
         push_scope
-        lnames = "".split(",")
-        ltypes = "".split(",")
-        empty_p = "".split(",")
+        lnames = "".split(",", -1)
+        ltypes = "".split(",", -1)
+        empty_p = "".split(",", -1)
         scan_locals(body, lnames, ltypes, empty_p)
         k = 0
         while k < lnames.length
@@ -12204,8 +12984,8 @@ class Compiler
           args_id = @nd_arguments[nid]
           if args_id >= 0
             arg_ids = get_args(args_id)
-            ptypes = @meth_param_types[mi].split(",")
-            pnames = @meth_param_names[mi].split(",")
+            ptypes = @meth_param_types[mi].split(",", -1)
+            pnames = @meth_param_names[mi].split(",", -1)
             rest_param_idx = method_rest_index(mi)
             if rest_param_idx >= ptypes.length
               rest_param_idx = -1
@@ -12331,7 +13111,7 @@ class Compiler
             owning = @current_method_name[0, marker]
             cci = find_class_idx(owning)
             if cci >= 0
-              cmnames = @cls_cmeth_names[cci].split(";")
+              cmnames = @cls_cmeth_names[cci].split(";", -1)
               cmidx = 0
               while cmidx < cmnames.length
                 if cmnames[cmidx] == mname
@@ -12356,8 +13136,8 @@ class Compiler
                 args_id_m = @nd_arguments[nid]
                 if args_id_m >= 0
                   arg_ids_m = get_args(args_id_m)
-                  ptypes_m = @meth_param_types[sib_mi_m].split(",")
-                  pnames_m = @meth_param_names[sib_mi_m].split(",")
+                  ptypes_m = @meth_param_types[sib_mi_m].split(",", -1)
+                  pnames_m = @meth_param_names[sib_mi_m].split(",", -1)
                   widen_ptypes_from_args(arg_ids_m, pnames_m, ptypes_m)
                   @meth_param_types[sib_mi_m] = ptypes_m.join(",")
                 end
@@ -12531,9 +13311,9 @@ class Compiler
             arg_ids_p = get_args(args_id_p)
             obs_ids = observed_class_ids_for_recv(@nd_receiver[nid], @current_class_idx)
             obs_filter = (obs_ids != "")
-            obs_list = "".split(",")
+            obs_list = "".split(",", -1)
             if obs_filter
-              obs_list = obs_ids.split(",")
+              obs_list = obs_ids.split(",", -1)
             end
             ci_p = 0
             while ci_p < @cls_names.length
@@ -12585,7 +13365,7 @@ class Compiler
             cci = find_class_idx(rcname)
             if cci >= 0
               cmname = @nd_name[nid]
-              cmnames = @cls_cmeth_names[cci].split(";")
+              cmnames = @cls_cmeth_names[cci].split(";", -1)
               cmidx = 0
               while cmidx < cmnames.length
                 if cmnames[cmidx] == cmname
@@ -12619,8 +13399,8 @@ class Compiler
                 mod_args_id = @nd_arguments[nid]
                 if mod_args_id >= 0
                   mod_arg_ids = get_args(mod_args_id)
-                  mod_pnames = @meth_param_names[mod_mi].split(",")
-                  mod_ptypes = @meth_param_types[mod_mi].split(",")
+                  mod_pnames = @meth_param_names[mod_mi].split(",", -1)
+                  mod_ptypes = @meth_param_types[mod_mi].split(",", -1)
                   widen_ptypes_from_args(mod_arg_ids, mod_pnames, mod_ptypes)
                   @meth_param_types[mod_mi] = mod_ptypes.join(",")
                 end
@@ -12647,7 +13427,7 @@ class Compiler
             if module_name_exists(mua_mod_name) == 1
               mua_rconsts = module_acc_resolved(mua_mod_name, mua_inner_mname)
               if mua_rconsts != "" && mua_rconsts != "?"
-                mua_cands = mua_rconsts.split(";")
+                mua_cands = mua_rconsts.split(";", -1)
                 mua_outer_mname = @nd_name[nid]
                 mua_args_id = @nd_arguments[nid]
                 if mua_args_id >= 0
@@ -12655,12 +13435,12 @@ class Compiler
                   mua_cands.each { |mua_cn|
                     mua_cci = find_class_idx(mua_cn)
                     if mua_cci >= 0
-                      mua_cmnames = @cls_cmeth_names[mua_cci].split(";")
-                      mua_cmpall = @cls_cmeth_ptypes[mua_cci].split("|")
+                      mua_cmnames = @cls_cmeth_names[mua_cci].split(";", -1)
+                      mua_cmpall = @cls_cmeth_ptypes[mua_cci].split("|", -1)
                       mua_cmidx = 0
                       while mua_cmidx < mua_cmnames.length
                         if mua_cmnames[mua_cmidx] == mua_outer_mname && mua_cmidx < mua_cmpall.length
-                          mua_cmpt = mua_cmpall[mua_cmidx].split(",")
+                          mua_cmpt = mua_cmpall[mua_cmidx].split(",", -1)
                           mua_k = 0
                           while mua_k < mua_arg_ids.length
                             mua_at = infer_type(mua_arg_ids[mua_k])
@@ -12687,8 +13467,8 @@ class Compiler
                       mua_mod_mfn = mua_cn + "_cls_" + mua_outer_mname
                       mua_mod_mi = find_method_idx(mua_mod_mfn)
                       if mua_mod_mi >= 0
-                        mua_mod_pnames = @meth_param_names[mua_mod_mi].split(",")
-                        mua_mod_ptypes = @meth_param_types[mua_mod_mi].split(",")
+                        mua_mod_pnames = @meth_param_names[mua_mod_mi].split(",", -1)
+                        mua_mod_ptypes = @meth_param_types[mua_mod_mi].split(",", -1)
                         widen_ptypes_from_args(mua_arg_ids, mua_mod_pnames, mua_mod_ptypes)
                         @meth_param_types[mua_mod_mi] = mua_mod_ptypes.join(",")
                       end
@@ -12868,7 +13648,7 @@ class Compiler
     if child_init_idx < 0
       return
     end
-    bodies = @cls_meth_bodies[child_ci].split(";")
+    bodies = @cls_meth_bodies[child_ci].split(";", -1)
     if child_init_idx >= bodies.length
       return
     end
@@ -12894,7 +13674,7 @@ class Compiler
     ci = 0
     while ci < @cls_names.length
       if @cls_parents[ci] != ""
-        child_method_names = @cls_meth_names[ci].split(";")
+        child_method_names = @cls_meth_names[ci].split(";", -1)
         j = 0
         while j < child_method_names.length
           mname = child_method_names[j]
@@ -12926,7 +13706,7 @@ class Compiler
   end
 
   def propagate_super_method_one(child_ci, child_mi, parent_ci, mname)
-    bodies = @cls_meth_bodies[child_ci].split(";")
+    bodies = @cls_meth_bodies[child_ci].split(";", -1)
     if child_mi >= bodies.length
       return
     end
@@ -13018,8 +13798,8 @@ class Compiler
   def propagate_bare_new_to_subclass_initialize
     ci = 0
     while ci < @cls_names.length
-      cmnames = @cls_cmeth_names[ci].split(";")
-      cm_bodies = @cls_cmeth_bodies[ci].split(";")
+      cmnames = @cls_cmeth_names[ci].split(";", -1)
+      cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
       j = 0
       while j < cmnames.length
         bid = -1
@@ -13143,7 +13923,7 @@ class Compiler
     while i < @cls_names.length
       init_idx2 = cls_find_method_direct(i, "initialize")
       if init_idx2 >= 0
-        bodies = @cls_meth_bodies[i].split(";")
+        bodies = @cls_meth_bodies[i].split(";", -1)
         if init_idx2 < bodies.length
           if bodies[init_idx2].to_i == -2
  # Synthetic struct - update ivar types from init param types
@@ -13167,13 +13947,13 @@ class Compiler
  # For each class method, if it assigns @ivar = param, update ivar type from param type
     i = 0
     while i < @cls_names.length
-      mnames = @cls_meth_names[i].split(";")
+      mnames = @cls_meth_names[i].split(";", -1)
       mi = 0
       while mi < mnames.length
         init_idx = mi
         pnames = cls_meth_pnames_get(i, init_idx)
         ptypes = cls_meth_ptypes_get(i, init_idx)
-        bodies = @cls_meth_bodies[i].split(";")
+        bodies = @cls_meth_bodies[i].split(";", -1)
         bid = -1
         if init_idx < bodies.length
           bid = bodies[init_idx].to_i
@@ -13193,8 +13973,8 @@ class Compiler
                       if pi < ptypes.length
  # Update ivar type
                         iname = @nd_name[sid]
-                        ivar_names = @cls_ivar_names[i].split(";")
-                        ivar_types = @cls_ivar_types[i].split(";")
+                        ivar_names = @cls_ivar_names[i].split(";", -1)
+                        ivar_types = @cls_ivar_types[i].split(";", -1)
                         ij = 0
                         while ij < ivar_names.length
                           if ij < ivar_types.length
@@ -13236,8 +14016,8 @@ class Compiler
  # Check all classes' methods (not just the class owning the readers).
     oci = 0
     while oci < @cls_names.length
-      mnames = @cls_meth_names[oci].split(";")
-      bodies = @cls_meth_bodies[oci].split(";")
+      mnames = @cls_meth_names[oci].split(";", -1)
+      bodies = @cls_meth_bodies[oci].split(";", -1)
       j = 0
       while j < mnames.length
         if mnames[j] != "initialize"
@@ -13258,7 +14038,7 @@ class Compiler
  # only one reader and ignoring later accesses
  # would pick a class that fails to satisfy the
  # full method set.
-                  called = "".split(",")
+                  called = "".split(",", -1)
                   collect_param_methods(bid, pnames[pk], called)
                   if called.length > 0 && called_methods_only_on_container_builtins(called) == 0
  # Check the param's default expression first: if it's an
@@ -13270,10 +14050,10 @@ class Compiler
  # exists on both ActionController_Base and ActionResponse).
                     default_obj_t = ""
                     defs_str_cm = ""
-                    if j < @cls_meth_defaults[oci].split("|").length
-                      defs_str_cm = @cls_meth_defaults[oci].split("|")[j]
+                    if j < @cls_meth_defaults[oci].split("|", -1).length
+                      defs_str_cm = @cls_meth_defaults[oci].split("|", -1)[j]
                     end
-                    defs_arr_cm = defs_str_cm.split(",")
+                    defs_arr_cm = defs_str_cm.split(",", -1)
                     if pk < defs_arr_cm.length
                       def_id_cm = defs_arr_cm[pk].to_i
                       if def_id_cm > 0
@@ -13329,13 +14109,13 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length
             if ptypes[pk] == "int"
-              called = "".split(",")
+              called = "".split(",", -1)
               collect_param_methods(bid, pnames[pk], called)
               if called.length > 0 && called_methods_only_on_container_builtins(called) == 0
  # Same precedence rule as the cls_meth side above: if the
@@ -13347,7 +14127,7 @@ class Compiler
                 if mi < @meth_has_defaults.length
                   defs_str_mp = @meth_has_defaults[mi]
                 end
-                defs_arr_mp = defs_str_mp.split(",")
+                defs_arr_mp = defs_str_mp.split(",", -1)
                 if pk < defs_arr_mp.length
                   def_id_mp = defs_arr_mp[pk].to_i
                   if def_id_mp > 0
@@ -13440,13 +14220,13 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed_top = 0
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length && (ptypes[pk] == "int" || ptypes[pk] == "nil")
-            called = "".split(",")
+            called = "".split(",", -1)
             collect_param_methods(bid, pnames[pk], called)
             sawa = 0
             kk = 0
@@ -13473,8 +14253,8 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -13490,7 +14270,7 @@ class Compiler
             pk = 0
             while pk < pnames_j.length
               if pk < ptypes_j.length && (ptypes_j[pk] == "int" || ptypes_j[pk] == "nil")
-                called_c = "".split(",")
+                called_c = "".split(",", -1)
                 collect_param_methods(bid_j, pnames_j[pk], called_c)
                 sawc = 0
                 kk = 0
@@ -13559,13 +14339,13 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed_top = 0
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length && (ptypes[pk] == "int" || ptypes[pk] == "nil")
-            called = "".split(",")
+            called = "".split(",", -1)
             collect_param_methods(bid, pnames[pk], called)
             saw = 0
             kk = 0
@@ -13591,8 +14371,8 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -13608,7 +14388,7 @@ class Compiler
             pk = 0
             while pk < pnames_j.length
               if pk < ptypes_j.length && (ptypes_j[pk] == "int" || ptypes_j[pk] == "nil")
-                called_c = "".split(",")
+                called_c = "".split(",", -1)
                 collect_param_methods(bid_j, pnames_j[pk], called_c)
                 sawc = 0
                 kk = 0
@@ -13731,8 +14511,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed_cs = 0
  # Derive the lexical scope from the method name itself —
  # `Db_cls_column_bool` → "Db" — so a bare sibling call like
@@ -13747,7 +14527,7 @@ class Compiler
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length && ptypes[pk] == "int"
-            obs = "".split(",")
+            obs = "".split(",", -1)
             collect_param_callee_slots(bid, pnames[pk], obs)
             agreed = ""
             disagree = 0
@@ -13783,7 +14563,7 @@ class Compiler
  # assign_form_pair's `into` widened to str_poly_hash via body
  # heterogeneous `into[k] = val` + `into[k] = {}` writes.
           if pk < ptypes.length && is_hash_type(ptypes[pk]) == 1 && ptypes[pk].include?("poly") == false
-            obs_h = "".split(",")
+            obs_h = "".split(",", -1)
             collect_param_callee_slots(bid, pnames[pk], obs_h)
             cur_kt_h = hash_key_part(ptypes[pk])
             agreed_h = ""
@@ -13826,8 +14606,8 @@ class Compiler
  # @meth_* walk over each registered class's cmeth table.
     cci_cs = 0
     while cci_cs < @cls_names.length
-      cmnames_cs = @cls_cmeth_names[cci_cs].split(";")
-      cmbodies_cs = @cls_cmeth_bodies[cci_cs].split(";")
+      cmnames_cs = @cls_cmeth_names[cci_cs].split(";", -1)
+      cmbodies_cs = @cls_cmeth_bodies[cci_cs].split(";", -1)
       cls_changed_cs = 0
       cmj_cs = 0
       while cmj_cs < cmnames_cs.length
@@ -13844,7 +14624,7 @@ class Compiler
           pk_cs = 0
           while pk_cs < pnames_cm_cs.length
             if pk_cs < ptypes_cm_cs.length && ptypes_cm_cs[pk_cs] == "int"
-              obs_cs = "".split(",")
+              obs_cs = "".split(",", -1)
               collect_param_callee_slots(bid_cm_cs, pnames_cm_cs[pk_cs], obs_cs)
               agreed_cs = ""
               disagree_cs = 0
@@ -13876,7 +14656,7 @@ class Compiler
  # slot is a poly variant of the same hash family, widen the
  # caller's param accordingly.
             if pk_cs < ptypes_cm_cs.length && is_hash_type(ptypes_cm_cs[pk_cs]) == 1 && ptypes_cm_cs[pk_cs].include?("poly") == false
-              obs_ch = "".split(",")
+              obs_ch = "".split(",", -1)
               collect_param_callee_slots(bid_cm_cs, pnames_cm_cs[pk_cs], obs_ch)
               cur_kt_ch = hash_key_part(ptypes_cm_cs[pk_cs])
               agreed_ch = ""
@@ -13956,7 +14736,7 @@ class Compiler
         lvi = 0
         while lvi < sn_lv.length
           if lvi < st_lv.length && is_hash_type(st_lv[lvi]) == 1 && st_lv[lvi].include?("poly") == false
-            obs_lv = "".split(",")
+            obs_lv = "".split(",", -1)
             collect_param_callee_slots(bid_lv, sn_lv[lvi], obs_lv)
             cur_kt_lv = hash_key_part(st_lv[lvi])
             agreed_lv = ""
@@ -14001,7 +14781,7 @@ class Compiler
  # entries, so the widening propagates on the next iteration.
     ci_lv = 0
     while ci_lv < @cls_names.length
-      bodies_lv = @cls_meth_bodies[ci_lv].split(";")
+      bodies_lv = @cls_meth_bodies[ci_lv].split(";", -1)
       bj_lv = 0
       while bj_lv < bodies_lv.length
         bid_im = bodies_lv[bj_lv].to_i
@@ -14012,7 +14792,7 @@ class Compiler
           lvii = 0
           while lvii < sn_im.length
             if lvii < st_im.length && is_hash_type(st_im[lvii]) == 1 && st_im[lvii].include?("poly") == false
-              obs_im = "".split(",")
+              obs_im = "".split(",", -1)
               collect_param_callee_slots(bid_im, sn_im[lvii], obs_im)
               cur_kt_im = hash_key_part(st_im[lvii])
               agreed_im = ""
@@ -14066,8 +14846,8 @@ class Compiler
   def callee_kwarg_slot_type(callee_name, kwarg_name)
     cmi = find_method_idx(callee_name)
     if cmi >= 0
-      cpnames = @meth_param_names[cmi].split(",")
-      cptypes = @meth_param_types[cmi].split(",")
+      cpnames = @meth_param_names[cmi].split(",", -1)
+      cptypes = @meth_param_types[cmi].split(",", -1)
       pi = 0
       while pi < cpnames.length
         if cpnames[pi] == kwarg_name && pi < cptypes.length
@@ -14080,8 +14860,8 @@ class Compiler
       synth = @current_lexical_scope + "_cls_" + callee_name
       smi = find_method_idx(synth)
       if smi >= 0
-        spnames = @meth_param_names[smi].split(",")
-        sptypes = @meth_param_types[smi].split(",")
+        spnames = @meth_param_names[smi].split(",", -1)
+        sptypes = @meth_param_types[smi].split(",", -1)
         pi = 0
         while pi < spnames.length
           if spnames[pi] == kwarg_name && pi < sptypes.length
@@ -14092,7 +14872,7 @@ class Compiler
       end
       sci = find_class_idx(@current_lexical_scope)
       if sci >= 0
-        sc_cmnames = @cls_cmeth_names[sci].split(";")
+        sc_cmnames = @cls_cmeth_names[sci].split(";", -1)
         smj = 0
         while smj < sc_cmnames.length
           if sc_cmnames[smj] == callee_name
@@ -14176,8 +14956,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed = 0
         saved_scope = @current_lexical_scope
         mname_ks = @meth_names[mi]
@@ -14188,7 +14968,7 @@ class Compiler
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length && (ptypes[pk] == "int" || ptypes[pk] == "nil")
-            obs = "".split(",")
+            obs = "".split(",", -1)
             collect_param_kwarg_passthroughs(bid, pnames[pk], obs)
             agreed = ""
             disagree = 0
@@ -14228,7 +15008,7 @@ class Compiler
   def callee_slot_type(callee_name, pos)
     cmi = find_method_idx(callee_name)
     if cmi >= 0
-      cpts = @meth_param_types[cmi].split(",")
+      cpts = @meth_param_types[cmi].split(",", -1)
       if pos < cpts.length
         return cpts[pos]
       end
@@ -14238,7 +15018,7 @@ class Compiler
       synth = @current_lexical_scope + "_cls_" + callee_name
       smi = find_method_idx(synth)
       if smi >= 0
-        spts = @meth_param_types[smi].split(",")
+        spts = @meth_param_types[smi].split(",", -1)
         if pos < spts.length
           return spts[pos]
         end
@@ -14249,7 +15029,7 @@ class Compiler
  # resolves here.
       sci = find_class_idx(@current_lexical_scope)
       if sci >= 0
-        sc_cmnames = @cls_cmeth_names[sci].split(";")
+        sc_cmnames = @cls_cmeth_names[sci].split(";", -1)
         smj = 0
         while smj < sc_cmnames.length
           if sc_cmnames[smj] == callee_name
@@ -14270,13 +15050,13 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed_top = 0
         pk = 0
         while pk < pnames.length
           if pk < ptypes.length && ptypes[pk] == "int"
-            called = "".split(",")
+            called = "".split(",", -1)
             collect_param_methods(bid, pnames[pk], called)
             sawk = 0
             kk = 0
@@ -14301,8 +15081,8 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -14318,7 +15098,7 @@ class Compiler
             pk = 0
             while pk < pnames_j.length
               if pk < ptypes_j.length && ptypes_j[pk] == "int"
-                called_c = "".split(",")
+                called_c = "".split(",", -1)
                 collect_param_methods(bid_j, pnames_j[pk], called_c)
                 sawc = 0
                 kk = 0
@@ -14466,7 +15246,7 @@ class Compiler
     if defaults_str == ""
       return 0
     end
-    defs = defaults_str.split(",")
+    defs = defaults_str.split(",", -1)
     if pi >= defs.length
       return 0
     end
@@ -14499,8 +15279,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         defaults_str_m = @meth_has_defaults[mi]
         changed_m = 0
         pk = 0
@@ -14529,9 +15309,9 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
-      defaults_per = @cls_meth_defaults[ci].split("|")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
+      defaults_per = @cls_meth_defaults[ci].split("|", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -14695,8 +15475,8 @@ class Compiler
   def widen_params_from_ivar_hash_aset
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -14707,8 +15487,8 @@ class Compiler
           bid_j = bodies[mj].to_i
         end
         if bid_j >= 0 && bid_j != -2 && pnames_j.length > 0
-          key_widen = "".split(",")
-          val_widen = "".split(",")
+          key_widen = "".split(",", -1)
+          val_widen = "".split(",", -1)
           while key_widen.length < pnames_j.length
             key_widen.push("")
             val_widen.push("")
@@ -14779,8 +15559,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         ptypes_changed = 0
  # Set up the method's scope so scan_param_body_write_unify's
  # LV-read arm (used by is_reliable_literal_for_widen) can look
@@ -14819,18 +15599,18 @@ class Compiler
  # Per-class instance and class methods.
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
         if mj < all_params.length && mj < all_ptypes.length && mj < bodies.length
           bid_j = bodies[mj].to_i
           if bid_j >= 0
-            pnames_j = all_params[mj].split(",")
-            ptypes_j = all_ptypes[mj].split(",")
+            pnames_j = all_params[mj].split(",", -1)
+            ptypes_j = all_ptypes[mj].split(",", -1)
             inner_changed = 0
  # Same scope setup as the top-level branch so the LV-read
  # widening picks up sibling-param types.
@@ -14858,7 +15638,7 @@ class Compiler
  # observed as the RHS-is-pname target, and promote to
  # "poly" when found.
                 if new_t != "poly" && mnames[mj] == "[]="
-                  ivt_set = "".split(",")
+                  ivt_set = "".split(",", -1)
                   collect_param_ivar_write_slot_types(bid_j, pnames_j[pk], ci, ivt_set)
                   if ivt_set.length >= 2
                     new_t = "poly"
@@ -14904,9 +15684,9 @@ class Compiler
   def widen_uninit_attr_ivars_to_poly
     ci = 0
     while ci < @cls_names.length
-      readers = @cls_attr_readers[ci].split(";")
-      writers = @cls_attr_writers[ci].split(";")
-      attr_iname_set = "".split(",")
+      readers = @cls_attr_readers[ci].split(";", -1)
+      writers = @cls_attr_writers[ci].split(";", -1)
+      attr_iname_set = "".split(",", -1)
       k = 0
       while k < readers.length
         if readers[k] != "" && not_in("@" + readers[k], attr_iname_set) == 1
@@ -14925,8 +15705,8 @@ class Compiler
         ci = ci + 1
         next
       end
-      names = @cls_ivar_names[ci].split(";")
-      types = @cls_ivar_types[ci].split(";")
+      names = @cls_ivar_names[ci].split(";", -1)
+      types = @cls_ivar_types[ci].split(";", -1)
       changed_c = 0
       k = 0
       while k < names.length
@@ -14976,10 +15756,10 @@ class Compiler
  # widening to poly would break the body's `@amp -= int` arithmetic.
   def ivar_assigned_in_init_chain?(ci, iname)
     cur = ci
-    visited = "".split(",")
+    visited = "".split(",", -1)
     while cur >= 0 && cur < @cls_names.length && not_in(@cls_names[cur], visited) == 1
       visited.push(@cls_names[cur])
-      bodies_w = @cls_meth_bodies[cur].split(";")
+      bodies_w = @cls_meth_bodies[cur].split(";", -1)
       bi = 0
       while bi < bodies_w.length
         bid_w = bodies_w[bi].to_i
@@ -14992,8 +15772,8 @@ class Compiler
       end
  # `super` call anywhere in initialize delegates to the parent's
  # initialize path — assume that may assign any ancestor ivar.
-      mnames_w = @cls_meth_names[cur].split(";")
-      bodies_w2 = @cls_meth_bodies[cur].split(";")
+      mnames_w = @cls_meth_names[cur].split(";", -1)
+      bodies_w2 = @cls_meth_bodies[cur].split(";", -1)
       mi_init_w = 0
       while mi_init_w < mnames_w.length
         if mnames_w[mi_init_w] == "initialize" && mi_init_w < bodies_w2.length
@@ -15079,9 +15859,9 @@ class Compiler
   def widen_nil_default_params_to_poly
     mi = 0
     while mi < @meth_names.length
-      pnames = @meth_param_names[mi].split(",")
-      ptypes = @meth_param_types[mi].split(",")
-      defaults = @meth_has_defaults[mi].split(",")
+      pnames = @meth_param_names[mi].split(",", -1)
+      ptypes = @meth_param_types[mi].split(",", -1)
+      defaults = @meth_has_defaults[mi].split(",", -1)
       changed = 0
       pk = 0
       while pk < pnames.length
@@ -15105,20 +15885,20 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      all_defaults = @cls_meth_defaults[ci].split("|")
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      all_defaults = @cls_meth_defaults[ci].split("|", -1)
       cls_changed = 0
       mj = 0
       while mj < all_params.length
         if mj < all_ptypes.length
-          pnames_j = all_params[mj].split(",")
-          ptypes_j = all_ptypes[mj].split(",")
+          pnames_j = all_params[mj].split(",", -1)
+          ptypes_j = all_ptypes[mj].split(",", -1)
           defs_str_j = ""
           if mj < all_defaults.length
             defs_str_j = all_defaults[mj]
           end
-          defs_arr_j = defs_str_j.split(",")
+          defs_arr_j = defs_str_j.split(",", -1)
           inner_changed = 0
           pk = 0
           while pk < pnames_j.length
@@ -15146,20 +15926,20 @@ class Compiler
         @cls_meth_ptypes[ci] = all_ptypes.join("|")
         @cls_meth_ptypes_version = @cls_meth_ptypes_version + 1
       end
-      cmeth_params_all = @cls_cmeth_params[ci].split("|")
-      cmeth_ptypes_all = @cls_cmeth_ptypes[ci].split("|")
-      cmeth_defaults_all = @cls_cmeth_defaults[ci].split("|")
+      cmeth_params_all = @cls_cmeth_params[ci].split("|", -1)
+      cmeth_ptypes_all = @cls_cmeth_ptypes[ci].split("|", -1)
+      cmeth_defaults_all = @cls_cmeth_defaults[ci].split("|", -1)
       cmeth_cls_changed = 0
       cmj = 0
       while cmj < cmeth_params_all.length
         if cmj < cmeth_ptypes_all.length
-          cm_pnames = cmeth_params_all[cmj].split(",")
-          cm_ptypes = cmeth_ptypes_all[cmj].split(",")
+          cm_pnames = cmeth_params_all[cmj].split(",", -1)
+          cm_ptypes = cmeth_ptypes_all[cmj].split(",", -1)
           cm_defs_str = ""
           if cmj < cmeth_defaults_all.length
             cm_defs_str = cmeth_defaults_all[cmj]
           end
-          cm_defs_arr = cm_defs_str.split(",")
+          cm_defs_arr = cm_defs_str.split(",", -1)
           cm_inner_changed = 0
           cpk = 0
           while cpk < cm_pnames.length
@@ -15235,7 +16015,7 @@ class Compiler
  # App.new internally) would need call-graph analysis and is left
  # to a follow-up.
   def detect_const_init_classes
-    @const_init_class = "".split(",")
+    @const_init_class = "".split(",", -1)
     i = 0
     while i < @const_expr_ids.length
       cls_name_cic = ""
@@ -15349,7 +16129,7 @@ class Compiler
   def infer_yield_blk_param_types_for_body(body_id, ptypes_str)
     arity = body_max_yield_arity(body_id, 0)
     return "" if arity == 0 || body_id < 0
-    types = "".split(",")
+    types = "".split(",", -1)
     k = 0
     while k < arity
       types.push("")
@@ -15366,12 +16146,12 @@ class Compiler
  # Locate the method's params (top-level or class-instance) so the
  # `yield <param>` shape resolves through find_var_type to the
  # (post-promote) param type instead of falling back to "int".
-    pnames_arr = "".split(",")
-    ptypes_arr = ptypes_str.split(",")
+    pnames_arr = "".split(",", -1)
+    ptypes_arr = ptypes_str.split(",", -1)
     mi_ll = 0
     while mi_ll < @meth_body_ids.length
       if @meth_body_ids[mi_ll] == body_id
-        pnames_arr = @meth_param_names[mi_ll].split(",")
+        pnames_arr = @meth_param_names[mi_ll].split(",", -1)
         mi_ll = @meth_body_ids.length
       else
         mi_ll = mi_ll + 1
@@ -15380,7 +16160,7 @@ class Compiler
     if pnames_arr.length == 0
       ci_ll = 0
       while ci_ll < @cls_names.length
-        bodies_ll = ci_ll < @cls_meth_bodies.length ? @cls_meth_bodies[ci_ll].split(";") : "".split(",")
+        bodies_ll = ci_ll < @cls_meth_bodies.length ? @cls_meth_bodies[ci_ll].split(";", -1) : "".split(",", -1)
         midx_ll = 0
         while midx_ll < bodies_ll.length
           if bodies_ll[midx_ll].to_i == body_id
@@ -15401,12 +16181,12 @@ class Compiler
       end
       j_p = j_p + 1
     end
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     sn_b = @nd_scope_names[body_id]
     if sn_b != ""
-      lnames = sn_b.split("|")
-      ltypes = @nd_scope_types[body_id].split("|")
+      lnames = sn_b.split("|", -1)
+      ltypes = @nd_scope_types[body_id].split("|", -1)
     end
     j = 0
     while j < lnames.length
@@ -15415,7 +16195,7 @@ class Compiler
     end
     project_yield_arg_types(body_id, types)
     pop_scope
-    proj = "".split(",")
+    proj = "".split(",", -1)
     j = 0
     while j < types.length
       t = types[j]
@@ -15430,13 +16210,13 @@ class Compiler
   end
 
   def infer_proc_blk_param_types
-    @meth_blk_param_types = "".split(",")
+    @meth_blk_param_types = "".split(",", -1)
     mi = 0
     while mi < @meth_param_names.length
-      types = @meth_param_types[mi].split(",")
+      types = @meth_param_types[mi].split(",", -1)
       if types.length > 0 && types.last == "proc"
-        bpname = @meth_param_names[mi].split(",").last
-        acc = "".split(",")
+        bpname = @meth_param_names[mi].split(",", -1).last
+        acc = "".split(",", -1)
         collect_blk_call_arg_types(@meth_body_ids[mi], bpname, acc, @meth_body_ids[mi])
         @meth_blk_param_types.push(acc.join("|"))
       elsif @meth_has_yield[mi] == 1
@@ -15450,21 +16230,21 @@ class Compiler
       end
       mi = mi + 1
     end
-    @cls_cmeth_blk_param_types = "".split(",")
+    @cls_cmeth_blk_param_types = "".split(",", -1)
     ci = 0
     while ci < @cls_names.length
       if ci < @cls_cmeth_names.length
-        cmnames = @cls_cmeth_names[ci].split(";")
-        cm_bodies = @cls_cmeth_bodies[ci].split(";")
-        cm_ptypes = @cls_cmeth_ptypes[ci].split("|")
+        cmnames = @cls_cmeth_names[ci].split(";", -1)
+        cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+        cm_ptypes = @cls_cmeth_ptypes[ci].split("|", -1)
         cmidx = 0
         while cmidx < cmnames.length
           if cmidx < cm_ptypes.length
-            cpts = cm_ptypes[cmidx].split(",")
+            cpts = cm_ptypes[cmidx].split(",", -1)
             if cpts.length > 0 && cpts.last == "proc"
               cpnames = cls_cmeth_pnames_get(ci, cmidx)
               bpname = cpnames[cpnames.length - 1]
-              acc = "".split(",")
+              acc = "".split(",", -1)
               body_id = cm_bodies[cmidx].to_i
               collect_blk_call_arg_types(body_id, bpname, acc, body_id)
               @cls_cmeth_blk_param_types.push(acc.join("|"))
@@ -15885,8 +16665,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed_top = 0
         pk = 0
         while pk < pnames.length
@@ -15923,8 +16703,8 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      bodies = @cls_meth_bodies[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < mnames.length
@@ -16173,13 +16953,13 @@ class Compiler
       while mi < @meth_names.length
         bid = @meth_body_ids[mi]
         if bid >= 0
-          pnames = @meth_param_names[mi].split(",")
-          ptypes = @meth_param_types[mi].split(",")
+          pnames = @meth_param_names[mi].split(",", -1)
+          ptypes = @meth_param_types[mi].split(",", -1)
           empty_str = ""
           if mi < @meth_param_empty.length
             empty_str = @meth_param_empty[mi]
           end
-          empties = empty_str.split(",")
+          empties = empty_str.split(",", -1)
           push_scope
           dj = 0
           while dj < pnames.length
@@ -16190,8 +16970,8 @@ class Compiler
             declare_var(pnames[dj], pt)
             dj = dj + 1
           end
-          ml = "".split(",")
-          mt = "".split(",")
+          ml = "".split(",", -1)
+          mt = "".split(",", -1)
           scan_locals(bid, ml, mt, pnames)
           lk = 0
           while lk < ml.length
@@ -16203,7 +16983,7 @@ class Compiler
           while pk < pnames.length
             if pk < ptypes.length && pk < empties.length
               if empties[pk] == "1" && ptypes[pk] == "int_array"
-                elem_acc = "".split(",")
+                elem_acc = "".split(",", -1)
                 collect_param_push_elem_types(bid, pnames[pk], elem_acc)
                 promoted_type = empty_array_promotion_for(elem_acc)
                 if promoted_type != ""
@@ -16233,10 +17013,10 @@ class Compiler
       ci = 0
       while ci < @cls_names.length
         @current_class_idx = ci
-        all_params = @cls_meth_params[ci].split("|")
-        all_ptypes = @cls_meth_ptypes[ci].split("|")
-        all_empty = @cls_meth_ptypes_empty[ci].split("|")
-        bodies = @cls_meth_bodies[ci].split(";")
+        all_params = @cls_meth_params[ci].split("|", -1)
+        all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+        all_empty = @cls_meth_ptypes_empty[ci].split("|", -1)
+        bodies = @cls_meth_bodies[ci].split(";", -1)
         cls_changed = 0
         mj = 0
         while mj < all_params.length
@@ -16245,14 +17025,14 @@ class Compiler
             bid = bodies[mj].to_i
           end
           if bid >= 0
-            cm_pnames = all_params[mj].split(",")
-            cm_ptypes = "".split(",")
-            cm_empties = "".split(",")
+            cm_pnames = all_params[mj].split(",", -1)
+            cm_ptypes = "".split(",", -1)
+            cm_empties = "".split(",", -1)
             if mj < all_ptypes.length
-              cm_ptypes = all_ptypes[mj].split(",")
+              cm_ptypes = all_ptypes[mj].split(",", -1)
             end
             if mj < all_empty.length
-              cm_empties = all_empty[mj].split(",")
+              cm_empties = all_empty[mj].split(",", -1)
             end
             push_scope
             cdj = 0
@@ -16264,8 +17044,8 @@ class Compiler
               declare_var(cm_pnames[cdj], cpt)
               cdj = cdj + 1
             end
-            cml = "".split(",")
-            cmt = "".split(",")
+            cml = "".split(",", -1)
+            cmt = "".split(",", -1)
             scan_locals(bid, cml, cmt, cm_pnames)
             cmlk = 0
             while cmlk < cml.length
@@ -16277,7 +17057,7 @@ class Compiler
             while pk < cm_pnames.length
               if pk < cm_ptypes.length && pk < cm_empties.length
                 if cm_empties[pk] == "1" && cm_ptypes[pk] == "int_array"
-                  elem_acc = "".split(",")
+                  elem_acc = "".split(",", -1)
                   collect_param_push_elem_types(bid, cm_pnames[pk], elem_acc)
                   promoted_type = empty_array_promotion_for(elem_acc)
                   if promoted_type != ""
@@ -16311,6 +17091,13 @@ class Compiler
       end
       @current_class_idx = -1
     end
+ # Issue #806: warn on non-convergence after the cap. changed == 1
+ # means the last iteration still mutated state and would have run
+ # again. Indicates types may remain widened beyond what a converged
+ # fixpoint would have produced.
+    if changed == 1
+      $stderr.puts "warning: param-array type inference did not converge after 4 iterations; some types may be widened to poly"
+    end
   end
 
  # Body-side param narrowing (Stage 1 of the callee→caller direction
@@ -16339,9 +17126,9 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       if bid >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
-        observations = "".split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
+        observations = "".split(",", -1)
         collect_param_method_calls(bid, pnames, observations)
         changed = 0
         pk = 0
@@ -16364,9 +17151,9 @@ class Compiler
  # Class instance methods.
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      bodies = @cls_meth_bodies[ci].split(";")
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < all_params.length
@@ -16375,12 +17162,12 @@ class Compiler
           bid = bodies[mj].to_i
         end
         if bid >= 0
-          cm_pnames = all_params[mj].split(",")
-          cm_ptypes = "".split(",")
+          cm_pnames = all_params[mj].split(",", -1)
+          cm_ptypes = "".split(",", -1)
           if mj < all_ptypes.length
-            cm_ptypes = all_ptypes[mj].split(",")
+            cm_ptypes = all_ptypes[mj].split(",", -1)
           end
-          observations = "".split(",")
+          observations = "".split(",", -1)
           collect_param_method_calls(bid, cm_pnames, observations)
           m_changed = 0
           pk = 0
@@ -16631,18 +17418,18 @@ class Compiler
  # Does class `ci` define `mname` directly — instance method, attr
  # reader, or attr writer — without walking the parent chain?
   def class_has_method_local(ci, mname)
-    readers = @cls_attr_readers[ci].split(";")
+    readers = @cls_attr_readers[ci].split(";", -1)
     if not_in(mname, readers) == 0
       return 1
     end
     if mname.length > 1 && mname[mname.length - 1] == "="
       bname = mname[0, mname.length - 1]
-      writers = @cls_attr_writers[ci].split(";")
+      writers = @cls_attr_writers[ci].split(";", -1)
       if not_in(bname, writers) == 0
         return 1
       end
     end
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     if not_in(mname, mnames) == 0
       return 1
     end
@@ -16697,7 +17484,7 @@ class Compiler
  # Cheap guard: the user must define a class with this method.
     ci2 = 0
     while ci2 < @cls_names.length
-      mns = @cls_meth_names[ci2].split(";")
+      mns = @cls_meth_names[ci2].split(";", -1)
       jj = 0
       while jj < mns.length
         if mns[jj] == mname
@@ -16828,9 +17615,9 @@ class Compiler
  # Set up main scope for type inference
     push_scope
     stmts = get_body_stmts(@root_id)
-    lnames = "".split(",")
-    ltypes = "".split(",")
-    empty_p = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
+    empty_p = "".split(",", -1)
     stmts.each { |sid|
       if @nd_type[sid] != "DefNode"
         if @nd_type[sid] != "ClassNode"
@@ -16859,8 +17646,8 @@ class Compiler
  # recorded type.
       saved_meth = @current_method_name
       @current_method_name = @meth_names[i]
-      pnames = @meth_param_names[i].split(",")
-      ptypes = @meth_param_types[i].split(",")
+      pnames = @meth_param_names[i].split(",", -1)
+      ptypes = @meth_param_types[i].split(",", -1)
       j = 0
       while j < pnames.length
         pt = "int"
@@ -16871,8 +17658,8 @@ class Compiler
         j = j + 1
       end
       if @meth_body_ids[i] >= 0
-        ml = "".split(",")
-        mt = "".split(",")
+        ml = "".split(",", -1)
+        mt = "".split(",", -1)
 
         scan_locals(@meth_body_ids[i], ml, mt, pnames)
         lk = 0
@@ -16892,8 +17679,8 @@ class Compiler
     ci = 0
     while ci < @cls_names.length
       @current_class_idx = ci
-      bodies = @cls_meth_bodies[ci].split(";")
-      mnames = @cls_meth_names[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
+      mnames = @cls_meth_names[ci].split(";", -1)
       bj = 0
       while bj < bodies.length
         bid = bodies[bj].to_i
@@ -16910,8 +17697,8 @@ class Compiler
             declare_var(pnames2[pk], pt)
             pk = pk + 1
           end
-          ml2 = "".split(",")
-          mt2 = "".split(",")
+          ml2 = "".split(",", -1)
+          mt2 = "".split(",", -1)
           scan_locals(bid, ml2, mt2, pnames2)
           lk2 = 0
           while lk2 < ml2.length
@@ -16928,8 +17715,8 @@ class Compiler
  # Also scan class method bodies (def self.<m>) so an
  # attr_writer call on a freshly-`new`'d instance inside a
  # `def self.from_raw(...)` factory widens the ivar's type.
-      cm_bodies = @cls_cmeth_bodies[ci].split(";")
-      cm_names = @cls_cmeth_names[ci].split(";")
+      cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+      cm_names = @cls_cmeth_names[ci].split(";", -1)
       saved_meth = @current_method_name
       cbj = 0
       while cbj < cm_bodies.length
@@ -16953,8 +17740,8 @@ class Compiler
             declare_var(cpnames[cpk], cpt)
             cpk = cpk + 1
           end
-          cml = "".split(",")
-          cmt = "".split(",")
+          cml = "".split(",", -1)
+          cmt = "".split(",", -1)
           scan_locals(cbid, cml, cmt, cpnames)
           clk = 0
           while clk < cml.length
@@ -16995,7 +17782,7 @@ class Compiler
  # ivar to poly just because Pass 1 recorded the bare name and a
  # later pass recorded the qualified one.
   def drop_stale_unqualified_obj_obs(obs)
-    out = "".split(",")
+    out = "".split(",", -1)
  # Type-prime locals as strings so spinel-self-compile picks the
  # right C type (sp_str_sub_range / sp_str_concat returns
  # `const char *`; without the empty-string seed scan_locals
@@ -17046,14 +17833,14 @@ class Compiler
   def finalize_ivar_heterogeneity
     ci = 0
     while ci < @cls_names.length
-      names = @cls_ivar_names[ci].split(";")
-      types = @cls_ivar_types[ci].split(";")
+      names = @cls_ivar_names[ci].split(";", -1)
+      types = @cls_ivar_types[ci].split(";", -1)
       obs = @cls_ivar_observed_types[ci].split(";", -1)
       changed = 0
       ivk = 0
       while ivk < names.length
         if ivk < types.length && ivk < obs.length && types[ivk] != "poly"
-          distinct = obs[ivk].split(",")
+          distinct = obs[ivk].split(",", -1)
  # Collapse stale unqualified obj-name observations against
  # their qualified form before the distinct-count widening
  # decision. A first-pass `@x = Foo.new(...)` recorded inside
@@ -17075,7 +17862,7 @@ class Compiler
  # Without this, callers that read the slot through an attr_
  # reader then forward into another method's typed param see a
  # poly value and degrade every downstream slot.
-          collapsed = "".split(",")
+          collapsed = "".split(",", -1)
           ck = 0
           while ck < distinct.length
             cur = distinct[ck]
@@ -17169,7 +17956,7 @@ class Compiler
     if midx < 0
       return ""
     end
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if midx >= bodies.length
       return ""
     end
@@ -17208,7 +17995,7 @@ class Compiler
  # CallNode rhs (`@a = @b = make_int`) bypasses scan_ivars's
  # dual-definite-literal widening and tail slots stay at
  # their pre-existing concrete type.
-        chain_inames = "".split(",")
+        chain_inames = "".split(",", -1)
         chain_inames.push(iname)
         bottom = expr_id
         while bottom >= 0 && @nd_type[bottom] == "InstanceVariableWriteNode"
@@ -17233,7 +18020,7 @@ class Compiler
  # the promoted type before recording.
           if at == "int_array" && @cur_writer_body >= 0 && @nd_type[bottom] == "LocalVariableReadNode"
             lname_a = @nd_name[bottom]
-            elem_acc_a = "".split(",")
+            elem_acc_a = "".split(",", -1)
             collect_param_push_elem_types(@cur_writer_body, lname_a, elem_acc_a)
             promoted_a = empty_array_promotion_for(elem_acc_a)
             if promoted_a != ""
@@ -17389,7 +18176,7 @@ class Compiler
               cname = rt[4, rt.length - 4]
               ci = find_class_idx(cname)
               if ci >= 0
-                writers = @cls_attr_writers[ci].split(";")
+                writers = @cls_attr_writers[ci].split(";", -1)
                 wk = 0
                 while wk < writers.length
                   if writers[wk] == bname
@@ -17438,9 +18225,9 @@ class Compiler
  # poly across the program. Issue #684.
                     obs_ids_pw = observed_class_ids_for_recv(@nd_receiver[nid], @current_class_idx)
                     obs_filter_pw = (obs_ids_pw != "")
-                    obs_list_pw = "".split(",")
+                    obs_list_pw = "".split(",", -1)
                     if obs_filter_pw
-                      obs_list_pw = obs_ids_pw.split(",")
+                      obs_list_pw = obs_ids_pw.split(",", -1)
                     end
                     ci_p = 0
                     while ci_p < @cls_names.length
@@ -17459,7 +18246,7 @@ class Compiler
                         end
                       end
                       if skip_pw == 0
-                        writers_p = @cls_attr_writers[ci_p].split(";")
+                        writers_p = @cls_attr_writers[ci_p].split(";", -1)
                         wk_p = 0
                         while wk_p < writers_p.length
                           if writers_p[wk_p] == bname
@@ -17711,10 +18498,10 @@ class Compiler
  # For setter methods (def x=(v); @x = v; end), infer param type from ivar type
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      ivar_names = @cls_ivar_names[ci].split(";")
-      ivar_types = @cls_ivar_types[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      ivar_names = @cls_ivar_names[ci].split(";", -1)
+      ivar_types = @cls_ivar_types[ci].split(";", -1)
       changed = 0
       j = 0
       bname = ""
@@ -17763,7 +18550,7 @@ class Compiler
  # or passed to functions that expect lambda args (transitive closure)
     changed = 1
     iter = 0
-    sig_hist = "".split(",")
+    sig_hist = "".split(",", -1)
     while changed == 1
       iter = iter + 1
       if iter > 256
@@ -17775,8 +18562,8 @@ class Compiler
       while mi < @meth_names.length
         bid = @meth_body_ids[mi]
         if bid >= 0
-          pnames = @meth_param_names[mi].split(",")
-          ptypes = @meth_param_types[mi].split(",")
+          pnames = @meth_param_names[mi].split(",", -1)
+          ptypes = @meth_param_types[mi].split(",", -1)
           pk = 0
           while pk < pnames.length
             if pk < ptypes.length
@@ -17876,7 +18663,7 @@ class Compiler
       if recv < 0
         fmi = find_method_idx(mname)
         if fmi >= 0
-          fptypes = @meth_param_types[fmi].split(",")
+          fptypes = @meth_param_types[fmi].split(",", -1)
           args_id = @nd_arguments[nid]
           if args_id >= 0
             aargs = get_args(args_id)
@@ -17991,7 +18778,7 @@ class Compiler
           args_id = @nd_arguments[nid]
           if args_id >= 0
             aargs = get_args(args_id)
-            ptypes = @meth_param_types[mi].split(",")
+            ptypes = @meth_param_types[mi].split(",", -1)
             changed = 0
             k = 0
             while k < aargs.length
@@ -18095,18 +18882,18 @@ class Compiler
  # (raise-only bodies would otherwise re-derive as "int").
   def unify_imeth_override_returns
     if @unified_imeth_returns == nil
-      @unified_imeth_returns = "".split(",")
+      @unified_imeth_returns = "".split(",", -1)
     end
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
-      returns = @cls_meth_returns[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
+      returns = @cls_meth_returns[ci].split(";", -1)
       changed = 0
       mi = 0
       while mi < mnames.length
         mname = mnames[mi]
         if mname != ""
-          types = "".split(",")
+          types = "".split(",", -1)
           base_ret = ""
           if mi < returns.length
             base_ret = returns[mi]
@@ -18118,7 +18905,7 @@ class Compiler
             if dci != ci && cls_is_descendant(dci, ci) == 1
               dmidx = cls_find_method_direct(dci, mname)
               if dmidx >= 0
-                d_returns = @cls_meth_returns[dci].split(";")
+                d_returns = @cls_meth_returns[dci].split(";", -1)
                 if dmidx < d_returns.length
                   types.push(d_returns[dmidx])
                   have_descendant_override = 1
@@ -18144,7 +18931,7 @@ class Compiler
                 if dci2 != ci && cls_is_descendant(dci2, ci) == 1
                   dmidx2 = cls_find_method_direct(dci2, mname)
                   if dmidx2 >= 0
-                    d_returns2 = @cls_meth_returns[dci2].split(";")
+                    d_returns2 = @cls_meth_returns[dci2].split(";", -1)
                     if dmidx2 < d_returns2.length && d_returns2[dmidx2] != unified
                       d_returns2[dmidx2] = unified
                       @cls_meth_returns[dci2] = d_returns2.join(";")
@@ -18247,8 +19034,8 @@ class Compiler
       declare_var(pnames[k], pt)
       k = k + 1
     end
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     refine_method_body_locals(bid, lnames, ltypes, pnames)
     need = method_returns_need_poly_widening(bid, declared_rt)
     pop_scope
@@ -18268,8 +19055,8 @@ class Compiler
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
       cur_rt = @meth_return_types[mi]
-      pnames = @meth_param_names[mi].split(",")
-      ptypes = @meth_param_types[mi].split(",")
+      pnames = @meth_param_names[mi].split(",", -1)
+      ptypes = @meth_param_types[mi].split(",", -1)
       saved_meth = @current_method_name
       @current_method_name = @meth_names[mi]
       if widen_check_with_scope(bid, cur_rt, pnames, ptypes) == 1
@@ -18284,9 +19071,9 @@ class Compiler
     while ci < @cls_names.length
       saved_ci = @current_class_idx
       @current_class_idx = ci
-      bodies = @cls_meth_bodies[ci].split(";")
-      mnames = @cls_meth_names[ci].split(";")
-      returns = @cls_meth_returns[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
+      mnames = @cls_meth_names[ci].split(";", -1)
+      returns = @cls_meth_returns[ci].split(";", -1)
       changed = 0
       j = 0
       while j < bodies.length
@@ -18339,9 +19126,9 @@ class Compiler
     while ci < @cls_names.length
       saved_ci = @current_class_idx
       @current_class_idx = ci
-      cbodies = @cls_cmeth_bodies[ci].split(";")
-      cmnames = @cls_cmeth_names[ci].split(";")
-      creturns = @cls_cmeth_returns[ci].split(";")
+      cbodies = @cls_cmeth_bodies[ci].split(";", -1)
+      cmnames = @cls_cmeth_names[ci].split(";", -1)
+      creturns = @cls_cmeth_returns[ci].split(";", -1)
       changed = 0
       j = 0
       while j < cbodies.length
@@ -18382,7 +19169,7 @@ class Compiler
   def unify_imeth_override_ptypes
     ci = 0
     while ci < @cls_names.length
-      mnames = @cls_meth_names[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
       mi = 0
       while mi < mnames.length
         mname = mnames[mi]
@@ -18407,7 +19194,7 @@ class Compiler
             n = base_pt.length
  # Determine, per slot, whether at least one family member
  # has "poly". If so, widen every member at that slot.
-            poly_slot = "".split(",")
+            poly_slot = "".split(",", -1)
             k = 0
             while k < n
               poly_slot.push("0")
@@ -18527,8 +19314,8 @@ class Compiler
       if mfn.start_with?("__oc_Float_")
         declare_var("__self_type", "float")
       end
-      pnames = @meth_param_names[i].split(",")
-      ptypes = @meth_param_types[i].split(",")
+      pnames = @meth_param_names[i].split(",", -1)
+      ptypes = @meth_param_types[i].split(",", -1)
       j = 0
       while j < pnames.length
         pt = "int"
@@ -18547,8 +19334,8 @@ class Compiler
  # time, after `infer_body_return` has already pinned the
  # function's return type at the unrefined value.
       if @meth_body_ids[i] >= 0
-        lnames = "".split(",")
-        ltypes = "".split(",")
+        lnames = "".split(",", -1)
+        ltypes = "".split(",", -1)
         refine_method_body_locals(@meth_body_ids[i], lnames, ltypes, pnames)
       end
       rt = infer_body_return(@meth_body_ids[i])
@@ -18572,23 +19359,23 @@ class Compiler
     i = 0
     while i < @cls_names.length
       @current_class_idx = i
-      mnames = @cls_meth_names[i].split(";")
-      all_params = @cls_meth_params[i].split("|")
-      all_ptypes = @cls_meth_ptypes[i].split("|")
-      bodies = @cls_meth_bodies[i].split(";")
-      returns = @cls_meth_returns[i].split(";")
+      mnames = @cls_meth_names[i].split(";", -1)
+      all_params = @cls_meth_params[i].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[i].split("|", -1)
+      bodies = @cls_meth_bodies[i].split(";", -1)
+      returns = @cls_meth_returns[i].split(";", -1)
 
       j = 0
       while j < mnames.length
         push_scope
-        pnames = "".split(",")
-        ptypes = "".split(",")
+        pnames = "".split(",", -1)
+        ptypes = "".split(",", -1)
 
         if j < all_params.length
-          pnames = all_params[j].split(",")
+          pnames = all_params[j].split(",", -1)
         end
         if j < all_ptypes.length
-          ptypes = all_ptypes[j].split(",")
+          ptypes = all_ptypes[j].split(",", -1)
         end
 
  # Infer param types for initialize
@@ -18652,8 +19439,8 @@ class Compiler
         end
  # Declare locals for better return type inference
         if bid >= 0
-          rlnames = "".split(",")
-          rltypes = "".split(",")
+          rlnames = "".split(",", -1)
+          rltypes = "".split(",", -1)
           scan_locals(bid, rlnames, rltypes, pnames)
           rlk = 0
           while rlk < rlnames.length
@@ -18667,8 +19454,8 @@ class Compiler
  # encounters disagreeing concrete-literal writes; that's a
  # superset of scan_locals_first_type's "never-poly" rule but
  # produces strictly more accurate types for return inference.
-          rlnames2 = "".split(",")
-          rltypes2 = "".split(",")
+          rlnames2 = "".split(",", -1)
+          rltypes2 = "".split(",", -1)
           scan_locals(bid, rlnames2, rltypes2, pnames)
           rlk2 = 0
           while rlk2 < rlnames2.length
@@ -18738,11 +19525,11 @@ class Compiler
  # setup the instance-method side does so a `def self.<m>`
  # body's return type sees its locals (instance = new etc.)
  # and bare `new` resolves via current_class_method_owning_class.
-      cmnames = @cls_cmeth_names[i].split(";")
-      cm_bodies = @cls_cmeth_bodies[i].split(";")
-      cm_returns = @cls_cmeth_returns[i].split(";")
-      cm_params = @cls_cmeth_params[i].split("|")
-      cm_ptypes = @cls_cmeth_ptypes[i].split("|")
+      cmnames = @cls_cmeth_names[i].split(";", -1)
+      cm_bodies = @cls_cmeth_bodies[i].split(";", -1)
+      cm_returns = @cls_cmeth_returns[i].split(";", -1)
+      cm_params = @cls_cmeth_params[i].split("|", -1)
+      cm_ptypes = @cls_cmeth_ptypes[i].split("|", -1)
       saved_meth = @current_method_name
       j = 0
       while j < cmnames.length
@@ -18752,13 +19539,13 @@ class Compiler
           bid = cm_bodies[j].to_i
         end
         @current_method_name = @cls_names[i] + "_cls_" + cmnames[j]
-        cpnames = "".split(",")
-        cptypes = "".split(",")
+        cpnames = "".split(",", -1)
+        cptypes = "".split(",", -1)
         if j < cm_params.length
-          cpnames = cm_params[j].split(",")
+          cpnames = cm_params[j].split(",", -1)
         end
         if j < cm_ptypes.length
-          cptypes = cm_ptypes[j].split(",")
+          cptypes = cm_ptypes[j].split(",", -1)
         end
         cpk = 0
         while cpk < cpnames.length
@@ -18778,8 +19565,8 @@ class Compiler
  # actually-emitted local is correctly typed `sp_<C> *`,
  # so the function signature and the body's `return`
  # statement disagree at the C boundary.
-          ml = "".split(",")
-          mt = "".split(",")
+          ml = "".split(",", -1)
+          mt = "".split(",", -1)
           refine_method_body_locals(bid, ml, mt, cpnames)
         end
         rt = infer_body_return(bid)
@@ -18831,7 +19618,7 @@ class Compiler
  # Top-level method variant of widen_nil_ptypes: reads/writes
  # @meth_param_types[i] directly.
   def widen_nil_defaults_to(table, i, rt)
-    ptypes = table[i].split(",")
+    ptypes = table[i].split(",", -1)
     if widen_nil_ptypes(ptypes, rt) == 1
       table[i] = ptypes.join(",")
     end
@@ -18844,14 +19631,14 @@ class Compiler
  # has already propagated call-site-inferred types into ivars by this point.
     init_idx0 = cls_find_method_direct(ci, "initialize")
     if init_idx0 >= 0
-      bodies0 = @cls_meth_bodies[ci].split(";")
+      bodies0 = @cls_meth_bodies[ci].split(";", -1)
       if init_idx0 < bodies0.length && bodies0[init_idx0].to_i == -2
         return cls_ivar_type(ci, "@" + pname)
       end
     end
  # Check if param is assigned to an ivar in initialize
-    mnames = @cls_meth_names[ci].split(";")
-    bodies = @cls_meth_bodies[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     j = 0
     while j < mnames.length
       if mnames[j] == "initialize"
@@ -18887,9 +19674,9 @@ class Compiler
                         if parent_ci >= 0
                           parent_init = cls_find_method_direct(parent_ci, "initialize")
                           if parent_init >= 0
-                            parent_ptypes = @cls_meth_ptypes[parent_ci].split("|")
+                            parent_ptypes = @cls_meth_ptypes[parent_ci].split("|", -1)
                             if parent_init < parent_ptypes.length
-                              ppt = parent_ptypes[parent_init].split(",")
+                              ppt = parent_ptypes[parent_init].split(",", -1)
                               if sk < ppt.length
                                 return ppt[sk]
                               end
@@ -18920,7 +19707,7 @@ class Compiler
       return "void"
     end
  # Collect all explicit return types
-    types = "".split(",")
+    types = "".split(",", -1)
     collect_return_types_nid(body_id, types)
  # Push sibling-scope narrows from preceding guards so the
  # implicit-return type sees the narrowed local types. Without
@@ -18955,7 +19742,7 @@ class Compiler
     last_type = infer_type(last_id)
     if last_type == "int_array" && @nd_type[last_id] == "LocalVariableReadNode"
       lname_lr = @nd_name[last_id]
-      elem_acc_lr = "".split(",")
+      elem_acc_lr = "".split(",", -1)
       collect_param_push_elem_types(body_id, lname_lr, elem_acc_lr)
       promoted_lr = empty_array_promotion_for(elem_acc_lr)
       if promoted_lr != ""
@@ -19123,7 +19910,7 @@ class Compiler
  # filtering out missing bodies (negative IDs). Used by both the
  # `infer_type` BeginNode arm (last-stmt type unification) and the
  # `collect_return_types` BeginNode arm (explicit-return walk).
- # `[]` (not `"".split(",")`) is the int_array init idiom in this
+ # `[]` (not `"".split(",", -1)`) is the int_array init idiom in this
  # codebase — see the @nd_* parallel arrays in `initialize`.
   def begin_node_arm_bodies(nid)
     out = []
@@ -19158,6 +19945,8 @@ class Compiler
           if is_nullable_type(t) == 1
             result = t
           end
+        elsif (result == "encoding" && t == "int") || (result == "int" && t == "encoding")
+          return "poly"
         elsif result == "int"
  # int is default/unresolved — real type takes priority
           result = t
@@ -19290,6 +20079,13 @@ class Compiler
       if is_tuple_type(cur_t) == 0 || cur_t != new_t
         return new_t
       end
+    end
+ # Issue #901: Time - Time → float. Pass 1 sees the rhs LV as
+ # int (not yet declared) so the `-` arm returns "time"
+ # (Time - Numeric path). Pass 2 re-infers as "float" once the
+ # rhs LV is declared as time. Accept the refinement.
+    if cur_t == "time" && new_t == "float"
+      return new_t
     end
     ""
   end
@@ -19517,9 +20313,9 @@ class Compiler
     push_scope
     stmts = get_body_stmts(@root_id)
     pre_scan_simple_local_writes(stmts)
-    lnames = "".split(",")
-    ltypes = "".split(",")
-    empty_p = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
+    empty_p = "".split(",", -1)
     stmts.each { |sid|
       if @nd_type[sid] != "DefNode"
         if @nd_type[sid] != "ClassNode"
@@ -20223,9 +21019,9 @@ class Compiler
     stmts = get_body_stmts(@root_id)
  # First, figure out main local types
     push_scope
-    lnames = "".split(",")
-    ltypes = "".split(",")
-    empty_p = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
+    empty_p = "".split(",", -1)
     stmts.each { |sid|
       if @nd_type[sid] != "DefNode"
         if @nd_type[sid] != "ClassNode"
@@ -20258,8 +21054,8 @@ class Compiler
  # Check if it's a method parameter with a known type
           mi = 0
           while mi < @meth_names.length
-            pnames = @meth_param_names[mi].split(",")
-            ptypes = @meth_param_types[mi].split(",")
+            pnames = @meth_param_names[mi].split(",", -1)
+            ptypes = @meth_param_types[mi].split(",", -1)
             pi = 0
             while pi < pnames.length
               if pnames[pi] == vn && pi < ptypes.length
@@ -20278,7 +21074,7 @@ class Compiler
           ci = find_class_idx(cname)
           if ci >= 0
             mname = @nd_name[nid]
-            readers = @cls_attr_readers[ci].split(";")
+            readers = @cls_attr_readers[ci].split(";", -1)
             rk = 0
             while rk < readers.length
               if readers[rk] == mname
@@ -20307,7 +21103,7 @@ class Compiler
  # Scan initialize body for @ivar = param assignments
     bj = cls_find_method_direct(ci, "initialize")
     if bj >= 0
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       bid = bj < bodies.length ? bodies[bj].to_i : -1
       if bid >= 0
         pnames = cls_meth_pnames_get(ci, bj)
@@ -20378,7 +21174,7 @@ class Compiler
           args_id = @nd_arguments[nid]
           if args_id >= 0
             arg_ids = get_args(args_id)
-            ptypes = @meth_param_types[mi].split(",")
+            ptypes = @meth_param_types[mi].split(",", -1)
             rest_param_idx = method_rest_index(mi)
  # Splat slot widening: a `def f(*args)` slot defaults to int_array
  # (the splat default in collect_ptypes_str). Every call site packs
@@ -20555,8 +21351,8 @@ class Compiler
   def detect_poly_locals
  # Detect local variables assigned different types in main scope
     stmts = get_body_stmts(@root_id)
-    local_types = "".split(",")
-    local_names = "".split(",")
+    local_types = "".split(",", -1)
+    local_names = "".split(",", -1)
     stmts.each { |sid|
       if @nd_type[sid] != "DefNode"
         if @nd_type[sid] != "ClassNode"
@@ -20653,8 +21449,8 @@ class Compiler
  # leaving the inner class's initialize ptypes un-widened.
         saved_method_name = @current_method_name
         @current_method_name = @meth_names[mi]
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         pk = 0
         while pk < pnames.length
           if pnames[pk] != ""
@@ -20663,8 +21459,8 @@ class Compiler
           pk = pk + 1
         end
  # Scan locals in the body
-        lnames = "".split(",")
-        ltypes = "".split(",")
+        lnames = "".split(",", -1)
+        ltypes = "".split(",", -1)
         scan_locals(bid, lnames, ltypes, pnames)
         lk = 0
         while lk < lnames.length
@@ -20881,8 +21677,8 @@ class Compiler
     while pass < 5
       ci = 0
       while ci < @cls_names.length
-        mnames = @cls_meth_names[ci].split(";")
-        bodies = @cls_meth_bodies[ci].split(";")
+        mnames = @cls_meth_names[ci].split(";", -1)
+        bodies = @cls_meth_bodies[ci].split(";", -1)
         mi = 0
         while mi < mnames.length
           bid = -1
@@ -20907,8 +21703,8 @@ class Compiler
               pk = pk + 1
             end
  # Scan locals using first-type-only (no poly marking)
-            lnames = "".split(",")
-            ltypes = "".split(",")
+            lnames = "".split(",", -1)
+            ltypes = "".split(",", -1)
             scan_locals_first_type(bid, lnames, ltypes, pnames_arr)
             lk = 0
             while lk < lnames.length
@@ -20916,8 +21712,8 @@ class Compiler
               lk = lk + 1
             end
  # Second pass: rescan with locals now in scope for better inference
-            lnames2 = "".split(",")
-            ltypes2 = "".split(",")
+            lnames2 = "".split(",", -1)
+            ltypes2 = "".split(",", -1)
             scan_locals_first_type(bid, lnames2, ltypes2, pnames_arr)
             lk2 = 0
             while lk2 < lnames2.length
@@ -20939,10 +21735,10 @@ class Compiler
  # so a `params.fetch(:k, "")` call inside a `def
  # self.from_raw` widens P.fetch's default param via the
  # receiver-method unify path inside scan_new_calls.
-        cm_names = @cls_cmeth_names[ci].split(";")
-        cm_bodies = @cls_cmeth_bodies[ci].split(";")
-        cm_params = @cls_cmeth_params[ci].split("|")
-        cm_ptypes = @cls_cmeth_ptypes[ci].split("|")
+        cm_names = @cls_cmeth_names[ci].split(";", -1)
+        cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+        cm_params = @cls_cmeth_params[ci].split("|", -1)
+        cm_ptypes = @cls_cmeth_ptypes[ci].split("|", -1)
         saved_meth_cb = @current_method_name
         cmi = 0
         while cmi < cm_names.length
@@ -20954,13 +21750,13 @@ class Compiler
             @current_class_idx = ci
             @current_method_name = @cls_names[ci] + "_cls_" + cm_names[cmi]
             push_scope
-            cpnames = "".split(",")
-            cptypes = "".split(",")
+            cpnames = "".split(",", -1)
+            cptypes = "".split(",", -1)
             if cmi < cm_params.length
-              cpnames = cm_params[cmi].split(",")
+              cpnames = cm_params[cmi].split(",", -1)
             end
             if cmi < cm_ptypes.length
-              cptypes = cm_ptypes[cmi].split(",")
+              cptypes = cm_ptypes[cmi].split(",", -1)
             end
             cpk = 0
             while cpk < cpnames.length
@@ -20973,8 +21769,8 @@ class Compiler
               end
               cpk = cpk + 1
             end
-            cml = "".split(",")
-            cmt = "".split(",")
+            cml = "".split(",", -1)
+            cmt = "".split(",", -1)
             scan_locals_first_type(cbid, cml, cmt, cpnames)
             clk = 0
             while clk < cml.length
@@ -21169,9 +21965,9 @@ class Compiler
     ci = 0
     while ci < @cls_names.length
       cname = @cls_names[ci]
-      writers = @cls_attr_writers[ci].split(";")
-      names = @cls_ivar_names[ci].split(";")
-      types = @cls_ivar_types[ci].split(";")
+      writers = @cls_attr_writers[ci].split(";", -1)
+      names = @cls_ivar_names[ci].split(";", -1)
+      types = @cls_ivar_types[ci].split(";", -1)
       changed = 0
       k = 0
       while k < names.length
@@ -21300,7 +22096,7 @@ class Compiler
         end
         ck = 0
         while ck < @cls_includes.length
-          incs = @cls_includes[ck].split(";")
+          incs = @cls_includes[ck].split(";", -1)
           ik = 0
           while ik < incs.length
             if incs[ik] == current_cls_name
@@ -21384,9 +22180,9 @@ class Compiler
         ci = ci + 1
         next
       end
-      names = @cls_ivar_names[ci].split(";")
-      types = @cls_ivar_types[ci].split(";")
-      defs = @cls_ivar_init_definite[ci].split(";")
+      names = @cls_ivar_names[ci].split(";", -1)
+      types = @cls_ivar_types[ci].split(";", -1)
+      defs = @cls_ivar_init_definite[ci].split(";", -1)
  # observed_types are the actual concrete types the inference
  # passes saw written into this slot, accumulated separately from
  # the running @cls_ivar_types (which apply_rbs_seeds may already
@@ -21407,7 +22203,7 @@ class Compiler
             definite = 1
           end
           if definite == 1 && k < obs_row.length && obs_row[k] != ""
-            obs_list = obs_row[k].split(",")
+            obs_list = obs_row[k].split(",", -1)
             oi = 0
             while oi < obs_list.length
               ot = obs_list[oi]
@@ -21561,8 +22357,8 @@ class Compiler
       stj = @nd_scope_types[sj]
       snj = sj < @nd_scope_names.length ? @nd_scope_names[sj] : ""
       if stj != "" && snj != ""
-        psj = stj.split("|")
-        pnj = snj.split("|")
+        psj = stj.split("|", -1)
+        pnj = snj.split("|", -1)
         chj = 0
         ppj = 0
         while ppj < psj.length && ppj < pnj.length
@@ -21760,8 +22556,8 @@ class Compiler
     if ci >= ret_tbl.length
       return
     end
-    rets = ret_tbl[ci].split(";")
-    bodies = ci < body_tbl.length ? body_tbl[ci].split(";") : "".split(",")
+    rets = ret_tbl[ci].split(";", -1)
+    bodies = ci < body_tbl.length ? body_tbl[ci].split(";", -1) : "".split(",", -1)
     changed = 0
     mj = 0
     while mj < rets.length
@@ -21826,7 +22622,7 @@ class Compiler
  # Top-level methods.
     mi = 0
     while mi < @meth_param_types.length
-      pt = @meth_param_types[mi].split(",")
+      pt = @meth_param_types[mi].split(",", -1)
       changed = 0
       pk = 0
       while pk < pt.length
@@ -21848,7 +22644,7 @@ class Compiler
         @meth_return_types[mi] = "bigint"
         @needs_bigint = 1
       elsif @meth_return_types[mi].start_with?("tuple:")
-        tparts_mr = @meth_return_types[mi][6, @meth_return_types[mi].length - 6].split(",")
+        tparts_mr = @meth_return_types[mi][6, @meth_return_types[mi].length - 6].split(",", -1)
         changed_tup_mr = 0
         tpm_i = 0
         while tpm_i < tparts_mr.length
@@ -21887,7 +22683,7 @@ class Compiler
         promote_meth_returns_table(ci, @cls_cmeth_returns)
       end
  # Ivars.
-      ivt = @cls_ivar_types[ci].split(";")
+      ivt = @cls_ivar_types[ci].split(";", -1)
       changed_iv = 0
       ik = 0
       while ik < ivt.length
@@ -21910,11 +22706,11 @@ class Compiler
     if ci >= tbl.length
       return
     end
-    all_pt = tbl[ci].split("|")
+    all_pt = tbl[ci].split("|", -1)
     changed = 0
     mj = 0
     while mj < all_pt.length
-      pts = all_pt[mj].split(",")
+      pts = all_pt[mj].split(",", -1)
       pk = 0
       while pk < pts.length
         if pts[pk] == "int"
@@ -21936,7 +22732,7 @@ class Compiler
     if ci >= tbl.length
       return
     end
-    rets = tbl[ci].split(";")
+    rets = tbl[ci].split(";", -1)
     changed = 0
     mj = 0
     while mj < rets.length
@@ -21951,7 +22747,7 @@ class Compiler
  # promote mode lifting the ivars to bigint, the tuple build emit
  # produces sp_Tuple_bigint_bigint_bigint at the call site, so
  # the return type slot must move too.
-        tparts_ret = rets[mj][6, rets[mj].length - 6].split(",")
+        tparts_ret = rets[mj][6, rets[mj].length - 6].split(",", -1)
         changed_tup_ret = 0
         tpr_i = 0
         while tpr_i < tparts_ret.length
@@ -21987,13 +22783,13 @@ class Compiler
     arbitrate_rbs_method_returns_definite_conflict
  # Class instance methods.
     @cls_meth_rbs_ptypes.each_pair { |k, rbs_pt|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_meth_ptypes.length
         next
       end
-      all_pt = @cls_meth_ptypes[ci].split("|")
+      all_pt = @cls_meth_ptypes[ci].split("|", -1)
       if midx < all_pt.length && all_pt[midx] != rbs_pt
         all_pt[midx] = rbs_pt
         @cls_meth_ptypes[ci] = all_pt.join("|")
@@ -22001,13 +22797,13 @@ class Compiler
       end
     }
     @cls_meth_rbs_returns.each_pair { |k, rbs_ret|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_meth_returns.length
         next
       end
-      rets = @cls_meth_returns[ci].split(";")
+      rets = @cls_meth_returns[ci].split(";", -1)
       if midx < rets.length && rets[midx] != rbs_ret
         rets[midx] = rbs_ret
         @cls_meth_returns[ci] = rets.join(";")
@@ -22016,13 +22812,13 @@ class Compiler
     }
  # Class methods (cmeth).
     @cls_cmeth_rbs_ptypes.each_pair { |k, rbs_pt|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_cmeth_ptypes.length
         next
       end
-      all_pt = @cls_cmeth_ptypes[ci].split("|")
+      all_pt = @cls_cmeth_ptypes[ci].split("|", -1)
       if midx < all_pt.length && all_pt[midx] != rbs_pt
         all_pt[midx] = rbs_pt
         @cls_cmeth_ptypes[ci] = all_pt.join("|")
@@ -22030,13 +22826,13 @@ class Compiler
       end
     }
     @cls_cmeth_rbs_returns.each_pair { |k, rbs_ret|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_cmeth_returns.length
         next
       end
-      rets = @cls_cmeth_returns[ci].split(";")
+      rets = @cls_cmeth_returns[ci].split(";", -1)
       if midx < rets.length && rets[midx] != rbs_ret
         rets[midx] = rbs_ret
         @cls_cmeth_returns[ci] = rets.join(";")
@@ -22151,11 +22947,11 @@ class Compiler
         rcname = @nd_name[recv]
         rci = find_class_idx(rcname)
         if rci >= 0 && rci < @cls_cmeth_bodies.length
-          cmnames = @cls_cmeth_names[rci].split(";")
+          cmnames = @cls_cmeth_names[rci].split(";", -1)
           cmj = 0
           while cmj < cmnames.length
             if cmnames[cmj] == mname
-              cmbodies = @cls_cmeth_bodies[rci].split(";")
+              cmbodies = @cls_cmeth_bodies[rci].split(";", -1)
               if cmj < cmbodies.length
                 bid = cmbodies[cmj].to_i
               end
@@ -22227,13 +23023,13 @@ class Compiler
 
   def arbitrate_rbs_method_returns_definite_conflict
     @cls_meth_rbs_returns.each_pair { |k, rbs_ret|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_meth_bodies.length
         next
       end
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       if midx >= bodies.length
         next
       end
@@ -22241,13 +23037,13 @@ class Compiler
       if bid < 0
         next
       end
-      lits = "".split(",")
+      lits = "".split(",", -1)
       collect_rbs_literal_returns(bid, lits)
       implicit = rbs_body_implicit_return_literal(bid)
       if implicit != ""
         lits.push(implicit)
       end
-      mnames = @cls_meth_names[ci].split(";")
+      mnames = @cls_meth_names[ci].split(";", -1)
       mname = midx < mnames.length ? mnames[midx] : "?"
       li = 0
       while li < lits.length
@@ -22260,13 +23056,13 @@ class Compiler
       end
     }
     @cls_cmeth_rbs_returns.each_pair { |k, rbs_ret|
-      parts = k.split("|")
+      parts = k.split("|", -1)
       ci = parts[0].to_i
       midx = parts[1].to_i
       if ci < 0 || ci >= @cls_cmeth_bodies.length
         next
       end
-      bodies = @cls_cmeth_bodies[ci].split(";")
+      bodies = @cls_cmeth_bodies[ci].split(";", -1)
       if midx >= bodies.length
         next
       end
@@ -22274,13 +23070,13 @@ class Compiler
       if bid < 0
         next
       end
-      lits = "".split(",")
+      lits = "".split(",", -1)
       collect_rbs_literal_returns(bid, lits)
       implicit = rbs_body_implicit_return_literal(bid)
       if implicit != ""
         lits.push(implicit)
       end
-      cmnames = @cls_cmeth_names[ci].split(";")
+      cmnames = @cls_cmeth_names[ci].split(";", -1)
       mname = midx < cmnames.length ? cmnames[midx] : "?"
       li = 0
       while li < lits.length
@@ -22301,7 +23097,7 @@ class Compiler
       if bid < 0
         next
       end
-      lits = "".split(",")
+      lits = "".split(",", -1)
       collect_rbs_literal_returns(bid, lits)
       implicit = rbs_body_implicit_return_literal(bid)
       if implicit != ""
@@ -22492,7 +23288,7 @@ class Compiler
         rcname = @nd_name[recv]
         rci = find_class_idx(rcname)
         if rci >= 0
-          mnames_c = @cls_cmeth_names[rci].split(";")
+          mnames_c = @cls_cmeth_names[rci].split(";", -1)
           cmidx = -1
           mc = 0
           while mc < mnames_c.length
@@ -22516,7 +23312,7 @@ class Compiler
     if rbs_pt == ""
       return
     end
-    rbs_ptypes = rbs_pt.split(",")
+    rbs_ptypes = rbs_pt.split(",", -1)
     ak = 0
     while ak < arg_ids.length && ak < rbs_ptypes.length
       arg_id = arg_ids[ak]
@@ -22537,13 +23333,13 @@ class Compiler
     end
     key = ci.to_s + "|" + midx.to_s
     if ptypes_token != "-" && ptypes_token != ""
-      ptypes = ptypes_token.split(",")
+      ptypes = ptypes_token.split(",", -1)
       cls_meth_ptypes_put(ci, midx, ptypes)
       rbs_mark_cls_meth_seeded(ci, midx)
       @cls_meth_rbs_ptypes[key] = ptypes_token
     end
     if ret != "-" && ret != ""
-      rets = @cls_meth_returns[ci].split(";")
+      rets = @cls_meth_returns[ci].split(";", -1)
       if midx < rets.length
         rets[midx] = ret
         @cls_meth_returns[ci] = rets.join(";")
@@ -22565,7 +23361,7 @@ class Compiler
     if ci < 0 || ci >= @cls_cmeth_names.length
       return false
     end
-    cmnames = @cls_cmeth_names[ci].split(";")
+    cmnames = @cls_cmeth_names[ci].split(";", -1)
     midx = -1
     j = 0
     while j < cmnames.length
@@ -22581,12 +23377,12 @@ class Compiler
     end
     key = ci.to_s + "|" + midx.to_s
     if ptypes_token != "-" && ptypes_token != ""
-      ptypes = ptypes_token.split(",")
+      ptypes = ptypes_token.split(",", -1)
       cls_cmeth_ptypes_put(ci, midx, ptypes)
       @cls_cmeth_rbs_ptypes[key] = ptypes_token
     end
     if ret != "-" && ret != ""
-      rets = @cls_cmeth_returns[ci].split(";")
+      rets = @cls_cmeth_returns[ci].split(";", -1)
       if midx < rets.length
         rets[midx] = ret
         @cls_cmeth_returns[ci] = rets.join(";")
@@ -22632,8 +23428,8 @@ class Compiler
     if iname.length > 0 && !iname.start_with?("@")
       iname = "@" + iname
     end
-    names = @cls_ivar_names[ci].split(";")
-    types = @cls_ivar_types[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
+    types = @cls_ivar_types[ci].split(";", -1)
     j = 0
     found = -1
     while j < names.length
@@ -22657,7 +23453,7 @@ class Compiler
  # arbitrate_rbs_vs_inferred_ivars can restore it after the
  # iterative inference loop, in case some pass widens the slot
  # off the RBS pin. Issue #626 sub-issue 2.
-    rbs_names = @cls_ivar_names[ci].split(";")
+    rbs_names = @cls_ivar_names[ci].split(";", -1)
     rbs_types = @cls_ivar_rbs_types[ci].split(";", -1)
     while rbs_types.length < rbs_names.length
       rbs_types.push("")
@@ -22930,7 +23726,7 @@ class Compiler
       while sj < @nd_scope_types.length
         stj = @nd_scope_types[sj]
         if stj != ""
-          psj = stj.split("|")
+          psj = stj.split("|", -1)
           chj = 0
           ppj = 0
           while ppj < psj.length
@@ -23083,7 +23879,7 @@ class Compiler
  # Top-level method params + returns.
     rmi = 0
     while rmi < @meth_names.length
-      rpt = @meth_param_types[rmi].split(",")
+      rpt = @meth_param_types[rmi].split(",", -1)
       rpi = 0
       while rpi < rpt.length
         if rpt[rpi] != ""
@@ -23115,11 +23911,11 @@ class Compiler
  # Class instance method + cmeth params + returns.
     rci = 0
     while rci < @cls_names.length
-      r_im_pall = @cls_meth_ptypes[rci].split("|")
-      r_im_ret = @cls_meth_returns[rci].split(";")
+      r_im_pall = @cls_meth_ptypes[rci].split("|", -1)
+      r_im_ret = @cls_meth_returns[rci].split(";", -1)
       r_imj = 0
       while r_imj < r_im_pall.length
-        r_im_pt = r_im_pall[r_imj].split(",")
+        r_im_pt = r_im_pall[r_imj].split(",", -1)
         r_imk = 0
         while r_imk < r_im_pt.length
           if r_im_pt[r_imk] != ""
@@ -23151,11 +23947,11 @@ class Compiler
         end
         r_imrj = r_imrj + 1
       end
-      r_cmpall = @cls_cmeth_ptypes[rci].split("|")
-      r_cmret = @cls_cmeth_returns[rci].split(";")
+      r_cmpall = @cls_cmeth_ptypes[rci].split("|", -1)
+      r_cmret = @cls_cmeth_returns[rci].split(";", -1)
       r_cmj = 0
       while r_cmj < r_cmpall.length
-        r_cmpt = r_cmpall[r_cmj].split(",")
+        r_cmpt = r_cmpall[r_cmj].split(",", -1)
         r_cmk = 0
         while r_cmk < r_cmpt.length
           if r_cmpt[r_cmk] != ""
@@ -23188,7 +23984,7 @@ class Compiler
         r_cmrj = r_cmrj + 1
       end
  # ivars
-      r_ivt = @cls_ivar_types[rci].split(";")
+      r_ivt = @cls_ivar_types[rci].split(";", -1)
       r_ivj = 0
       while r_ivj < r_ivt.length
         if r_ivt[r_ivj] != ""
@@ -23213,7 +24009,7 @@ class Compiler
     while r_nd < @nd_scope_types.length
       r_st = @nd_scope_types[r_nd]
       if r_st != ""
-        r_pieces = r_st.split("|")
+        r_pieces = r_st.split("|", -1)
         r_pp = 0
         while r_pp < r_pieces.length
           if r_pieces[r_pp] != ""
@@ -23254,8 +24050,8 @@ class Compiler
  # Top-level + module class methods params.
     bmi = 0
     while bmi < @meth_names.length
-      bpn = @meth_param_names[bmi].split(",")
-      bpt = @meth_param_types[bmi].split(",")
+      bpn = @meth_param_names[bmi].split(",", -1)
+      bpt = @meth_param_types[bmi].split(",", -1)
       bj = 0
       while bj < bpn.length
         if bj < bpt.length
@@ -23278,14 +24074,14 @@ class Compiler
     bci = 0
     while bci < @cls_names.length
       bcn = @cls_names[bci]
-      b_im_pn = @cls_meth_params[bci].split("|")
-      b_im_pt = @cls_meth_ptypes[bci].split("|")
-      b_im_mn = @cls_meth_names[bci].split(";")
-      b_im_rn = @cls_meth_returns[bci].split(";")
+      b_im_pn = @cls_meth_params[bci].split("|", -1)
+      b_im_pt = @cls_meth_ptypes[bci].split("|", -1)
+      b_im_mn = @cls_meth_names[bci].split(";", -1)
+      b_im_rn = @cls_meth_returns[bci].split(";", -1)
       b_imj = 0
       while b_imj < b_im_pn.length
-        b_im_n = b_im_pn[b_imj].split(",")
-        b_im_t = b_im_pt[b_imj].split(",")
+        b_im_n = b_im_pn[b_imj].split(",", -1)
+        b_im_t = b_im_pt[b_imj].split(",", -1)
         b_im_mname = b_imj < b_im_mn.length ? b_im_mn[b_imj] : "?"
         b_imk = 0
         while b_imk < b_im_n.length
@@ -23305,14 +24101,14 @@ class Compiler
         end
         b_imj = b_imj + 1
       end
-      b_cm_pn = @cls_cmeth_params[bci].split("|")
-      b_cm_pt = @cls_cmeth_ptypes[bci].split("|")
-      b_cm_mn = @cls_cmeth_names[bci].split(";")
-      b_cm_rn = @cls_cmeth_returns[bci].split(";")
+      b_cm_pn = @cls_cmeth_params[bci].split("|", -1)
+      b_cm_pt = @cls_cmeth_ptypes[bci].split("|", -1)
+      b_cm_mn = @cls_cmeth_names[bci].split(";", -1)
+      b_cm_rn = @cls_cmeth_returns[bci].split(";", -1)
       b_cmj = 0
       while b_cmj < b_cm_pn.length
-        b_cm_n = b_cm_pn[b_cmj].split(",")
-        b_cm_t = b_cm_pt[b_cmj].split(",")
+        b_cm_n = b_cm_pn[b_cmj].split(",", -1)
+        b_cm_t = b_cm_pt[b_cmj].split(",", -1)
         b_cm_mname = b_cmj < b_cm_mn.length ? b_cm_mn[b_cmj] : "?"
         b_cmk = 0
         while b_cmk < b_cm_n.length
@@ -23332,8 +24128,8 @@ class Compiler
         end
         b_cmj = b_cmj + 1
       end
-      b_ivn = @cls_ivar_names[bci].split(";")
-      b_ivt = @cls_ivar_types[bci].split(";")
+      b_ivn = @cls_ivar_names[bci].split(";", -1)
+      b_ivt = @cls_ivar_types[bci].split(";", -1)
       b_ivj = 0
       while b_ivj < b_ivn.length
         if b_ivj < b_ivt.length
@@ -23362,7 +24158,7 @@ class Compiler
 
   def pre_detect_bigint
     stmts = get_body_stmts(@root_id)
-    bigint_names = "".split(",")
+    bigint_names = "".split(",", -1)
     stmts.each { |sid|
       scan_bigint_candidates(sid, bigint_names)
     }
@@ -23433,7 +24229,7 @@ class Compiler
       return 0
     end
  # Search for assignments where src == var_name
-    pairs = @bi_assigns.split(",")
+    pairs = @bi_assigns.split(",", -1)
     i = 0
     while i < pairs.length
       parts = pairs[i].split(":")
@@ -23566,7 +24362,7 @@ class Compiler
  # them here also means codegen no longer needs them once it stops
  # doing its own scope refinement.
   def detect_bigint_vars(stmts, names, types)
-    bigint_names = "".split(",")
+    bigint_names = "".split(",", -1)
     stmts.each { |sid|
       scan_bigint_candidates(sid, bigint_names)
     }
@@ -23592,7 +24388,7 @@ class Compiler
   def scan_bigint_propagate(stmts, names, types)
     changed = 1
     iter = 0
-    sig_hist = "".split(",")
+    sig_hist = "".split(",", -1)
     while changed == 1
       iter = iter + 1
       if iter > 256
@@ -23724,7 +24520,7 @@ class Compiler
  # Build into a local array and assign at the end.
  # (Pushing directly to @sym_names in this loop triggers a
  # self-host codegen regression — see HANDOFF notes.)
-    local = "".split(",")
+    local = "".split(",", -1)
     i = 0
     while i < @nd_type.length
       t = @nd_type[i]
@@ -23891,7 +24687,7 @@ class Compiler
     elsif t == "StatementsNode"
       stmts = @nd_stmts[bid]
       if stmts != ""
-        parts = stmts.split(",")
+        parts = stmts.split(",", -1)
         if parts.length == 1
           sid = parts[0].to_i
           if sid >= 0 && sid < @nd_count && @nd_type[sid] == "InstanceVariableWriteNode"
@@ -23916,9 +24712,9 @@ class Compiler
     if mnames_str == ""
       return 0
     end
-    mnames = mnames_str.split(";")
-    bodies = @cls_meth_bodies[ci].split(";")
-    writers = @cls_attr_writers[ci].split(";")
+    mnames = mnames_str.split(";", -1)
+    bodies = @cls_meth_bodies[ci].split(";", -1)
+    writers = @cls_attr_writers[ci].split(";", -1)
     mi = 0
     while mi < mnames.length
       mn = mnames[mi]
@@ -23962,9 +24758,9 @@ class Compiler
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
       if mnames_str != ""
-        mnames = mnames_str.split(";")
-        bodies = @cls_meth_bodies[i].split(";")
-        writers = @cls_attr_writers[i].split(";")
+        mnames = mnames_str.split(";", -1)
+        bodies = @cls_meth_bodies[i].split(";", -1)
+        writers = @cls_attr_writers[i].split(";", -1)
         mi = 0
         while mi < mnames.length
           mn = mnames[mi]
@@ -24003,7 +24799,7 @@ class Compiler
     if t == "StatementsNode"
       stmts = @nd_stmts[bid]
       if stmts != ""
-        parts = stmts.split(",")
+        parts = stmts.split(",", -1)
         if parts.length == 1
           sid = parts[0].to_i
           if sid >= 0 && sid < @nd_count
@@ -24031,9 +24827,9 @@ class Compiler
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
       if mnames_str != ""
-        mnames = mnames_str.split(";")
-        bodies = @cls_meth_bodies[i].split(";")
-        readers = @cls_attr_readers[i].split(";")
+        mnames = mnames_str.split(";", -1)
+        bodies = @cls_meth_bodies[i].split(";", -1)
+        readers = @cls_attr_readers[i].split(";", -1)
         mi = 0
         while mi < mnames.length
           mn = mnames[mi]
@@ -24135,7 +24931,7 @@ class Compiler
  # such classes from the value-type optimization keeps `<C>` heap-
  # allocated, so the constructor returns `sp_<C> *` and boxing is
  # well-typed. Mirrors the ptr_array exclusion .
-    @poly_returned_types = "".split(",")
+    @poly_returned_types = "".split(",", -1)
     mi = 0
     while mi < @meth_names.length
       if mi < @meth_return_types.length && @meth_return_types[mi] == "poly"
@@ -24148,8 +24944,8 @@ class Compiler
     end
     ci = 0
     while ci < @cls_names.length
-      bodies = @cls_meth_bodies[ci].split(";")
-      returns = @cls_meth_returns[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
+      returns = @cls_meth_returns[ci].split(";", -1)
       mj = 0
       while mj < bodies.length
         if mj < returns.length && returns[mj] == "poly"
@@ -24180,7 +24976,7 @@ class Compiler
  # same struct-by-void-* mismatch the ptr_array / poly-return
  # passes already guard against.
   def detect_poly_arg_passed_types
-    @poly_arg_passed_types = "".split(",")
+    @poly_arg_passed_types = "".split(",", -1)
     nid = 0
     while nid < @nd_type.length
       if @nd_type[nid] == "CallNode"
@@ -24202,8 +24998,8 @@ class Compiler
         if mfn != ""
           mi = find_method_idx(mfn)
           if mi >= 0
-            pnames = @meth_param_names[mi].split(",")
-            ptypes = @meth_param_types[mi].split(",")
+            pnames = @meth_param_names[mi].split(",", -1)
+            ptypes = @meth_param_types[mi].split(",", -1)
             args_id = @nd_arguments[nid]
             if args_id >= 0
               arg_ids = get_args(args_id)
@@ -24219,15 +25015,15 @@ class Compiler
             if ci2 >= 0
               init_idx = cls_find_method_direct(ci2, "initialize")
               if init_idx >= 0
-                all_params = @cls_meth_params[ci2].split("|")
-                all_ptypes = @cls_meth_ptypes[ci2].split("|")
-                pnames2 = "".split(",")
-                ptypes2 = "".split(",")
+                all_params = @cls_meth_params[ci2].split("|", -1)
+                all_ptypes = @cls_meth_ptypes[ci2].split("|", -1)
+                pnames2 = "".split(",", -1)
+                ptypes2 = "".split(",", -1)
                 if init_idx < all_params.length
-                  pnames2 = all_params[init_idx].split(",")
+                  pnames2 = all_params[init_idx].split(",", -1)
                 end
                 if init_idx < all_ptypes.length
-                  ptypes2 = all_ptypes[init_idx].split(",")
+                  ptypes2 = all_ptypes[init_idx].split(",", -1)
                 end
                 args_id2 = @nd_arguments[nid]
                 if args_id2 >= 0
@@ -24296,7 +25092,7 @@ class Compiler
  # `_push` takes `void *`; if `<C>` were optimized into a value type
  # then `sp_<C>_new(...)` would return the struct by value and the
  # generated push call would be a C type error.
-    @ptr_array_stored_types = "".split(",")
+    @ptr_array_stored_types = "".split(",", -1)
     nid = 0
     while nid < @nd_type.length
       if @nd_type[nid] == "ArrayNode"
@@ -24341,27 +25137,27 @@ class Compiler
 
   def detect_param_mutated_types
  # Find classes whose instances are mutated when passed as method parameters
-    @param_mutated_types = "".split(",")
+    @param_mutated_types = "".split(",", -1)
     i = 0
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
       if mnames_str != ""
-        mnames = mnames_str.split(";")
-        all_params = @cls_meth_params[i].split("|")
-        all_ptypes = @cls_meth_ptypes[i].split("|")
-        bodies = @cls_meth_bodies[i].split(";")
+        mnames = mnames_str.split(";", -1)
+        all_params = @cls_meth_params[i].split("|", -1)
+        all_ptypes = @cls_meth_ptypes[i].split("|", -1)
+        bodies = @cls_meth_bodies[i].split(";", -1)
         mi = 0
         while mi < mnames.length
           if mi < bodies.length && mi < all_params.length
             bid = bodies[mi].to_i
-            pnames = all_params[mi].split(",")
-            ptypes = "".split(",")
+            pnames = all_params[mi].split(",", -1)
+            ptypes = "".split(",", -1)
             if mi < all_ptypes.length
-              ptypes = all_ptypes[mi].split(",")
+              ptypes = all_ptypes[mi].split(",", -1)
             end
  # Collect object-type param names
-            obj_param_names = "".split(",")
-            obj_param_types = "".split(",")
+            obj_param_names = "".split(",", -1)
+            obj_param_types = "".split(",", -1)
             pj = 0
             while pj < pnames.length
               pt = "int"
@@ -24397,10 +25193,10 @@ class Compiler
     mi = 0
     while mi < @meth_names.length
       bid = @meth_body_ids[mi]
-      pnames = @meth_param_names[mi].split(",")
-      ptypes = @meth_param_types[mi].split(",")
-      obj_param_names = "".split(",")
-      obj_param_types = "".split(",")
+      pnames = @meth_param_names[mi].split(",", -1)
+      ptypes = @meth_param_types[mi].split(",", -1)
+      obj_param_names = "".split(",", -1)
+      obj_param_types = "".split(",", -1)
       pj = 0
       while pj < pnames.length
         pt = "int"
@@ -24442,16 +25238,16 @@ class Compiler
  # `<recv>.method(:foo)` can resolve `<recv>` (a local, an ivar via
  # attr_reader, or a chained call) back to its `obj_<X>` type.
   def detect_method_taken_classes
-    @method_taken_class_indices = "".split(",")
+    @method_taken_class_indices = "".split(",", -1)
  # Walk class methods first.
     i = 0
     while i < @cls_names.length
       mnames_str = @cls_meth_names[i]
       if mnames_str != ""
-        mnames = mnames_str.split(";")
-        all_params = @cls_meth_params[i].split("|")
-        all_ptypes = @cls_meth_ptypes[i].split("|")
-        bodies = @cls_meth_bodies[i].split(";")
+        mnames = mnames_str.split(";", -1)
+        all_params = @cls_meth_params[i].split("|", -1)
+        all_ptypes = @cls_meth_ptypes[i].split("|", -1)
+        bodies = @cls_meth_bodies[i].split(";", -1)
         saved_ci = @current_class_idx
         @current_class_idx = i
         mi = 0
@@ -24491,11 +25287,11 @@ class Compiler
     if @nd_type[@root_id] == "ProgramNode"
       stmts = get_body_stmts(@root_id)
       push_scope
-      lnames = "".split(",")
-      ltypes = "".split(",")
+      lnames = "".split(",", -1)
+      ltypes = "".split(",", -1)
       sk = 0
       while sk < stmts.length
-        scan_locals(stmts[sk], lnames, ltypes, "".split(","))
+        scan_locals(stmts[sk], lnames, ltypes, "".split(",", -1))
         sk = sk + 1
       end
       lk = 0
@@ -24514,8 +25310,8 @@ class Compiler
 
   def method_taken_walk_with_scope(bid, pnames_str, ptypes_str, enclosing_ci)
     push_scope
-    pnames = pnames_str.split(",")
-    ptypes = ptypes_str.split(",")
+    pnames = pnames_str.split(",", -1)
+    ptypes = ptypes_str.split(",", -1)
     k = 0
     while k < pnames.length
       pt = "int"
@@ -24525,8 +25321,8 @@ class Compiler
       declare_var(pnames[k], pt)
       k = k + 1
     end
-    lnames = "".split(",")
-    ltypes = "".split(",")
+    lnames = "".split(",", -1)
+    ltypes = "".split(",", -1)
     scan_locals(bid, lnames, ltypes, pnames)
     lk = 0
     while lk < lnames.length
@@ -24619,8 +25415,8 @@ class Compiler
     2.times do
       i = 0
       while i < @cls_names.length
-        names = @cls_ivar_names[i].split(";")
-        types = @cls_ivar_types[i].split(";")
+        names = @cls_ivar_names[i].split(";", -1)
+        types = @cls_ivar_types[i].split(";", -1)
  # Value-type candidates: small immutable scalar classes.
  # Limit to 8 ivars so the struct stays register-friendly.
         if names.length > 0 && names.length <= 8
@@ -24637,7 +25433,7 @@ class Compiler
             if cls_has_self_mutating_methods(i) == 1
               all_val = 0
             end
-            writers = @cls_attr_writers[i].split(";")
+            writers = @cls_attr_writers[i].split(";", -1)
             if writers.length > 0 && writers[0] != ""
               all_val = 0
             end
@@ -24745,8 +25541,8 @@ class Compiler
         i = i + 1
         next
       end
-      names = @cls_ivar_names[i].split(";")
-      types = @cls_ivar_types[i].split(";")
+      names = @cls_ivar_names[i].split(";", -1)
+      types = @cls_ivar_types[i].split(";", -1)
       eligible = 1
       if names.length == 0 || names.length > 8
         eligible = 0
@@ -24774,9 +25570,9 @@ class Compiler
       end
  # Only initialize + attr_* methods (no custom methods).
       if eligible == 1
-        mnames = @cls_meth_names[i].split(";")
-        readers = @cls_attr_readers[i].split(";")
-        writers = @cls_attr_writers[i].split(";")
+        mnames = @cls_meth_names[i].split(";", -1)
+        readers = @cls_attr_readers[i].split(";", -1)
+        writers = @cls_attr_writers[i].split(";", -1)
         mk = 0
         while mk < mnames.length
           mn = mnames[mk]
@@ -24828,7 +25624,7 @@ class Compiler
 
 
   def ivar_in_chain(ci, iname)
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
     k = 0
     while k < names.length
       if names[k] == iname
@@ -24905,7 +25701,7 @@ class Compiler
     if @cls_meth_idx_cache.key?(ck)
       return @cls_meth_idx_cache[ck]
     end
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < mnames.length
       if mnames[j] == mname
@@ -24927,17 +25723,17 @@ class Compiler
  # site closes with two join() calls.
   def cls_meth_ptypes_get(ci, midx)
     if ci < 0 || ci >= @cls_meth_ptypes.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
     if @cmp_outer_version != @cls_meth_ptypes_version || @cmp_outer_ci != ci
-      @cmp_outer_split = @cls_meth_ptypes[ci].split("|")
+      @cmp_outer_split = @cls_meth_ptypes[ci].split("|", -1)
       @cmp_outer_ci = ci
       @cmp_outer_version = @cls_meth_ptypes_version
     end
     if midx >= @cmp_outer_split.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    @cmp_outer_split[midx].split(",")
+    @cmp_outer_split[midx].split(",", -1)
   end
 
   def cls_meth_ptypes_put(ci, midx, ptypes)
@@ -24945,7 +25741,7 @@ class Compiler
       return
     end
     if @cmp_outer_version != @cls_meth_ptypes_version || @cmp_outer_ci != ci
-      @cmp_outer_split = @cls_meth_ptypes[ci].split("|")
+      @cmp_outer_split = @cls_meth_ptypes[ci].split("|", -1)
       @cmp_outer_ci = ci
       @cmp_outer_version = @cls_meth_ptypes_version
     end
@@ -24963,32 +25759,32 @@ class Compiler
 
   def cls_meth_pnames_get(ci, midx)
     if ci < 0 || ci >= @cls_meth_params.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
     if @cmn_outer_version != @cls_meth_params_version || @cmn_outer_ci != ci
-      @cmn_outer_split = @cls_meth_params[ci].split("|")
+      @cmn_outer_split = @cls_meth_params[ci].split("|", -1)
       @cmn_outer_ci = ci
       @cmn_outer_version = @cls_meth_params_version
     end
     if midx >= @cmn_outer_split.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    @cmn_outer_split[midx].split(",")
+    @cmn_outer_split[midx].split(",", -1)
   end
 
   def cls_cmeth_ptypes_get(ci, midx)
     if ci < 0 || ci >= @cls_cmeth_ptypes.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
     if @ccmp_outer_version != @cls_cmeth_ptypes_version || @ccmp_outer_ci != ci
-      @ccmp_outer_split = @cls_cmeth_ptypes[ci].split("|")
+      @ccmp_outer_split = @cls_cmeth_ptypes[ci].split("|", -1)
       @ccmp_outer_ci = ci
       @ccmp_outer_version = @cls_cmeth_ptypes_version
     end
     if midx >= @ccmp_outer_split.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    @ccmp_outer_split[midx].split(",")
+    @ccmp_outer_split[midx].split(",", -1)
   end
 
   def cls_cmeth_ptypes_put(ci, midx, ptypes)
@@ -24996,7 +25792,7 @@ class Compiler
       return
     end
     if @ccmp_outer_version != @cls_cmeth_ptypes_version || @ccmp_outer_ci != ci
-      @ccmp_outer_split = @cls_cmeth_ptypes[ci].split("|")
+      @ccmp_outer_split = @cls_cmeth_ptypes[ci].split("|", -1)
       @ccmp_outer_ci = ci
       @ccmp_outer_version = @cls_cmeth_ptypes_version
     end
@@ -25011,17 +25807,17 @@ class Compiler
 
   def cls_cmeth_pnames_get(ci, midx)
     if ci < 0 || ci >= @cls_cmeth_params.length || midx < 0
-      return "".split(",")
+      return "".split(",", -1)
     end
     if @ccmn_outer_version != @cls_cmeth_params_version || @ccmn_outer_ci != ci
-      @ccmn_outer_split = @cls_cmeth_params[ci].split("|")
+      @ccmn_outer_split = @cls_cmeth_params[ci].split("|", -1)
       @ccmn_outer_ci = ci
       @ccmn_outer_version = @cls_cmeth_params_version
     end
     if midx >= @ccmn_outer_split.length
-      return "".split(",")
+      return "".split(",", -1)
     end
-    @ccmn_outer_split[midx].split(",")
+    @ccmn_outer_split[midx].split(",", -1)
   end
 
  # Walk the inheritance chain starting at class `ci` looking for the
@@ -25078,8 +25874,8 @@ class Compiler
     while iter < 8
       i = 0
       while i < @cls_names.length
-        cmnames = @cls_cmeth_names[i].split(";")
-        cm_bodies = @cls_cmeth_bodies[i].split(";")
+        cmnames = @cls_cmeth_names[i].split(";", -1)
+        cm_bodies = @cls_cmeth_bodies[i].split(";", -1)
         j = 0
         while j < cmnames.length
           if cmnames[j] != "" && cls_cmeth_is_live(i, cmnames[j]) == 1
@@ -25138,7 +25934,7 @@ class Compiler
                    "+", "-", "*", "/", "%", "<<", "coerce", "<<="]
     ci = 0
     while ci < @cls_names.length
-      mnames_init = @cls_meth_names[ci].split(";")
+      mnames_init = @cls_meth_names[ci].split(";", -1)
       mj_init = 0
       while mj_init < mnames_init.length
         ai = 0
@@ -25154,9 +25950,9 @@ class Compiler
     end
  # Step 2/3: collect every CallNode name + SymbolNode value, mark
  # methods on every class that has them.
- # `"".split(",")` initializer types `used` as a str_array, since
+ # `"".split(",", -1)` initializer types `used` as a str_array, since
  # `acc` in collect_used_method_names is pushed strings only.
-    used = "".split(",")
+    used = "".split(",", -1)
     collect_used_method_names(@root_id, used)
  # Lifted instance_eval blocks: their bodies were detached from
  # @root_id by ieval_rewrite_call and stashed in @ieval_body_ids,
@@ -25178,7 +25974,7 @@ class Compiler
     end
     ci_b = 0
     while ci_b < @cls_names.length
-      mb_list = @cls_meth_bodies[ci_b].split(";")
+      mb_list = @cls_meth_bodies[ci_b].split(";", -1)
       mbk = 0
       while mbk < mb_list.length
         bid_mb = mb_list[mbk].to_i
@@ -25187,7 +25983,7 @@ class Compiler
         end
         mbk = mbk + 1
       end
-      cmb_list = @cls_cmeth_bodies[ci_b].split(";")
+      cmb_list = @cls_cmeth_bodies[ci_b].split(";", -1)
       cmbk = 0
       while cmbk < cmb_list.length
         bid_cmb = cmb_list[cmbk].to_i
@@ -25203,7 +25999,7 @@ class Compiler
       uname = used[ui]
       ci2 = 0
       while ci2 < @cls_names.length
-        mns = @cls_meth_names[ci2].split(";")
+        mns = @cls_meth_names[ci2].split(";", -1)
         mj2 = 0
         while mj2 < mns.length
           if mns[mj2] == uname
@@ -25214,6 +26010,36 @@ class Compiler
         ci2 = ci2 + 1
       end
       ui = ui + 1
+    end
+ # Step 4 (issue #720): for every class with a prep chain, if the
+ # active user-visible method is live, mark every synthetic shadow
+ # in the chain live too. Shadows are only called from super
+ # dispatch (compile_super_expr) which doesn't appear as a
+ # CallNode in the AST, so the previous steps miss them.
+    cip = 0
+    while cip < @cls_meth_prep_chain.length
+      chain_str = @cls_meth_prep_chain[cip]
+      if chain_str != ""
+        entries = chain_str.split(";", -1)
+        ep = 0
+        while ep < entries.length
+          eq_pos = entries[ep].index("=")
+          if eq_pos != nil
+            em = entries[ep][0, eq_pos]
+            if cls_meth_is_live(cip, em) == 1
+              syns_str = entries[ep][eq_pos + 1, entries[ep].length - eq_pos - 1]
+              syns = syns_str.split(",", -1)
+              sp = 0
+              while sp < syns.length
+                cls_meth_mark_live(cip, syns[sp])
+                sp = sp + 1
+              end
+            end
+          end
+          ep = ep + 1
+        end
+      end
+      cip = cip + 1
     end
   end
 
@@ -25302,7 +26128,7 @@ class Compiler
     if ci < 0 || ci >= @cls_names.length
       return
     end
-    cmnames = @cls_cmeth_names[ci].split(";")
+    cmnames = @cls_cmeth_names[ci].split(";", -1)
     has = 0
     k = 0
     while k < cmnames.length
@@ -25403,7 +26229,7 @@ class Compiler
             mod_name = @nd_name[inner_recv]
             resolved = module_acc_resolved(mod_name, @nd_name[recv])
             if resolved != "" && resolved != "?"
-              rnames = resolved.split(";")
+              rnames = resolved.split(";", -1)
               ri = 0
               while ri < rnames.length
                 tci2 = find_class_idx(rnames[ri])
@@ -25589,17 +26415,17 @@ class Compiler
  # by an explicit literal write, "" otherwise. Reset when called with
  # a fresh (empty) names array.
     if names.length == 0
-      @scan_literal_flags = "".split(",")
+      @scan_literal_flags = "".split(",", -1)
  # Parallel to `names`: "1" if every write to this local so far was
  # an empty `[]` literal — used to defer the array element type
  # until first `push` . A subsequent write with a
  # concrete element resets the flag to "".
-      @scan_empty_flags = "".split(",")
+      @scan_empty_flags = "".split(",", -1)
  # Parallel to `names`: "1" if the FIRST write to this local was an
  # empty `{}` literal — promote_empty_hash_local_writes uses this to
  # decide whether to refine str_int_hash (the empty-hash default)
  # to a more specific variant on first []= write.
-      @scan_empty_hash_flags = "".split(",")
+      @scan_empty_hash_flags = "".split(",", -1)
     end
  # `case x in [a, b, c]` -- the bound LVs in the array pattern's
  # requireds list need to live in the surrounding scope so the
@@ -25645,14 +26471,61 @@ class Compiler
         end
         ap_ri = ap_ri + 1
       end
+ # `case x in [a, *rest]` -- the splat target. Type is the
+ # source array's full type (slice keeps the variant). Issue #844.
+      ap_rest = @nd_rest[nid]
+      if ap_rest >= 0 && @nd_type[ap_rest] == "SplatNode"
+        ap_rest_exp = @nd_expression[ap_rest]
+        if ap_rest_exp >= 0 && @nd_type[ap_rest_exp] == "LocalVariableTargetNode"
+          ap_rname = @nd_name[ap_rest_exp]
+          if not_in(ap_rname, names) == 1 && not_in(ap_rname, params) == 1
+            names.push(ap_rname)
+            types.push(@scan_case_match_pred_type != "" ? @scan_case_match_pred_type : "int_array")
+            @scan_literal_flags.push("")
+            @scan_empty_flags.push("")
+            @scan_empty_hash_flags.push("")
+          end
+        end
+      end
+    end
+ # `case x in {a:, b:}` -- HashPatternNode, the named hash keys
+ # bind to LVs whose type is the hash's value type. Issue #805.
+    if @nd_type[nid] == "HashPatternNode"
+      hp_elems = parse_id_list(@nd_elements[nid])
+      hp_val_t = @scan_case_match_pred_val_t != "" ? @scan_case_match_pred_val_t : "int"
+      hp_ei = 0
+      while hp_ei < hp_elems.length
+        hp_asoc = hp_elems[hp_ei]
+        if @nd_type[hp_asoc] == "AssocNode"
+          hp_v = @nd_expression[hp_asoc]
+          if hp_v >= 0 && @nd_type[hp_v] == "LocalVariableTargetNode"
+            hp_lname = @nd_name[hp_v]
+            if not_in(hp_lname, names) == 1 && not_in(hp_lname, params) == 1
+              names.push(hp_lname)
+              types.push(hp_val_t)
+              @scan_literal_flags.push("")
+              @scan_empty_flags.push("")
+              @scan_empty_hash_flags.push("")
+            end
+          end
+        end
+        hp_ei = hp_ei + 1
+      end
     end
  # CaseMatchNode: stash the scrutinee's element type so the
  # ArrayPatternNode handler above can type the bound LVs.
     if @nd_type[nid] == "CaseMatchNode"
       saved_pred_elem = @scan_case_match_pred_elem
+      saved_pred_val_t = @scan_case_match_pred_val_t
+      saved_pred_type_full = @scan_case_match_pred_type
       pred_nid = @nd_predicate[nid]
       if pred_nid >= 0
         cmt = infer_type(pred_nid)
+ # Issues #884 #905: stash the scrutinee's full type so a bare
+ # `LocalVariableTargetNode` pattern (`case x in n`) or a
+ # `CapturePatternNode` (`case x in [...] => arr`) can bind
+ # its LV with the right slot type.
+        @scan_case_match_pred_type = cmt
         if cmt == "int_array" || cmt == "sym_array"
           @scan_case_match_pred_elem = "int"
         elsif cmt == "str_array"
@@ -25666,10 +26539,69 @@ class Compiler
         else
           @scan_case_match_pred_elem = ""
         end
+ # Issue #805: stash the hash value type so HashPatternNode's
+ # LV binding above gets the right element type.
+        if cmt == "sym_int_hash" || cmt == "str_int_hash"
+          @scan_case_match_pred_val_t = "int"
+        elsif cmt == "sym_str_hash" || cmt == "str_str_hash" || cmt == "int_str_hash"
+          @scan_case_match_pred_val_t = "string"
+        elsif cmt == "sym_poly_hash" || cmt == "str_poly_hash" || cmt == "poly_poly_hash"
+          @scan_case_match_pred_val_t = "poly"
+        else
+          @scan_case_match_pred_val_t = ""
+        end
       end
       scan_locals_children(nid, names, types, params)
       @scan_case_match_pred_elem = saved_pred_elem
+      @scan_case_match_pred_val_t = saved_pred_val_t
+      @scan_case_match_pred_type = saved_pred_type_full
       return
+    end
+ # `case x in pat => var` (CapturePatternNode) -- register the
+ # target LV with the scrutinee's type. Issue #884.
+    if @nd_type[nid] == "CapturePatternNode"
+      cp_target = @nd_target[nid]
+      if cp_target >= 0 && @nd_type[cp_target] == "LocalVariableTargetNode"
+        cp_lname = @nd_name[cp_target]
+        if not_in(cp_lname, names) == 1 && not_in(cp_lname, params) == 1
+          names.push(cp_lname)
+          types.push(@scan_case_match_pred_type != "" ? @scan_case_match_pred_type : "int")
+          @scan_literal_flags.push("")
+          @scan_empty_flags.push("")
+          @scan_empty_hash_flags.push("")
+        end
+      end
+      scan_locals_children(nid, names, types, params)
+      return
+    end
+ # `case x in n` (bare LocalVariableTargetNode pattern at the
+ # InNode root) -- register n with the scrutinee's type. Also
+ # `in n if guard` (IfNode wrapping a LocalVariableTargetNode
+ # in its statements). Issues #905 #884.
+    if @nd_type[nid] == "InNode"
+      pat_in = @nd_pattern[nid]
+      in_target_pat = pat_in
+ # Unwrap IfNode (guard clause) to find the underlying pattern.
+ # "statements" parser field maps onto @nd_body.
+      if in_target_pat >= 0 && @nd_type[in_target_pat] == "IfNode"
+        in_if_stmts = @nd_body[in_target_pat]
+        if in_if_stmts >= 0
+          in_if_body = get_stmts(in_if_stmts)
+          if in_if_body.length > 0
+            in_target_pat = in_if_body[0]
+          end
+        end
+      end
+      if in_target_pat >= 0 && @nd_type[in_target_pat] == "LocalVariableTargetNode"
+        in_lname = @nd_name[in_target_pat]
+        if not_in(in_lname, names) == 1 && not_in(in_lname, params) == 1
+          names.push(in_lname)
+          types.push(@scan_case_match_pred_type != "" ? @scan_case_match_pred_type : "int")
+          @scan_literal_flags.push("")
+          @scan_empty_flags.push("")
+          @scan_empty_hash_flags.push("")
+        end
+      end
     end
     if @nd_type[nid] == "MultiWriteNode"
       targets = parse_id_list(@nd_targets[nid])
@@ -25871,6 +26803,48 @@ class Compiler
               end
             end
             ki = ki + 1
+          end
+        end
+      end
+    end
+ # `a ||= rhs` / `a &&= rhs` -- the conditional write can switch
+ # `a` from its initial type to the rhs type. Widen the slot
+ # so reads downstream see the union (poly for incompatible
+ # base types). Same merge rules as LocalVariableWriteNode.
+ # Issue #702.
+    if @nd_type[nid] == "LocalVariableOrWriteNode" || @nd_type[nid] == "LocalVariableAndWriteNode"
+      lname = @nd_name[nid]
+      if not_in(lname, names) == 1
+        if not_in(lname, params) == 1
+          names.push(lname)
+          types.push(infer_type(@nd_expression[nid]))
+          @scan_literal_flags.push("")
+          @scan_empty_flags.push("")
+          @scan_empty_hash_flags.push("")
+        end
+      else
+        if not_in(lname, params) == 1
+          at_oa = infer_type(@nd_expression[nid])
+          koa = 0
+          while koa < names.length
+            if names[koa] == lname && types[koa] != at_oa && types[koa] != "poly"
+              if at_oa == "nil" && is_nullable_pointer_type(types[koa]) == 1
+                if types[koa][types[koa].length - 1] != "?"
+                  types[koa] = types[koa] + "?"
+                end
+              elsif types[koa] == "nil" && is_nullable_pointer_type(at_oa) == 1
+                types[koa] = is_nullable_type(at_oa) == 1 ? at_oa : (at_oa + "?")
+              elsif base_type(types[koa]) == at_oa || base_type(at_oa) == types[koa] || base_type(types[koa]) == base_type(at_oa)
+ # compatible — leave the richer one
+                if base_type(at_oa) == types[koa]
+                  types[koa] = at_oa
+                end
+              else
+                types[koa] = "poly"
+                @needs_rb_value = 1
+              end
+            end
+            koa = koa + 1
           end
         end
       end
@@ -26097,15 +27071,15 @@ class Compiler
               icm_args_id = @nd_arguments[nid]
               if icm_args_id >= 0
                 icm_aargs = get_args(icm_args_id)
-                icm_all_ptypes = @cls_meth_ptypes[icm_owner_ci].split("|")
-                icm_all_empty = @cls_meth_ptypes_empty[icm_owner_ci].split("|")
-                icm_ptypes = "".split(",")
-                icm_empties = "".split(",")
+                icm_all_ptypes = @cls_meth_ptypes[icm_owner_ci].split("|", -1)
+                icm_all_empty = @cls_meth_ptypes_empty[icm_owner_ci].split("|", -1)
+                icm_ptypes = "".split(",", -1)
+                icm_empties = "".split(",", -1)
                 if icm_midx < icm_all_ptypes.length
-                  icm_ptypes = icm_all_ptypes[icm_midx].split(",")
+                  icm_ptypes = icm_all_ptypes[icm_midx].split(",", -1)
                 end
                 if icm_midx < icm_all_empty.length
-                  icm_empties = icm_all_empty[icm_midx].split(",")
+                  icm_empties = icm_all_empty[icm_midx].split(",", -1)
                 end
                 icm_changed = 0
                 icm_k = 0
@@ -26183,12 +27157,12 @@ class Compiler
           ea_args_id = @nd_arguments[nid]
           if ea_args_id >= 0
             ea_aargs = get_args(ea_args_id)
-            ea_ptypes = @meth_param_types[ea_mi].split(",")
+            ea_ptypes = @meth_param_types[ea_mi].split(",", -1)
             ea_empty_str = ""
             if ea_mi < @meth_param_empty.length
               ea_empty_str = @meth_param_empty[ea_mi]
             end
-            ea_empties = ea_empty_str.split(",")
+            ea_empties = ea_empty_str.split(",", -1)
             ea_changed = 0
             ea_k = 0
             while ea_k < ea_aargs.length
@@ -26518,9 +27492,12 @@ class Compiler
         end
       end
     end
- # Detect << on string local variable: widen to mutable_str
+ # Detect mutating method on string local variable: widen to
+ # mutable_str. Issues #740, #741 extend this to prepend/insert.
     if @nd_type[nid] == "CallNode"
-      if @nd_name[nid] == "<<"
+      mname_mu = @nd_name[nid]
+      if mname_mu == "<<" || mname_mu == "prepend" || mname_mu == "insert" ||
+         mname_mu == "concat" || mname_mu == "replace"
         recv = @nd_receiver[nid]
         if recv >= 0
           if @nd_type[recv] == "LocalVariableReadNode"
@@ -26671,7 +27648,7 @@ class Compiler
                         if owner_ci_each >= 0
                           owner_midx_each = cls_find_method(owner_ci_each, mname)
                           arity_each = cls_method_yield_arity(owner_ci_each, owner_midx_each)
-                          ytypes_each = "".split(",")
+                          ytypes_each = "".split(",", -1)
                           ka = 0
                           while ka < arity_each
                             ytypes_each.push("")
@@ -26687,11 +27664,11 @@ class Compiler
  # default) and we'd miss the body-driven type.
                           if ybid_each >= 0
                             push_scope
-                            yl_names = "".split(",")
-                            yl_types = "".split(",")
+                            yl_names = "".split(",", -1)
+                            yl_types = "".split(",", -1)
                             saved_ci_each = @current_class_idx
                             @current_class_idx = owner_ci_each
-                            scan_locals(ybid_each, yl_names, yl_types, "".split(","))
+                            scan_locals(ybid_each, yl_names, yl_types, "".split(",", -1))
                             yj = 0
                             while yj < yl_names.length
                               declare_var(yl_names[yj], yl_types[yj])
@@ -26720,16 +27697,16 @@ class Compiler
                       ybid_628 = @meth_body_ids[mi_628]
                       if ybid_628 >= 0
                         arity_628 = method_yield_arity(mi_628)
-                        ytypes_628 = "".split(",")
+                        ytypes_628 = "".split(",", -1)
                         ka_628 = 0
                         while ka_628 < arity_628
                           ytypes_628.push("")
                           ka_628 = ka_628 + 1
                         end
                         push_scope
-                        yl_names_628 = "".split(",")
-                        yl_types_628 = "".split(",")
-                        scan_locals(ybid_628, yl_names_628, yl_types_628, "".split(","))
+                        yl_names_628 = "".split(",", -1)
+                        yl_types_628 = "".split(",", -1)
+                        scan_locals(ybid_628, yl_names_628, yl_types_628, "".split(",", -1))
                         yj_628 = 0
                         while yj_628 < yl_names_628.length
                           declare_var(yl_names_628[yj_628], yl_types_628[yj_628])
@@ -26748,6 +27725,30 @@ class Compiler
  # Already pushed via the no-recv yield branch above.
                   elsif mname == "times" || mname == "upto" || mname == "downto"
                     types.push("int")
+ # Issue #870: Float#step yields floats when recv or any step
+ # arg is float. Without the float slot, lv_x += 0.5 truncates
+ # to += 0 and loops forever.
+                  elsif mname == "step"
+                    is_float_step_sl = 0
+                    if @nd_receiver[nid] >= 0 && infer_type(@nd_receiver[nid]) == "float"
+                      is_float_step_sl = 1
+                    end
+                    args_step_sl = @nd_arguments[nid]
+                    if args_step_sl >= 0
+                      aargs_step_sl = get_args(args_step_sl)
+                      ai_sl = 0
+                      while ai_sl < aargs_step_sl.length
+                        if infer_type(aargs_step_sl[ai_sl]) == "float"
+                          is_float_step_sl = 1
+                        end
+                        ai_sl = ai_sl + 1
+                      end
+                    end
+                    if is_float_step_sl == 1
+                      types.push("float")
+                    else
+                      types.push("int")
+                    end
  # `<source>.with_index(off).<consumer> { |elem, idx| }`:
  # block param at bk=1 is the idx counter (int), not another
  # element of the source. Without this, the same elem_type-
@@ -27166,7 +28167,7 @@ class Compiler
       return @current_method_name[0, cls_idx]
     end
     if @current_class_idx >= 0 && @current_class_idx < @cls_names.length
-      cm = @cls_cmeth_names[@current_class_idx].split(";")
+      cm = @cls_cmeth_names[@current_class_idx].split(";", -1)
       k = 0
       while k < cm.length
         if cm[k] == @current_method_name
@@ -27228,7 +28229,7 @@ class Compiler
  # parent chain so a subclass call to an inherited
  # attr_accessor reader is recognised (issue #508 analyze side).
   def cls_has_attr_reader(ci, mname)
-    readers = @cls_attr_readers[ci].split(";")
+    readers = @cls_attr_readers[ci].split(";", -1)
     j = 0
     while j < readers.length
       if readers[j] == mname
@@ -27307,7 +28308,7 @@ class Compiler
     if obs == ""
       return 0
     end
-    distinct = obs.split(",")
+    distinct = obs.split(",", -1)
     saw_any = 0
     di = 0
     while di < distinct.length
@@ -27345,7 +28346,7 @@ class Compiler
       return @lv_alias_cache[cache_key]
     end
     found = ""
-    bodies = @cls_meth_bodies[@current_class_idx].split(";")
+    bodies = @cls_meth_bodies[@current_class_idx].split(";", -1)
     bi = 0
     while bi < bodies.length
       bid = bodies[bi].to_i
@@ -27413,7 +28414,7 @@ class Compiler
     if ci < 0 || ci >= @cls_ivar_observed_types.length
       return ""
     end
-    names = @cls_ivar_names[ci].split(";")
+    names = @cls_ivar_names[ci].split(";", -1)
     parts = @cls_ivar_observed_types[ci].split(";", -1)
     k = 0
     while k < names.length
@@ -27458,7 +28459,7 @@ class Compiler
     have_poly = 0
     seen_non_obj = 0
     if obs != ""
-      parts = obs.split(",")
+      parts = obs.split(",", -1)
       k = 0
       while k < parts.length
         t = parts[k]
@@ -27501,7 +28502,7 @@ class Compiler
       return ""
     end
     if walked != ""
-      walked.split(",").each { |w| out = obs_add(out, w) }
+      walked.split(",", -1).each { |w| out = obs_add(out, w) }
     end
     if out == ""
       return ""
@@ -27514,7 +28515,7 @@ class Compiler
     if out == ""
       return cidx_str
     end
-    cur = out.split(",")
+    cur = out.split(",", -1)
     k = 0
     while k < cur.length
       if cur[k] == cidx_str
@@ -27545,8 +28546,8 @@ class Compiler
       return @ivar_concrete_recover_cache[ck]
     end
     out = ""
-    mnames_w = @cls_meth_names[ci].split(";")
-    bodies_w = @cls_meth_bodies[ci].split(";")
+    mnames_w = @cls_meth_names[ci].split(";", -1)
+    bodies_w = @cls_meth_bodies[ci].split(";", -1)
     mi_w = 0
     while mi_w < mnames_w.length
       bid_w = -1
@@ -27562,7 +28563,7 @@ class Compiler
           return "?"
         end
         if result_for_meth != ""
-          result_for_meth.split(",").each { |w| out = obs_add(out, w) }
+          result_for_meth.split(",", -1).each { |w| out = obs_add(out, w) }
         end
       end
       mi_w = mi_w + 1
@@ -27605,7 +28606,7 @@ class Compiler
             if call_obs == "?"
               poison = 1
             elsif call_obs != ""
-              call_obs.split(",").each { |w| out = obs_add(out, w) }
+              call_obs.split(",", -1).each { |w| out = obs_add(out, w) }
             end
           end
         end
@@ -27786,7 +28787,7 @@ class Compiler
     if ci < 0
       return ""
     end
-    mnames = @cls_meth_names[ci].split(";")
+    mnames = @cls_meth_names[ci].split(";", -1)
     j = 0
     while j < mnames.length
       if mnames[j] == mname
@@ -27804,10 +28805,10 @@ class Compiler
   end
 
  # if midx is out of range or the body id is invalid. Centralises
- # the @cls_meth_bodies[ci].split(";")[midx].to_i parse so detectors
+ # the @cls_meth_bodies[ci].split(";", -1)[midx].to_i parse so detectors
  # don't have to inline it.
   def cls_method_body_id(ci, midx)
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if midx >= bodies.length
       return -1
     end
@@ -27857,7 +28858,7 @@ class Compiler
   end
 
   def cls_method_has_yield(ci, midx)
-    ystr = @cls_meth_has_yield[ci].split(";")
+    ystr = @cls_meth_has_yield[ci].split(";", -1)
     if midx < ystr.length
       if ystr[midx] == "1"
         return 1
@@ -27921,7 +28922,7 @@ class Compiler
     if ci < 0 || midx < 0
       return 1
     end
-    bodies = @cls_meth_bodies[ci].split(";")
+    bodies = @cls_meth_bodies[ci].split(";", -1)
     if midx >= bodies.length
       return 1
     end
@@ -28455,6 +29456,7 @@ class Compiler
     buf = ir_emit_sa(buf, "@cls_meth_bodies", @cls_meth_bodies)
     buf = ir_emit_sa(buf, "@cls_meth_defaults", @cls_meth_defaults)
     buf = ir_emit_sa(buf, "@cls_meth_ptypes_empty", @cls_meth_ptypes_empty)
+    buf = ir_emit_sa(buf, "@cls_meth_prep_chain", @cls_meth_prep_chain)
     buf = ir_emit_sa(buf, "@cls_attr_readers", @cls_attr_readers)
     buf = ir_emit_sa(buf, "@cls_attr_writers", @cls_attr_writers)
     buf = ir_emit_sa(buf, "@cls_cmeth_names", @cls_cmeth_names)
@@ -28575,8 +29577,11 @@ class Compiler
  # Non-array string ivars (computed in analyze, consumed by emit)
     buf = buf + "STR @cls_cmeth_live " + ir_escape(@cls_cmeth_live) + "\n"
     buf = buf + "STR @cls_meth_live " + ir_escape(@cls_meth_live) + "\n"
-    buf = buf + "STR @meth_blk_param_types " + ir_escape(@meth_blk_param_types.join("|")) + "\n"
-    buf = buf + "STR @cls_cmeth_blk_param_types " + ir_escape(@cls_cmeth_blk_param_types.join("|")) + "\n"
+ # Issue #750: switch to SA (string array) so each element is
+ # escaped individually -- inner `|` in `int|int` no longer
+ # collides with the outer separator on round-trip.
+    buf = ir_emit_sa(buf, "@meth_blk_param_types", @meth_blk_param_types)
+    buf = ir_emit_sa(buf, "@cls_cmeth_blk_param_types", @cls_cmeth_blk_param_types)
 
  # Per-AST-node records (T / NM / NB / SN / ST) get accumulated
  # into a StrArray and joined once. Building them with `buf + ...`
@@ -28585,7 +29590,7 @@ class Compiler
  # (one per reachable node, ~150K on spinel_codegen.rb) that
  # quadratic blew up the spinel-compiled binary's heap to 60GB
  # before crashing.
-    rec_buf = "".split(",")
+    rec_buf = "".split(",", -1)
     ni = 0
     while ni < @nd_count
       t = @nd_inferred_type[ni]
@@ -28807,7 +29812,7 @@ class Compiler
     if nt == "CallNode" && @nd_receiver[nid] < 0 && @nd_name[nid] != "new" && @current_class_idx >= 0
       mn_check = @nd_name[nid]
       if find_method_idx(mn_check) < 0
-        cmnames_check = @cls_cmeth_names[@current_class_idx].split(";")
+        cmnames_check = @cls_cmeth_names[@current_class_idx].split(";", -1)
         ccheck = 0
         while ccheck < cmnames_check.length
           if cmnames_check[ccheck] == mn_check
@@ -28885,8 +29890,8 @@ class Compiler
  # Refinement passes — re-scan with declared scope; promote refined types.
     pass = 0
     while pass < 2
-      ln = "".split(",")
-      lt = "".split(",")
+      ln = "".split(",", -1)
+      lt = "".split(",", -1)
       si = 0
       while si < stmts.length
         sid = stmts[si]
@@ -28999,16 +30004,16 @@ class Compiler
         ybid_bp = @meth_body_ids[mi_bp]
         if ybid_bp >= 0
           arity_bp = method_yield_arity(mi_bp)
-          ytypes_bp = "".split(",")
+          ytypes_bp = "".split(",", -1)
           ka_bp = 0
           while ka_bp < arity_bp
             ytypes_bp.push("")
             ka_bp = ka_bp + 1
           end
           push_scope
-          yl_names_bp = "".split(",")
-          yl_types_bp = "".split(",")
-          scan_locals(ybid_bp, yl_names_bp, yl_types_bp, "".split(","))
+          yl_names_bp = "".split(",", -1)
+          yl_types_bp = "".split(",", -1)
+          scan_locals(ybid_bp, yl_names_bp, yl_types_bp, "".split(",", -1))
           yj_bp = 0
           while yj_bp < yl_names_bp.length
             declare_var(yl_names_bp[yj_bp], yl_types_bp[yj_bp])
@@ -29036,16 +30041,16 @@ class Compiler
         ybid_bp = @meth_body_ids[mi_bp]
         if ybid_bp >= 0
           arity_bp = method_yield_arity(mi_bp)
-          ytypes_bp = "".split(",")
+          ytypes_bp = "".split(",", -1)
           ka_bp = 0
           while ka_bp < arity_bp
             ytypes_bp.push("")
             ka_bp = ka_bp + 1
           end
           push_scope
-          yl_names_bp = "".split(",")
-          yl_types_bp = "".split(",")
-          scan_locals(ybid_bp, yl_names_bp, yl_types_bp, "".split(","))
+          yl_names_bp = "".split(",", -1)
+          yl_types_bp = "".split(",", -1)
+          scan_locals(ybid_bp, yl_names_bp, yl_types_bp, "".split(",", -1))
           yj_bp = 0
           while yj_bp < yl_names_bp.length
             declare_var(yl_names_bp[yj_bp], yl_types_bp[yj_bp])
@@ -29082,6 +30087,61 @@ class Compiler
       if mname == "each" && recv >= 0 && @nd_type[recv] == "CallNode" && @nd_name[recv] == "group_by" && @nd_block[recv] >= 0
         return "poly" if pi == 0
         return "poly_array" if pi == 1
+      end
+ # Issue #829: `arr.each_cons(n).map { |x, y, ...| }` and the
+ # each_slice variant fuse in codegen and auto-destructure the
+ # yielded sub-array across multiple block params. The block
+ # sees each param as a *scalar* element of the inner array,
+ # not as the sub-array itself. Without this the analyzer types
+ # `x` as int_array and `y - x` dispatches to set difference.
+ # Issue #829: arr.each_cons(n)[.with_index].map { |x, y, ...[, i]| }
+ # auto-destructures when block req-param count matches n (+1 for
+ # with_index). `|pair|` and `|pair, i|` stay as sub-arrays.
+      if mname == "map"
+        ec_arr_node_fz = -1
+        ec_wi_flag_fz = 0
+        if recv >= 0 && @nd_type[recv] == "CallNode" && (@nd_name[recv] == "each_cons" || @nd_name[recv] == "each_slice") && @nd_block[recv] < 0
+          ec_arr_node_fz = recv
+        elsif recv >= 0 && @nd_type[recv] == "CallNode" && @nd_name[recv] == "with_index" && @nd_block[recv] < 0
+          inner_fz = @nd_receiver[recv]
+          if inner_fz >= 0 && @nd_type[inner_fz] == "CallNode" && (@nd_name[inner_fz] == "each_cons" || @nd_name[inner_fz] == "each_slice") && @nd_block[inner_fz] < 0
+            ec_arr_node_fz = inner_fz
+            ec_wi_flag_fz = 1
+          end
+        end
+        if ec_arr_node_fz >= 0
+          ec_inner_recv_fz = @nd_receiver[ec_arr_node_fz]
+          ec_n_fz = -1
+          ec_args_fz = @nd_arguments[ec_arr_node_fz]
+          if ec_args_fz >= 0
+            ec_a_list_fz = get_args(ec_args_fz)
+            if ec_a_list_fz.length > 0 && @nd_type[ec_a_list_fz[0]] == "IntegerNode"
+              ec_n_fz = @nd_value[ec_a_list_fz[0]].to_i
+            end
+          end
+          if ec_inner_recv_fz >= 0 && ec_n_fz > 0
+            ec_inner_rt_fz = infer_type(ec_inner_recv_fz)
+            if is_array_type(ec_inner_rt_fz) == 1
+              blk_fz = @nd_block[call_nid]
+              if blk_fz >= 0
+                ec_bpn_fz = @nd_parameters[blk_fz]
+                if ec_bpn_fz >= 0
+                  ec_inner_pn_fz = @nd_parameters[ec_bpn_fz]
+                  if ec_inner_pn_fz >= 0
+                    ec_reqs_fz = parse_id_list(@nd_requireds[ec_inner_pn_fz])
+                    ec_expected_fz = ec_n_fz + ec_wi_flag_fz
+                    if ec_reqs_fz.length == ec_expected_fz && ec_reqs_fz.length >= 2 && @nd_type[ec_reqs_fz[0]] != "MultiTargetNode"
+                      if ec_wi_flag_fz == 1 && pi == ec_reqs_fz.length - 1
+                        return "int"
+                      end
+                      return elem_type_of_array(ec_inner_rt_fz)
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
       end
  # Hash#each yields |k, v|. elem_type_of_array on a hash type
  # falls back to "int" for both, which then types `puts k + ":"`
@@ -29125,7 +30185,28 @@ class Compiler
       end
       return "int"
     end
-    if mname == "times" || mname == "upto" || mname == "downto" || mname == "step"
+ # Issue #870: Float#step yields floats. If recv or any step
+ # arg is float, the block param is float (without this the
+ # int slot truncates `+= 0.5` to `+= 0` and loops forever).
+    if mname == "step"
+      recv_step_bp = @nd_receiver[call_nid]
+      if recv_step_bp >= 0 && infer_type(recv_step_bp) == "float"
+        return "float"
+      end
+      args_step_bp = @nd_arguments[call_nid]
+      if args_step_bp >= 0
+        aargs_step_bp = get_args(args_step_bp)
+        ai_step = 0
+        while ai_step < aargs_step_bp.length
+          if infer_type(aargs_step_bp[ai_step]) == "float"
+            return "float"
+          end
+          ai_step = ai_step + 1
+        end
+      end
+      return "int"
+    end
+    if mname == "times" || mname == "upto" || mname == "downto"
       return "int"
     end
     if mname == "reduce" || mname == "inject"
@@ -29148,6 +30229,11 @@ class Compiler
       return "int"
     end
     if mname == "each_line"
+      return "string"
+    end
+ # Issue #849: gsub/sub block form. Each match is yielded as
+ # a string to the block; block returns the replacement string.
+    if mname == "gsub" || mname == "sub"
       return "string"
     end
     if mname == "each_pair"
@@ -29233,8 +30319,32 @@ class Compiler
       return "int"
     end
     if mname == "each_slice" || mname == "each_cons"
- # Block param is sub-array of recv's element type — keep recv's
- # array type (slice of int_array is still int_array).
+ # Multi-param block on each_cons(k) / each_slice(k) — when the
+ # req-param count matches the literal k, codegen destructures
+ # the pair into scalar element-type slots. Mirror that here
+ # so the block body's type inference sees the right shape.
+      n_ec_bp = -1
+      ec_args_bp = @nd_arguments[call_nid]
+      if ec_args_bp >= 0
+        ec_alist_bp = get_args(ec_args_bp)
+        if ec_alist_bp.length > 0 && @nd_type[ec_alist_bp[0]] == "IntegerNode"
+          n_ec_bp = @nd_value[ec_alist_bp[0]].to_i
+        end
+      end
+      blk_ec_bp = @nd_block[call_nid]
+      if blk_ec_bp >= 0 && n_ec_bp > 0
+        ec_bp_node = @nd_parameters[blk_ec_bp]
+        if ec_bp_node >= 0
+          ec_inner_pn = @nd_parameters[ec_bp_node]
+          if ec_inner_pn >= 0
+            ec_reqs_bp = parse_id_list(@nd_requireds[ec_inner_pn])
+            if ec_reqs_bp.length == n_ec_bp && ec_reqs_bp.length >= 2 && @nd_type[ec_reqs_bp[0]] != "MultiTargetNode"
+              return elem_type_of_array(recv_t)
+            end
+          end
+        end
+      end
+ # Default: bind the whole pair as a sub-array of recv's element type.
       return recv_t
     end
     if mname == "chunk_while" || mname == "slice_when"
@@ -29278,8 +30388,8 @@ class Compiler
       j = j + 1
     end
  # Pass 2: re-scan with vars declared
-    lnames2 = "".split(",")
-    ltypes2 = "".split(",")
+    lnames2 = "".split(",", -1)
+    ltypes2 = "".split(",", -1)
     scan_locals(bid, lnames2, ltypes2, params)
     j = 0
     while j < lnames2.length
@@ -29310,8 +30420,8 @@ class Compiler
  # set pp's scope to the merged type; redo scan_locals so the
  # `[]=` arm now sees pp resolved to its real type and re-picks
  # the right hash variant. Mirror the merge rules from pass 2.
-    lnames3 = "".split(",")
-    ltypes3 = "".split(",")
+    lnames3 = "".split(",", -1)
+    ltypes3 = "".split(",", -1)
     scan_locals(bid, lnames3, ltypes3, params)
     j = 0
     while j < lnames3.length
@@ -29365,7 +30475,7 @@ class Compiler
     j = 0
     while j < lnames.length
       if is_hash_type(ltypes[j]) == 1 && ltypes[j].include?("poly") == false
-        obs_p5 = "".split(",")
+        obs_p5 = "".split(",", -1)
         collect_param_callee_slots(bid, lnames[j], obs_p5)
         cur_kt_p5 = hash_key_part(ltypes[j])
         agreed_p5 = ""
@@ -29430,7 +30540,7 @@ class Compiler
     if @multi_const_inits != nil
       j = 0
       while j < @multi_const_inits.length
-        mw_id = @multi_const_inits[j].split("|")[1].to_i
+        mw_id = @multi_const_inits[j].split("|", -1)[1].to_i
         rhs = @nd_expression[mw_id]
         if rhs >= 0
           scan_locals(rhs, lnames, ltypes, empty_params)
@@ -29453,8 +30563,8 @@ class Compiler
     while mi < @meth_names.length
       bid_h = @meth_body_ids[mi]
       if bid_h >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         changed = 0
         pk = 0
         while pk < pnames.length
@@ -29476,9 +30586,9 @@ class Compiler
  # Class instance methods.
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      bodies = @cls_meth_bodies[ci].split(";")
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       cls_changed = 0
       mj = 0
       while mj < all_params.length
@@ -29487,10 +30597,10 @@ class Compiler
           bid_c = bodies[mj].to_i
         end
         if bid_c >= 0
-          cm_pnames = all_params[mj].split(",")
-          cm_ptypes = "".split(",")
+          cm_pnames = all_params[mj].split(",", -1)
+          cm_ptypes = "".split(",", -1)
           if mj < all_ptypes.length
-            cm_ptypes = all_ptypes[mj].split(",")
+            cm_ptypes = all_ptypes[mj].split(",", -1)
           end
           m_changed = 0
           pk2 = 0
@@ -29538,8 +30648,8 @@ class Compiler
     while mi < @meth_names.length
       bid_h = @meth_body_ids[mi]
       if bid_h >= 0
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         each_widen_walk(bid_h, pnames, ptypes)
       end
       mi = mi + 1
@@ -29547,9 +30657,9 @@ class Compiler
  # Class instance methods.
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_meth_params[ci].split("|")
-      all_ptypes = @cls_meth_ptypes[ci].split("|")
-      bodies = @cls_meth_bodies[ci].split(";")
+      all_params = @cls_meth_params[ci].split("|", -1)
+      all_ptypes = @cls_meth_ptypes[ci].split("|", -1)
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       mj = 0
       while mj < all_params.length
         bid_c = -1
@@ -29557,10 +30667,10 @@ class Compiler
           bid_c = bodies[mj].to_i
         end
         if bid_c >= 0
-          cm_pnames = all_params[mj].split(",")
-          cm_ptypes = "".split(",")
+          cm_pnames = all_params[mj].split(",", -1)
+          cm_ptypes = "".split(",", -1)
           if mj < all_ptypes.length
-            cm_ptypes = all_ptypes[mj].split(",")
+            cm_ptypes = all_ptypes[mj].split(",", -1)
           end
           each_widen_walk(bid_c, cm_pnames, cm_ptypes)
         end
@@ -29571,9 +30681,9 @@ class Compiler
  # Class methods (cmeths).
     ci = 0
     while ci < @cls_names.length
-      all_params = @cls_cmeth_params[ci].split("|")
-      all_ptypes = @cls_cmeth_ptypes[ci].split("|")
-      bodies = @cls_cmeth_bodies[ci].split(";")
+      all_params = @cls_cmeth_params[ci].split("|", -1)
+      all_ptypes = @cls_cmeth_ptypes[ci].split("|", -1)
+      bodies = @cls_cmeth_bodies[ci].split(";", -1)
       mj = 0
       while mj < all_params.length
         bid_c = -1
@@ -29581,10 +30691,10 @@ class Compiler
           bid_c = bodies[mj].to_i
         end
         if bid_c >= 0
-          cm_pnames = all_params[mj].split(",")
-          cm_ptypes = "".split(",")
+          cm_pnames = all_params[mj].split(",", -1)
+          cm_ptypes = "".split(",", -1)
           if mj < all_ptypes.length
-            cm_ptypes = all_ptypes[mj].split(",")
+            cm_ptypes = all_ptypes[mj].split(",", -1)
           end
           each_widen_walk(bid_c, cm_pnames, cm_ptypes)
         end
@@ -29661,12 +30771,12 @@ class Compiler
         cls_name_w = @nd_name[recv_w]
         ci_w = find_class_idx(cls_name_w)
         if ci_w >= 0
-          cm_names_w = @cls_cmeth_names[ci_w].split(";")
-          cmpall_w = @cls_cmeth_ptypes[ci_w].split("|")
+          cm_names_w = @cls_cmeth_names[ci_w].split(";", -1)
+          cmpall_w = @cls_cmeth_ptypes[ci_w].split("|", -1)
           cmi_w = 0
           while cmi_w < cm_names_w.length
             if cm_names_w[cmi_w] == mname_w && cmi_w < cmpall_w.length
-              cmpt_w = cmpall_w[cmi_w].split(",")
+              cmpt_w = cmpall_w[cmi_w].split(",", -1)
               arg_ids_w = get_args(args_id_w)
               ai_w = 0
               changed_w = 0
@@ -29754,8 +30864,8 @@ class Compiler
       return ""
     end
  # Track all observed value types via a single string accumulator.
-    val_types = "".split(",")
-    key_types = "".split(",")
+    val_types = "".split(",", -1)
+    key_types = "".split(",", -1)
     collect_param_hash_writes(nid, pname, val_types, key_types)
  # also harvest signals from `pname.each do |k, v|`
  # block bodies. Programs that read-only-iterate the hash never
@@ -30051,9 +31161,9 @@ class Compiler
  # ---- Top-level main ----
     push_scope
     stmts = get_body_stmts(@root_id)
-    ml = "".split(",")
-    mt = "".split(",")
-    empty_p = "".split(",")
+    ml = "".split(",", -1)
+    mt = "".split(",", -1)
+    empty_p = "".split(",", -1)
     refine_locals_multi_pass_full(stmts, ml, mt, empty_p, 1, 1)
     @nd_scope_names[@root_id] = ml.join("|")
     @nd_scope_types[@root_id] = mt.join("|")
@@ -30067,8 +31177,8 @@ class Compiler
         push_scope
         saved_method_name = @current_method_name
         @current_method_name = @meth_names[mi]
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         pk = 0
         while pk < pnames.length
           if pnames[pk] != ""
@@ -30076,8 +31186,8 @@ class Compiler
           end
           pk = pk + 1
         end
-        ml = "".split(",")
-        mt = "".split(",")
+        ml = "".split(",", -1)
+        mt = "".split(",", -1)
         refine_method_body_locals(bid, ml, mt, pnames)
         @nd_scope_names[bid] = ml.join("|")
         @nd_scope_types[bid] = mt.join("|")
@@ -30092,7 +31202,7 @@ class Compiler
     while ci < @cls_names.length
       saved_ci = @current_class_idx
       @current_class_idx = ci
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
       bj = 0
       while bj < bodies.length
         bid = bodies[bj].to_i
@@ -30109,8 +31219,8 @@ class Compiler
             declare_var(pnames2[pk], pt)
             pk = pk + 1
           end
-          ml2 = "".split(",")
-          mt2 = "".split(",")
+          ml2 = "".split(",", -1)
+          mt2 = "".split(",", -1)
           refine_method_body_locals(bid, ml2, mt2, pnames2)
           @nd_scope_names[bid] = ml2.join("|")
           @nd_scope_types[bid] = mt2.join("|")
@@ -30118,8 +31228,8 @@ class Compiler
         end
         bj = bj + 1
       end
-      cm_bodies = @cls_cmeth_bodies[ci].split(";")
-      cm_names = @cls_cmeth_names[ci].split(";")
+      cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+      cm_names = @cls_cmeth_names[ci].split(";", -1)
       saved_meth = @current_method_name
  # Build per-(ci, cmj) scope tables alongside the per-bid
  # @nd_scope_names entry. Inherited cmeths share their body id
@@ -30128,8 +31238,8 @@ class Compiler
  # leaving every other subclass with the wrong LV types — see
  # Comment.find returning sp_Article *). Per-(ci, cmj) keeps
  # each subclass's specialized result alive for codegen.
-      cms_per_ci = "".split(",")
-      cmt_per_ci = "".split(",")
+      cms_per_ci = "".split(",", -1)
+      cmt_per_ci = "".split(",", -1)
       cbj = 0
       while cbj < cm_bodies.length
         cbid = cm_bodies[cbj].to_i
@@ -30151,8 +31261,8 @@ class Compiler
             declare_var(cpnames[cpk], cpt)
             cpk = cpk + 1
           end
-          cml = "".split(",")
-          cmt = "".split(",")
+          cml = "".split(",", -1)
+          cmt = "".split(",", -1)
           refine_method_body_locals(cbid, cml, cmt, cpnames)
           @nd_scope_names[cbid] = cml.join("|")
           @nd_scope_types[cbid] = cmt.join("|")
@@ -30190,7 +31300,7 @@ class Compiler
     if @multi_const_inits != nil
       mci = 0
       while mci < @multi_const_inits.length
-        parts = @multi_const_inits[mci].split("|")
+        parts = @multi_const_inits[mci].split("|", -1)
         scope_n = parts[0]
         mw_id = parts[1].to_i
         rhs = @nd_expression[mw_id]
@@ -30220,7 +31330,7 @@ class Compiler
  # their typed slots, then refine body locals with those names
  # excluded from the rescan so reassigns hit the param slot
  # rather than inventing a fresh local of the RHS type.
-        ie_pnames = "".split(",")
+        ie_pnames = "".split(",", -1)
         spn_iv = ""
         if iv < @ieval_self_param_names.length
           spn_iv = @ieval_self_param_names[iv]
@@ -30233,9 +31343,9 @@ class Compiler
         if iv < @ieval_extra_param_names.length
           extra_iv_csv = @ieval_extra_param_names[iv]
         end
-        extra_iv_names = "".split(",")
+        extra_iv_names = "".split(",", -1)
         if extra_iv_csv != ""
-          extra_iv_names = extra_iv_csv.split(";")
+          extra_iv_names = extra_iv_csv.split(";", -1)
         end
         kex_iv = 0
         while kex_iv < extra_iv_names.length
@@ -30243,12 +31353,12 @@ class Compiler
           ie_pnames.push(extra_iv_names[kex_iv])
           kex_iv = kex_iv + 1
         end
-        ml_iv = "".split(",")
-        mt_iv = "".split(",")
+        ml_iv = "".split(",", -1)
+        mt_iv = "".split(",", -1)
         refine_method_body_locals(bid_iv, ml_iv, mt_iv, ie_pnames)
  # Order: self-bound at slot 0, extras, then body locals.
-        final_names = "".split(",")
-        final_types = "".split(",")
+        final_names = "".split(",", -1)
+        final_types = "".split(",", -1)
         if spn_iv != ""
           final_names.push(spn_iv)
           final_types.push("obj_" + @cls_names[@ieval_class_idxs[iv]])
@@ -30300,7 +31410,7 @@ class Compiler
         end
         if body_bn >= 0
  # Collect syntactic block param names
-          bp_list = "".split(",")
+          bp_list = "".split(",", -1)
           params_n = @nd_parameters[bn]
           if params_n >= 0
             inner_p = @nd_parameters[params_n]
@@ -30320,8 +31430,8 @@ class Compiler
               end
             end
           end
-          bn_names = "".split(",")
-          bn_types = "".split(",")
+          bn_names = "".split(",", -1)
+          bn_types = "".split(",", -1)
           scan_locals(body_bn, bn_names, bn_types, bp_list)
           @nd_scope_names[body_bn] = bn_names.join("|")
           @nd_scope_types[body_bn] = bn_types.join("|")
@@ -30335,9 +31445,9 @@ class Compiler
  # ---- Top-level (main) ----
     stmts = get_body_stmts(@root_id)
     push_scope
-    empty_p = "".split(",")
-    ml = "".split(",")
-    mt = "".split(",")
+    empty_p = "".split(",", -1)
+    ml = "".split(",", -1)
+    mt = "".split(",", -1)
     refine_locals_multi_pass_full(stmts, ml, mt, empty_p, 1, 1)
     si = 0
     while si < stmts.length
@@ -30354,8 +31464,8 @@ class Compiler
         push_scope
         saved_method_name = @current_method_name
         @current_method_name = @meth_names[mi]
-        pnames = @meth_param_names[mi].split(",")
-        ptypes = @meth_param_types[mi].split(",")
+        pnames = @meth_param_names[mi].split(",", -1)
+        ptypes = @meth_param_types[mi].split(",", -1)
         pk = 0
         while pk < pnames.length
           if pnames[pk] != ""
@@ -30363,8 +31473,8 @@ class Compiler
           end
           pk = pk + 1
         end
-        lnames = "".split(",")
-        ltypes = "".split(",")
+        lnames = "".split(",", -1)
+        ltypes = "".split(",", -1)
         refine_method_body_locals(bid, lnames, ltypes, pnames)
         walk_and_cache(bid)
         @current_method_name = saved_method_name
@@ -30378,12 +31488,21 @@ class Compiler
     while ci < @cls_names.length
       saved_ci = @current_class_idx
       @current_class_idx = ci
-      bodies = @cls_meth_bodies[ci].split(";")
+      bodies = @cls_meth_bodies[ci].split(";", -1)
+      ann_mnames = @cls_meth_names[ci].split(";", -1)
       bj = 0
       while bj < bodies.length
         bid = bodies[bj].to_i
         if bid >= 0
           push_scope
+ # Issue #720: SuperNode infer_type consults @current_method_name
+ # to drive prep-chain redirect. Without setting it, super inside
+ # a prepended method or shadow caches as "int" and codegen reads
+ # the stale cache before its own redirect runs.
+          saved_meth_cls = @current_method_name
+          if bj < ann_mnames.length
+            @current_method_name = ann_mnames[bj]
+          end
           pnames2 = cls_meth_pnames_get(ci, bj)
           ptypes2 = cls_meth_ptypes_get(ci, bj)
           pk = 0
@@ -30395,16 +31514,17 @@ class Compiler
             declare_var(pnames2[pk], pt)
             pk = pk + 1
           end
-          ml2 = "".split(",")
-          mt2 = "".split(",")
+          ml2 = "".split(",", -1)
+          mt2 = "".split(",", -1)
           refine_method_body_locals(bid, ml2, mt2, pnames2)
           walk_and_cache(bid)
+          @current_method_name = saved_meth_cls
           pop_scope
         end
         bj = bj + 1
       end
-      cm_bodies = @cls_cmeth_bodies[ci].split(";")
-      cm_names = @cls_cmeth_names[ci].split(";")
+      cm_bodies = @cls_cmeth_bodies[ci].split(";", -1)
+      cm_names = @cls_cmeth_names[ci].split(";", -1)
       saved_meth = @current_method_name
       cbj = 0
       while cbj < cm_bodies.length
@@ -30425,8 +31545,8 @@ class Compiler
             declare_var(cpnames[cpk], cpt)
             cpk = cpk + 1
           end
-          cml = "".split(",")
-          cmt = "".split(",")
+          cml = "".split(",", -1)
+          cmt = "".split(",", -1)
           refine_method_body_locals(cbid, cml, cmt, cpnames)
           walk_and_cache(cbid)
           pop_scope

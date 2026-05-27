@@ -33,20 +33,50 @@ typedef struct {
 
 static void compile_alt(re_compiler *c);  /* forward */
 
+/* Issue #781: error handler hook so the library can route through
+   the user program's sp_raise_cls (which is `static inline` per
+   translation unit and not directly linkable from a .a). The user
+   program calls sp_re_set_error_handler(fn) at startup; fn should
+   not return (typically wraps sp_raise_cls). If unset, fall back
+   to fprintf + exit. */
+static void (*sp_re_error_handler)(const char *msg) = NULL;
+void sp_re_set_error_handler(void (*fn)(const char *msg)) {
+  sp_re_error_handler = fn;
+}
+
 static void
 compile_error(re_compiler *c, const char *msg)
 {
   if (c->stripped) free(c->stripped);
   c->stripped = NULL;
-  fprintf(stderr, "RegexpError: %s: /%.*s/\n", msg, (int)(c->src_end - c->src), c->src); exit(1);
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "%s: /%.*s/",
+           msg, (int)(c->src_end - c->src), c->src);
+  if (sp_re_error_handler) {
+    sp_re_error_handler(buf);
+    /* shouldn't return; fall through to exit as a safety net */
+  }
+  fprintf(stderr, "RegexpError: %s\n", buf);
+  exit(1);
 }
 
 static uint32_t
 emit(re_compiler *c, uint8_t op, uint8_t a, uint16_t offset)
 {
   if (c->code_len >= c->code_capa) {
-    c->code_capa = c->code_capa ? c->code_capa * 2 : 64;
-    c->code = (re_inst*)realloc(c->code, sizeof(re_inst) * c->code_capa);
+    /* Issue #821: detect uint32_t overflow on doubling. The previous
+       form silently wrapped to a small value (e.g. 2^31 doubles to
+       0), realloc'd a tiny buffer, then wrote past it. Cap at
+       (UINT32_MAX / 2) before doubling so the next * 2 stays in
+       range; if we're already past that, raise instead of overflowing. */
+    if (c->code_capa > (uint32_t)0x40000000u) {
+      compile_error(c, "regexp too large");
+    }
+    uint32_t new_capa = c->code_capa ? c->code_capa * 2 : 64;
+    re_inst *nc = (re_inst*)realloc(c->code, sizeof(re_inst) * new_capa);
+    if (!nc) compile_error(c, "regexp too large");
+    c->code = nc;
+    c->code_capa = new_capa;
   }
   uint32_t pos = c->code_len++;
   c->code[pos].op = op;
@@ -73,11 +103,16 @@ insert_inst(re_compiler *c, uint32_t pos, uint8_t op, uint8_t a, uint16_t offset
   c->code[pos].a = a;
   c->code[pos].offset = offset;
 
-  /* fix all jump targets that point at or past the insertion point */
+  /* fix all jump targets that point at or past the insertion point.
+     Issue #824: previously only JMP/SPLIT/SPLITNG offsets were
+     patched, leaving LOOKAHEAD/NEG_LOOKAHEAD/LOOKBEHIND/NEG_LOOKBEHIND
+     dangling (their offset is the jump-to-end target). */
   for (uint32_t i = 0; i < c->code_len; i++) {
     if (i == pos) continue;
     switch (c->code[i].op) {
     case RE_JMP: case RE_SPLIT: case RE_SPLITNG:
+    case RE_LOOKAHEAD: case RE_NEG_LOOKAHEAD:
+    case RE_LOOKBEHIND: case RE_NEG_LOOKBEHIND:
       if (c->code[i].offset >= pos && c->code[i].offset < 0xffff) {
         c->code[i].offset++;
       }
@@ -275,6 +310,13 @@ compile_charclass(re_compiler *c)
     if (peek(c) == '-' && c->p + 1 < c->src_end && c->p[1] != ']') {
       next_char(c);  /* skip '-' */
       uint32_t hi = read_class_atom(c);
+      /* Issue #778: reversed range like [z-a] is a hard error in
+         CRuby (RegexpError "empty range in char class"). Spinel
+         used to silently accept it and emit a class that matched
+         nothing. Raise instead. */
+      if (cp > hi) {
+        compile_error(c, "empty range in char class");
+      }
       if (cp < 128 && hi < 128) {
         class_set_range(cc, (uint8_t)cp, (uint8_t)hi);
       }
@@ -283,7 +325,7 @@ compile_charclass(re_compiler *c)
            Mixed ASCII/non-ASCII ranges are rare; stash the whole
            span in the codepoint list (the bitmap covers ASCII only,
            so a non-ASCII upper bound forces the codepoint path). */
-        if (cp <= hi) class_add_range(cc, cp, hi);
+        class_add_range(cc, cp, hi);
       }
     }
     else {
@@ -302,17 +344,31 @@ static mrb_bool
 parse_quantifier(re_compiler *c, int *min_out, int *max_out)
 {
   const char *save = c->p;
+  /* Issue #819: integer overflow in `min/max = ... * 10 + digit`
+     used to wrap to negative. CRuby caps quantifiers at a sane
+     internal limit. We pick 100000 -- larger than any reasonable
+     pattern but small enough that the subsequent emit loop can't
+     run forever. */
+  enum { RE_QUANT_MAX = 100000 };
   int min = 0, max = -1;
 
   while (peek(c) >= '0' && peek(c) <= '9') {
-    min = min * 10 + (next_char(c) - '0');
+    int d = next_char(c) - '0';
+    if (min > RE_QUANT_MAX || min * 10 + d > RE_QUANT_MAX) {
+      compile_error(c, "quantifier too big");
+    }
+    min = min * 10 + d;
   }
   if (peek(c) == ',') {
     next_char(c);
     if (peek(c) >= '0' && peek(c) <= '9') {
       max = 0;
       while (peek(c) >= '0' && peek(c) <= '9') {
-        max = max * 10 + (next_char(c) - '0');
+        int d = next_char(c) - '0';
+        if (max > RE_QUANT_MAX || max * 10 + d > RE_QUANT_MAX) {
+          compile_error(c, "quantifier too big");
+        }
+        max = max * 10 + d;
       }
     }
     /* else max = -1 (unlimited) */
@@ -325,6 +381,10 @@ parse_quantifier(re_compiler *c, int *min_out, int *max_out)
     return FALSE;
   }
   next_char(c);  /* skip '}' */
+  /* Issue #822: min > max is invalid. CRuby raises RegexpError. */
+  if (max >= 0 && min > max) {
+    compile_error(c, "invalid repeat count");
+  }
   *min_out = min;
   *max_out = max;
   return TRUE;
@@ -496,9 +556,18 @@ compile_atom(re_compiler *c)
         emit(c, RE_SAVE, 0, group * 2);
         if (cap_name) {
           /* register named capture */
+          /* Issue #823: cap_name points into the pattern source --
+             but when the pattern came from strip_extended, c->stripped
+             is freed at re_compile exit, leaving the name dangling.
+             Allocate a fresh copy so the named-capture table owns
+             its strings. */
+          char *name_copy = (char*)malloc(cap_name_len + 1);
+          if (!name_copy) compile_error(c, "out of memory");
+          memcpy(name_copy, cap_name, cap_name_len);
+          name_copy[cap_name_len] = '\0';
           c->named_captures = (re_named_capture*)realloc(c->named_captures,
             sizeof(re_named_capture) * (c->num_named + 1));
-          c->named_captures[c->num_named].name = cap_name;
+          c->named_captures[c->num_named].name = name_copy;
           c->named_captures[c->num_named].name_len = cap_name_len;
           c->named_captures[c->num_named].group = group;
           c->num_named++;
@@ -629,7 +698,18 @@ compile_quantified(re_compiler *c)
 {
   uint32_t start = c->code_len;
   compile_atom(c);
-  if (c->code_len == start) return;  /* no atom emitted */
+  if (c->code_len == start) {
+    /* Issue #825: when compile_atom emitted nothing AND the next
+       char is a bare quantifier (star, plus, question), the
+       surrounding seq loop has nothing to advance with and spins
+       forever. Raise instead. CRuby: RegexpError "target of
+       repeat operator is not specified". */
+    int qch = peek(c);
+    if (qch == '*' || qch == '+' || qch == '?') {
+      compile_error(c, "target of repeat operator is not specified");
+    }
+    return;  /* no atom emitted, no quantifier -- caller handles */
+  }
 
   int ch = peek(c);
   if (ch == '*' || ch == '+' || ch == '?') {
@@ -731,30 +811,40 @@ compile_alt(re_compiler *c)
      insert a SPLIT before it by shifting code. */
 
   /* Collect all alternatives, then emit SPLIT chain at the end.
-     This avoids insert_inst offset corruption for multi-way alternation. */
-  uint32_t alt_starts[64];  /* start positions of each alternative */
-  int num_alts = 0;
+     This avoids insert_inst offset corruption for multi-way alternation.
+     alt_starts grows dynamically; the only ceiling is the offset field's
+     uint16_t width (~65535), enforced later when the SPLIT chain is
+     wired up. Issue #777. */
+  uint32_t alt_cap = 64;
+  uint32_t *alt_starts = (uint32_t *)malloc(sizeof(uint32_t) * alt_cap);
+  if (!alt_starts) compile_error(c, "out of memory");
+  uint32_t num_alts = 0;
   alt_starts[num_alts++] = alt_start;
 
   while (peek(c) == '|') {
     next_char(c);
     emit(c, RE_JMP, 0, 0);  /* placeholder: jump to end */
+    if (num_alts >= alt_cap) {
+      alt_cap *= 2;
+      uint32_t *grown = (uint32_t *)realloc(alt_starts, sizeof(uint32_t) * alt_cap);
+      if (!grown) { free(alt_starts); compile_error(c, "out of memory"); }
+      alt_starts = grown;
+    }
     alt_starts[num_alts++] = c->code_len;
-    if (num_alts >= 64) compile_error(c, "too many alternatives");
     compile_seq(c);
   }
 
-  if (num_alts <= 1) return;  /* shouldn't happen, but safety */
+  if (num_alts <= 1) { free(alt_starts); return; }
 
   /* Now insert SPLIT chain before the alternatives.
      For n alternatives: n-1 SPLIT instructions, each pointing to
      their respective alternative. */
-  uint32_t split_count = (uint32_t)(num_alts - 1);
+  uint32_t split_count = num_alts - 1;
   /* Insert split_count instructions at alt_starts[0] */
   for (uint32_t i = 0; i < split_count; i++) {
     insert_inst(c, alt_starts[0], RE_JMP, 0, 0);  /* placeholder */
     /* adjust all alt_starts by +1 due to insertion */
-    for (int j = 0; j < num_alts; j++) {
+    for (uint32_t j = 0; j < num_alts; j++) {
       alt_starts[j]++;
     }
   }
@@ -762,18 +852,28 @@ compile_alt(re_compiler *c)
   /* Now set up SPLIT chain: each SPLIT tries next instruction or jumps to alt */
   for (uint32_t i = 0; i < split_count; i++) {
     uint32_t pos = alt_starts[0] - split_count + i;
+    uint32_t target = alt_starts[i + 1];
+    if (target > 0xFFFF) {
+      free(alt_starts);
+      compile_error(c, "regex too large (alternation offset overflow)");
+    }
     c->code[pos].op = RE_SPLIT;
     c->code[pos].a = 0;
-    c->code[pos].offset = (uint16_t)alt_starts[i + 1];
+    c->code[pos].offset = (uint16_t)target;
   }
 
   /* Patch JMPs (they are right before each alt_starts[1..n-1]) to point to end */
   uint32_t end = c->code_len;
-  for (int i = 1; i < num_alts; i++) {
+  if (end > 0xFFFF) {
+    free(alt_starts);
+    compile_error(c, "regex too large (end offset overflow)");
+  }
+  for (uint32_t i = 1; i < num_alts; i++) {
     uint32_t jmp_pos = alt_starts[i] - 1;
     c->code[jmp_pos].op = RE_JMP;
     c->code[jmp_pos].offset = (uint16_t)end;
   }
+  free(alt_starts);
 }
 
 /*
@@ -1016,7 +1116,16 @@ re_free(mrb_regexp_pattern *pat)
       }
       free(pat->classes);
     }
-    free(pat->named_captures);
+    /* Issue #823: per-name buffers now owned by the table; free each
+       before freeing the array itself. Names registered before the
+       fix were uninit memory pointers but the new allocator path
+       gives us our own copy. */
+    if (pat->named_captures) {
+      for (uint16_t i = 0; i < pat->num_named; i++) {
+        free((void *)pat->named_captures[i].name);
+      }
+      free(pat->named_captures);
+    }
     free(pat->prefix);
     free(pat->cached_visited);
     free(pat->cached_threads[0]);

@@ -37,8 +37,11 @@ static void out_add(const char *fmt, ...) {
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
   if (line_count >= line_cap) {
-    line_cap = line_cap * 2 + 256;
-    lines = realloc(lines, sizeof(char *) * line_cap);
+    size_t new_cap = line_cap * 2 + 256;
+    char **new_lines = realloc(lines, sizeof(char *) * new_cap);
+    if (!new_lines) { fprintf(stderr, "spinel_parse: out of memory\n"); exit(1); }
+    lines = new_lines;
+    line_cap = new_cap;
   }
   lines[line_count++] = strdup(buf);
 }
@@ -69,6 +72,11 @@ static char *escape_str(const uint8_t *src, size_t len) {
     else if (c == '\r') { out[j++]='%'; out[j++]='0'; out[j++]='D'; }
     else if (c == '\t') { out[j++]='%'; out[j++]='0'; out[j++]='9'; }
     else if (c == ' ')  { out[j++]='%'; out[j++]='2'; out[j++]='0'; }
+    /* Issue #722: NUL byte inside a string literal would truncate
+       the field at the AST text-serialization layer (lines split
+       on '\n' and the loader uses strlen on fields). Encode as %00
+       so the byte survives the round-trip. */
+    else if (c == 0)    { out[j++]='%'; out[j++]='0'; out[j++]='0'; }
     else out[j++] = c;
   }
   out[j] = '\0';
@@ -109,11 +117,21 @@ static void emit_int(int id, const char *field, long long val) {
 }
 
 static void emit_float(int id, const char *field, double val) {
+  /* Issue #766: 64-byte buf; "%.17g" produces at most 24 chars, plus
+     ".0" trailer = 26. Safe by margin.
+     Issue #767: snprintf is locale-sensitive (de_DE produces "3,14"
+     for 3.14, which then fails to parse as a C float literal).
+     Format into a fresh sprintf via the C locale by using a manual
+     dot conversion: produce in current locale then replace ',' -> '.'.
+     The lib-side replacement is safe because Ruby float literals never
+     contain a comma. */
   char buf[64];
   snprintf(buf, sizeof(buf), "%.17g", val);
-  /* Ensure there's a decimal point (Ruby outputs 0.0, not 0) */
-  if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E'))
-    strcat(buf, ".0");
+  for (char *p = buf; *p; p++) if (*p == ',') *p = '.';
+  if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) {
+    size_t l = strlen(buf);
+    if (l + 3 < sizeof(buf)) strcat(buf, ".0");
+  }
   out_add("F %d %s %s", id, field, buf);
 }
 
@@ -140,8 +158,11 @@ static void emit_node_array(int id, const char *field, pm_node_list_t *list) {
   for (size_t i = 0; i < list->size; i++) {
     /* worst case per iter: ", -2147483648\0" -> 14 bytes; reserve 16 to be safe */
     if (pos + 16 >= cap) {
-      cap = cap * 2 + 16;
-      buf = realloc(buf, cap);
+      size_t new_cap = cap * 2 + 16;
+      char *nb = realloc(buf, new_cap);
+      if (!nb) { fprintf(stderr, "spinel_parse: out of memory\n"); exit(1); }
+      buf = nb;
+      cap = new_cap;
     }
     if (i > 0) buf[pos++] = ',';
     int n = snprintf(buf + pos, cap - pos, "%d", ids[i]);
@@ -256,8 +277,12 @@ static int flatten(pm_node_t *node) {
     R("receiver", n->receiver);
     R("arguments", n->arguments);
     R("block", n->block);
+    /* Issue #793: emit explicit call_operator for non-safe-nav calls
+       too, so codegen reads "." instead of an unset field. */
     if (PM_NODE_FLAG_P(node, PM_CALL_NODE_FLAGS_SAFE_NAVIGATION)) {
       S("call_operator", escape_str((const uint8_t *)"&.", 2));
+    } else {
+      S("call_operator", escape_str((const uint8_t *)".", 1));
     }
     break;
   }
@@ -545,6 +570,29 @@ static int flatten(pm_node_t *node) {
     pm_float_node_t *n = (pm_float_node_t *)node;
     N("FloatNode");
     F("value", n->value);
+    break;
+  }
+  case PM_IMAGINARY_NODE: {
+    /* `2i` -- imaginary numeric. Issue #840. Wraps an inner
+       IntegerNode or FloatNode in `numeric`. Codegen surfaces this
+       as a sp_Complex literal {re=0, im=numeric}. */
+    pm_imaginary_node_t *n = (pm_imaginary_node_t *)node;
+    N("ImaginaryNode");
+    R("numeric", n->numeric);
+    break;
+  }
+  case PM_RATIONAL_NODE: {
+    /* `1/2r` or `1.5r` -- rational literal. Issue #841. Emits
+       numerator + denominator as decimal-text fields (loader pins
+       them in @nd_rat_num / @nd_rat_den). Prism stores both as
+       reduced pm_integer_t. */
+    pm_rational_node_t *n = (pm_rational_node_t *)node;
+    N("RationalNode");
+    char nbuf[32];
+    snprintf(nbuf, sizeof(nbuf), "%lld", (long long)pm_int_value(&n->numerator));
+    emit_str(id, "rat_num", nbuf);
+    snprintf(nbuf, sizeof(nbuf), "%lld", (long long)pm_int_value(&n->denominator));
+    emit_str(id, "rat_den", nbuf);
     break;
   }
   case PM_STRING_NODE: {
@@ -898,9 +946,8 @@ static int flatten(pm_node_t *node) {
     break;
   }
   case PM_SOURCE_ENCODING_NODE: {
-    /* `__ENCODING__`. CRuby returns an Encoding object; Spinel has
-       no Encoding runtime, so we return the canonical name as a
-       frozen string. All Spinel sources are UTF-8. */
+    /* `__ENCODING__`. Spinel sources are UTF-8; codegen returns a
+       small Encoding value for Ruby-compatible `.class` / `.name`. */
     N("SourceEncodingNode");
     break;
   }
@@ -1068,6 +1115,43 @@ static int flatten(pm_node_t *node) {
     A("requireds", &n->requireds);
     R("rest", n->rest);
     A("posts", &n->posts);
+    break;
+  }
+  case PM_HASH_PATTERN_NODE: {
+    /* `case x in {a:, b: 2}`. elements is a list of AssocNodes
+       (key + sub-pattern); a `:b:` shorthand binds the key's symbol
+       as a same-named LV. Constant covers `Foo[a:]` destructuring
+       (not yet handled by codegen). Rest covers `**rest` (also not
+       yet handled). Issue #805. */
+    pm_hash_pattern_node_t *n = (pm_hash_pattern_node_t *)node;
+    N("HashPatternNode");
+    R("constant", n->constant);
+    A("elements", &n->elements);
+    R("rest", n->rest);
+    break;
+  }
+  case PM_FIND_PATTERN_NODE: {
+    /* `case x in [*a, b, *c]` -- find-anywhere pattern with leading
+       and trailing wildcards plus required middle elements.
+       Currently surfaces all three slots so the codegen can match
+       on length + extract requireds; the find-anywhere semantics
+       (variable-position match) are not yet implemented but the
+       shape no longer drops to UnsupportedNode. Issue #805. */
+    pm_find_pattern_node_t *n = (pm_find_pattern_node_t *)node;
+    N("FindPatternNode");
+    R("constant", n->constant);
+    R("left", (pm_node_t *)n->left);
+    A("requireds", &n->requireds);
+    R("right", n->right);
+    break;
+  }
+  case PM_CAPTURE_PATTERN_NODE: {
+    /* `case x in pat => var` -- match `pat`, bind matched value to
+       `var` (LocalVariableTargetNode). Issue #884. */
+    pm_capture_pattern_node_t *n = (pm_capture_pattern_node_t *)node;
+    N("CapturePatternNode");
+    R("value", (pm_node_t *)n->value);
+    R("target", (pm_node_t *)n->target);
     break;
   }
   case PM_PINNED_EXPRESSION_NODE: {
@@ -1276,11 +1360,19 @@ static int flatten(pm_node_t *node) {
 static char *read_file(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) return NULL;
-  fseek(f, 0, SEEK_END);
+  if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
   long len = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  char *buf = malloc(len + 1);
-  size_t nread = fread(buf, 1, len, f);
+  /* Issue #768: ftell returning -1 (stream error) used to wrap len + 1
+     to 0, malloc(0) returns NULL, then fread(NULL, 1, SIZE_MAX, f)
+     tried to read 16 exabytes. Bail cleanly. */
+  if (len < 0) { fclose(f); return NULL; }
+  if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
+  char *buf = malloc((size_t)len + 1);
+  if (!buf) { fclose(f); return NULL; }
+  size_t nread = fread(buf, 1, (size_t)len, f);
+  /* Issue #763: detect short read and bail rather than processing
+     a truncated source file silently. */
+  if (nread != (size_t)len) { free(buf); fclose(f); return NULL; }
   buf[nread] = '\0';
   fclose(f);
   return buf;
@@ -1295,27 +1387,44 @@ static int sp_included_cap = 0;
 
 /* Resolve a path to its canonical form for dedup. realpath() returns NULL
    on missing files; in that case fall back to the literal path. */
+/* Issue #749: realpath/_fullpath + strdup can both fail under OOM,
+   leaving callers with a NULL pointer that goes to strcmp(NULL, ...)
+   and segfaults. Fall back to a static empty string so downstream
+   `strcmp(canonical, ...) == 0` consistently misses (the caller then
+   treats this as "not already included" and proceeds with the file
+   read, which fails through the normal LoadError path). */
 static char *sp_canonical_path(const char *path) {
+  if (!path) { char *e = strdup(""); return e ? e : NULL; }
 #ifdef _WIN32
   char *real = _fullpath(NULL, path, 0);
 #else
   char *real = realpath(path, NULL);
 #endif
-  return real ? real : strdup(path);
+  if (real) return real;
+  char *d = strdup(path);
+  if (d) return d;
+  /* Last resort: return a static empty string to avoid NULL. The
+     buffer is read-only by callers (passed to strcmp, then freed by
+     the caller's free() -- so allocate a fresh empty string instead
+     of returning a string literal). */
+  return strdup("");
 }
 
 static int sp_path_already_included(const char *canonical) {
+  if (!canonical) return 0;
   for (int i = 0; i < sp_included_count; i++) {
-    if (strcmp(sp_included_paths[i], canonical) == 0) return 1;
+    if (sp_included_paths[i] && strcmp(sp_included_paths[i], canonical) == 0) return 1;
   }
   return 0;
 }
 
 static void sp_mark_path_included(const char *canonical) {
   if (sp_included_count >= sp_included_cap) {
-    sp_included_cap = sp_included_cap == 0 ? 16 : sp_included_cap * 2;
-    sp_included_paths = (char **)realloc(sp_included_paths,
-                                         sizeof(char *) * sp_included_cap);
+    int new_cap = sp_included_cap == 0 ? 16 : sp_included_cap * 2;
+    char **np = (char **)realloc(sp_included_paths, sizeof(char *) * new_cap);
+    if (!np) { fprintf(stderr, "spinel_parse: out of memory\n"); exit(1); }
+    sp_included_paths = np;
+    sp_included_cap = new_cap;
   }
   sp_included_paths[sp_included_count++] = strdup(canonical);
 }
@@ -1431,12 +1540,16 @@ static char *resolve_requires(const char *source, const char *source_path) {
     if (!end || end > line_end) { scan_from = pos + 1; continue; }
 
     size_t path_len = end - start;
+    /* Issue #765: bail rather than silently truncating overlong paths
+       into the fixed-size buffers. */
+    if (path_len >= sizeof(((struct {char x[512];}*)0)->x)) { scan_from = pos + 1; continue; }
     char rel_path[512];
     snprintf(rel_path, sizeof(rel_path), "%.*s", (int)path_len, start);
 
     /* Build full path */
     char full_path[1024];
-    snprintf(full_path, sizeof(full_path), "%s/%s", dir, rel_path);
+    int fp_n = snprintf(full_path, sizeof(full_path), "%s/%s", dir, rel_path);
+    if (fp_n < 0 || (size_t)fp_n >= sizeof(full_path)) { scan_from = pos + 1; continue; }
     {
       size_t fl = strlen(full_path);
       if (fl < sizeof(full_path) - 4 && (fl < 3 || strcmp(full_path + fl - 3, ".rb") != 0))
@@ -1618,7 +1731,7 @@ static char *rewrite_syntax_sugar(char *source) {
   size_t oi = 0;
   size_t i = 0;
 
-  #define OUT_CHAR(c) do { if (oi >= cap - 1) { cap *= 2; out = realloc(out, cap); } out[oi++] = (c); } while(0)
+  #define OUT_CHAR(c) do { if (oi >= cap - 1) { size_t _nc = cap * 2; char *_no = realloc(out, _nc); if (!_no) { fprintf(stderr, "spinel_parse: out of memory\n"); exit(1); } out = _no; cap = _nc; } out[oi++] = (c); } while(0)
   #define OUT_STR(s) do { const char *_s = (s); while (*_s) { OUT_CHAR(*_s); _s++; } } while(0)
 
   /* Rewrite one .send(:foo / .send("foo dispatch. `string_form` is 1
@@ -1719,8 +1832,13 @@ static char *rewrite_syntax_sugar(char *source) {
              source[i] == '?' || source[i] == '!')) i++;
       size_t name_len = i - ns;
       if (name_len > 0) {
-        /* Skip closing paren if we removed opening */
-        if (had_paren && i < len && source[i] == ')') i++;
+        /* Issue #792: skip any whitespace between the symbol name
+           and the closing paren so `(&:bar )` matches the same way
+           `(&:bar)` does. */
+        if (had_paren) {
+          while (i < len && (source[i] == ' ' || source[i] == '\t')) i++;
+          if (i < len && source[i] == ')') i++;
+        }
         OUT_STR(" { |_spx| _spx.");
         size_t k; for (k = 0; k < name_len; k++) OUT_CHAR(source[ns + k]);
         OUT_STR(" }");
@@ -1790,9 +1908,12 @@ int main(int argc, char **argv) {
     for (diag = (pm_diagnostic_t *)parser.error_list.head; diag; diag = (pm_diagnostic_t *)diag->node.next) {
       fprintf(stderr, "  %s\n", diag->message);
     }
+    /* Issue #764: free the registered include paths on the parse-
+       error exit path too. */
     pm_node_destroy(&parser, root);
     pm_parser_free(&parser);
     free(source);
+    sp_includes_free();
     return 1;
   }
 
@@ -1814,11 +1935,25 @@ int main(int argc, char **argv) {
     out = fopen(positional[1], "wb");
     if (!out) {
       fprintf(stderr, "spinel_parse: cannot write '%s'\n", positional[1]);
+      /* Clean up before bailing on the output-open failure. */
+      for (int i = 0; i < line_count; i++) free(lines[i]);
+      free(lines);
+      pm_node_destroy(&parser, root);
+      pm_parser_free(&parser);
+      free(source);
+      free(g_source_file_escaped);
+      g_source_file_escaped = NULL;
+      sp_includes_free();
       return 1;
     }
   }
 
   fprintf(out, "ROOT %d\n", root_id);
+  /* Issue #878: emit the source file path as a top-level fact so
+     `__dir__` and similar compile-time helpers can recover it
+     even when the source contains no `__FILE__` reference. The
+     loader stashes it in @source_file_path. */
+  fprintf(out, "SOURCE_FILE %s\n", g_source_file_escaped);
   for (int i = 0; i < line_count; i++) {
     fprintf(out, "%s\n", lines[i]);
     free(lines[i]);
