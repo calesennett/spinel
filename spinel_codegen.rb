@@ -14372,6 +14372,8 @@ class Compiler
     if has_nul == 1
  # Build the C string literal with `\000` escapes, then wrap
  # in a stmt-expression that allocates a GC string and copies.
+ # High bytes (>= 0x80) escape via `\xHH` for the same
+ # source-encoding reason as the static path below.
       inner = ""
       ii = 0
       while ii < s.length
@@ -14388,6 +14390,20 @@ class Compiler
           inner = inner + bsl + "t"
         elsif ch == 0.chr
           inner = inner + bsl + "000"
+        elsif ch.ord >= 0x80
+          hex = "0123456789ABCDEF"
+          cb2 = 0
+          while cb2 < ch.bytesize
+            bb2 = ch.getbyte(cb2)
+            inner = inner + bsl + "x" + hex[(bb2 >> 4) & 0xF] + hex[bb2 & 0xF]
+            cb2 = cb2 + 1
+          end
+          if ii + 1 < s.length
+            nb = s[ii + 1].getbyte(0)
+            if (nb >= 48 && nb <= 57) || (nb >= 65 && nb <= 70) || (nb >= 97 && nb <= 102)
+              inner = inner + "\" \""
+            end
+          end
         else
           inner = inner + ch
         end
@@ -14399,7 +14415,10 @@ class Compiler
  # Input `s` is the runtime Ruby string content (already-cooked: any
  # backslash in `s` is a literal backslash, NOT an escape introducer).
  # We C-escape the small set that needs it: backslash, double-quote,
- # newline, carriage return, tab. Everything else copies through.
+ # newline, carriage return, tab. Bytes >= 0x80 are escaped as
+ # `\xHH` (and string-concat-broken so subsequent hex digits don't
+ # extend the escape) — clang's -Winvalid-source-encoding rejects
+ # raw high bytes in source files.
     result = "\""
     i = 0
     while i < s.length
@@ -14420,7 +14439,7 @@ class Compiler
                 result = result + bsl + "t"
               else
                 if ch == 0.chr
- # Issue #722: NUL byte inside the literal. Octal `\000` always
+ # NUL byte inside the literal. Octal `\000` always
  # consumes exactly 3 digits so a following digit char doesn't
  # extend the escape. sp_str_byte_len falls back to strlen for
  # static literals so the in-string-NUL length still reports
@@ -14428,7 +14447,30 @@ class Compiler
  # new marker -- deferred.
                   result = result + bsl + "000"
                 else
-                  result = result + ch
+                  bv = ch.ord
+                  if bv >= 0x80
+ # Multi-byte / high-byte: emit one `\xHH` per UTF-8 byte so
+ # the source-encoding warning doesn't fire and the output
+ # round-trips byte-for-byte.
+                    hex = "0123456789ABCDEF"
+                    cb = 0
+                    while cb < ch.bytesize
+                      bb = ch.getbyte(cb)
+                      result = result + bsl + "x" + hex[(bb >> 4) & 0xF] + hex[bb & 0xF]
+                      cb = cb + 1
+                    end
+ # Break out of the escape with a string concat so a
+ # following hex digit ('0'-'9' / 'a'-'f' / 'A'-'F')
+ # doesn't get absorbed into the \xHH sequence.
+                    if i + 1 < s.length
+                      nb = s[i + 1].getbyte(0)
+                      if (nb >= 48 && nb <= 57) || (nb >= 65 && nb <= 70) || (nb >= 97 && nb <= 102)
+                        result = result + "\" \""
+                      end
+                    end
+                  else
+                    result = result + ch
+                  end
                 end
               end
             end
@@ -33631,22 +33673,35 @@ class Compiler
           if bp == ""
             bp = "_l"
           end
-          @needs_str_array = 1
-          tmp_arr = new_temp
-          tmp_i = new_temp
-          src = rc
+          src_el = rc
           if rt == "mutable_str"
-            src = rc + "->data"
+            src_el = rc + "->data"
           end
-          emit("  sp_StrArray *" + tmp_arr + " = sp_str_split(" + src + ", \"\\n\");")
-          emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " < " + tmp_arr + "->len; " + tmp_i + "++) {")
-          emit("    const char *lv_" + bp + " = " + tmp_arr + "->data[" + tmp_i + "];")
+          base_el = new_temp
+          start_el = new_temp
+          pos_el = new_temp
+          slen_el = new_temp
+          buf_el = new_temp
+          llen_el = new_temp
+          emit("  const char *" + base_el + " = " + src_el + ";")
+          emit("  mrb_int " + slen_el + " = sp_str_length(" + base_el + ");")
+          emit("  mrb_int " + start_el + " = 0;")
+          emit("  mrb_int " + pos_el + " = 0;")
+          emit("  while (" + start_el + " < " + slen_el + ") {")
+          emit("    while (" + pos_el + " < " + slen_el + " && " + base_el + "[" + pos_el + "] != '\\n') " + pos_el + "++;")
+          emit("    if (" + pos_el + " < " + slen_el + ") " + pos_el + "++;")
+          emit("    mrb_int " + llen_el + " = " + pos_el + " - " + start_el + ";")
+          emit("    char *" + buf_el + " = sp_str_alloc(" + llen_el + ");")
+          emit("    memcpy(" + buf_el + ", " + base_el + " + " + start_el + ", " + llen_el + ");")
+          emit("    " + buf_el + "[" + llen_el + "] = 0;")
+          emit("    const char *lv_" + bp + " = " + buf_el + ";")
           @indent = @indent + 1
           push_scope
           declare_var(bp, "string")
           compile_stmts_body(@nd_body[@nd_block[nid]])
           pop_scope
           @indent = @indent - 1
+          emit("    " + start_el + " = " + pos_el + ";")
           emit("  }")
           return 1
         end

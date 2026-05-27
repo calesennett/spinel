@@ -266,15 +266,28 @@ static mrb_int sp_str_to_i_cruby(const char *s) {
    far. Issue #883. */
 static mrb_int sp_str_to_i_base(const char *s, mrb_int base) {
   if (!s) return 0;
-  if (base < 2 || base > 36) base = 10;
+  /* base 0 = auto-detect from prefix (0x → 16, 0b → 2, 0/0o → 8,
+     otherwise 10). Per CRuby, only base 0 enables prefix-based
+     dispatch — explicit bases just *accept* the matching prefix. */
+  if (base != 0 && (base < 2 || base > 36)) base = 10;
   const char *p = s;
   while (isspace((unsigned char)*p)) p++;
   int neg = 0;
   if (*p == '+') p++;
   else if (*p == '-') { neg = 1; p++; }
-  /* Optional `0x` / `0b` / `0o` prefix matching the explicit base.
-     CRuby's String#to_i(base) accepts these. */
-  if (*p == '0' && p[1] != 0) {
+  if (base == 0) {
+    if (*p == '0') {
+      if (p[1] == 'x' || p[1] == 'X') { base = 16; p += 2; }
+      else if (p[1] == 'b' || p[1] == 'B') { base = 2; p += 2; }
+      else if (p[1] == 'o' || p[1] == 'O') { base = 8; p += 2; }
+      else if (p[1] == 'd' || p[1] == 'D') { base = 10; p += 2; }
+      else if (p[1] >= '0' && p[1] <= '7') { base = 8; p++; }
+      else { base = 10; }
+    } else {
+      base = 10;
+    }
+  } else if (*p == '0' && p[1] != 0) {
+    /* Explicit base accepts the matching prefix. */
     if ((base == 16) && (p[1] == 'x' || p[1] == 'X')) p += 2;
     else if ((base == 2) && (p[1] == 'b' || p[1] == 'B')) p += 2;
     else if ((base == 8) && (p[1] == 'o' || p[1] == 'O')) p += 2;
