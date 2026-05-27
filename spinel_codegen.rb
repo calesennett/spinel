@@ -19689,6 +19689,11 @@ class Compiler
     if mname == "itself"
       return rc
     end
+ # String#valid_encoding? — spinel sources are UTF-8 and the
+ # runtime helper validates byte sequences. Returns a bool.
+    if mname == "valid_encoding?"
+      return "sp_str_valid_encoding(" + rc + ")"
+    end
  # Case-insensitive String compares. CRuby returns -1/0/1 for
  # `casecmp` and a bool for `casecmp?`. Runtime sp_str_casecmp
  # avoids the POSIX/Windows strcasecmp/stricmp split.

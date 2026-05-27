@@ -4362,6 +4362,9 @@ class Compiler
     if mname == "casecmp?"
       return "bool"
     end
+    if mname == "valid_encoding?"
+      return "bool"
+    end
     if mname == "start_with?"
       return "bool"
     end
