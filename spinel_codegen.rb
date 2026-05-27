@@ -170,8 +170,10 @@ class Compiler
  # 0..20 are reserved for Ruby primitive classes / modules per
  # docs/CLASS-OBJECT.md (minus Method which the existing
  # register_builtin_classes pushes as a user-class entry).
- # User @cls_names entries shift to cls_id 21 + internal_ci;
- # modules shift to 21 + N + module_idx. Lets sp_class_for_poly
+ # Additional built-ins (exceptions, Encoding, etc.) follow that
+ # primitive prefix. User @cls_names entries shift by
+ # @builtin_class_count; modules shift after user classes. Lets
+ # sp_class_for_poly
  # map primitive tags to the built-in cls_id so
  # `5.is_a?(Integer)` against a dynamic klass resolves via
  # the same sp_class_le path as user-class checks.
@@ -197,7 +199,8 @@ class Compiler
                                "ScriptError", "NotImplementedError", "LoadError", "SyntaxError",
                                "StopIteration", "RegexpError",
                                "EncodingError", "SystemCallError",
-                               "LocalJumpError", "FiberError"]
+                               "LocalJumpError", "FiberError",
+                               "Encoding"]
  # -1 = no parent (root). Module entries (Kernel, Comparable,
  # Enumerable) intentionally have -1 since modules don't
  # have superclasses.
@@ -218,7 +221,8 @@ class Compiler
                                 21, 36, 36, 36,
                                 26, 22,
                                 22, 22,
-                                22, 22]
+                                22, 22,
+                                1]
  # Semicolon-separated module-name includes per built-in class.
     @builtin_class_includes = ["", "Kernel", "", "", "",
                                "", "", "",
@@ -237,7 +241,8 @@ class Compiler
                                "", "", "", "",
                                "", "",
                                "", "",
-                               "", ""]
+                               "", "",
+                               ""]
     @builtin_class_count = @builtin_class_names.length
  # emit-time toggle for the per-program
  # sp_class_names[] table + sp_class_to_s helper. compile_expr's
@@ -917,7 +922,7 @@ class Compiler
     if name == "Math" || name == "File" || name == "Dir" || name == "Time" || name == "IO" || name == "Process" || name == "Kernel" || name == "Comparable" || name == "Enumerable" || name == "Complex"
       return 1
     end
-    if name == "Object" || name == "Integer" || name == "String" || name == "Float" || name == "Symbol" || name == "Array" || name == "Hash" || name == "Range" || name == "Numeric" || name == "TrueClass" || name == "FalseClass" || name == "NilClass" || name == "Proc" || name == "Lambda" || name == "Regexp" || name == "MatchData" || name == "StringIO" || name == "Fiber"
+    if name == "Object" || name == "Integer" || name == "String" || name == "Float" || name == "Symbol" || name == "Array" || name == "Hash" || name == "Range" || name == "Numeric" || name == "TrueClass" || name == "FalseClass" || name == "NilClass" || name == "Proc" || name == "Lambda" || name == "Regexp" || name == "MatchData" || name == "StringIO" || name == "Fiber" || name == "Encoding"
       return 1
     end
  # Common exception classes referenced by raise / rescue. We
@@ -1604,6 +1609,12 @@ class Compiler
       end
       return is_a_static_negative(eb)
     end
+    if cname == "Encoding"
+      if eb == "encoding"
+        return "TRUE"
+      end
+      return is_a_static_negative(eb)
+    end
  # User-defined class
     if find_class_idx(cname) >= 0
       if is_obj_type(eb) == 1
@@ -1663,6 +1674,9 @@ class Compiler
     end
     if cname == "Range"
       return "range"
+    end
+    if cname == "Encoding"
+      return "encoding"
     end
     if find_class_idx(cname) >= 0
       return "obj_" + cname
@@ -2961,8 +2975,11 @@ class Compiler
     if t == "FloatNode"
       return "float"
     end
-    if t == "StringNode" || t == "SourceFileNode" || t == "SourceEncodingNode" || t == "NumberedReferenceReadNode" || t == "InterpolatedStringNode" || t == "InterpolatedSymbolNode" || t == "BackReferenceReadNode" || t == "XStringNode" || t == "InterpolatedXStringNode"
+    if t == "StringNode" || t == "SourceFileNode" || t == "NumberedReferenceReadNode" || t == "InterpolatedStringNode" || t == "InterpolatedSymbolNode" || t == "BackReferenceReadNode" || t == "XStringNode" || t == "InterpolatedXStringNode"
       return "string"
+    end
+    if t == "SourceEncodingNode"
+      return "encoding"
     end
     if t == "SymbolNode"
       return "symbol"
@@ -4166,6 +4183,9 @@ class Compiler
     if t == "int_str_hash"
       return 1
     end
+    if t == "int_int_hash"
+      return 1
+    end
     if t == "sym_int_hash"
       return 1
     end
@@ -4539,6 +4559,9 @@ class Compiler
     if t == "int_str_hash"
       return "sp_IntStrHash *"
     end
+    if t == "int_int_hash"
+      return "sp_IntIntHash *"
+    end
     if t == "sym_int_hash"
       return "sp_SymIntHash *"
     end
@@ -4574,6 +4597,9 @@ class Compiler
  # id so `c.to_s` can index sp_class_names[].
       @needs_class_table = 1
       return "sp_Class"
+    end
+    if t == "encoding"
+      return "sp_Encoding"
     end
     if t == "proc"
       return "sp_Proc *"
@@ -4675,6 +4701,9 @@ class Compiler
  # returns "" for it. Locals declared `sp_Class lv_x = ((sp_Class){-1})`
  # are equivalent to nil for to_s purposes.
       return "((sp_Class){-1LL})"
+    end
+    if t == "encoding"
+      return "((sp_Encoding){NULL})"
     end
     if t == "stringio"
       return "NULL"
@@ -5011,6 +5040,33 @@ class Compiler
     pat == "" ? compile_expr(a_ss[0]) : pat
   end
 
+ # Check whether the format string uses only plain `%s`
+ # placeholders (and literals / `%%`). Used to short-circuit
+ # `"fmt" % str_array` to the simpler strarr helper instead of
+ # boxing through poly_array.
+  def str_format_only_simple_s_p(s)
+    i = 0
+    while i < s.length
+      if s[i] == "%"
+        i = i + 1
+        if i >= s.length
+          return 0
+        end
+        if s[i] == "%"
+          i = i + 1
+          next
+        end
+        if s[i] == "s"
+          i = i + 1
+          next
+        end
+        return 0
+      end
+      i = i + 1
+    end
+    1
+  end
+
   def gvar_punct_word(c)
     return "bang" if c == "!"
     return "semi" if c == ";"
@@ -5111,7 +5167,7 @@ class Compiler
     if is_nullable_type(t) == 1
       t = base_type(t)
     end
-    if t == "str_int_hash" || t == "str_str_hash" || t == "int_str_hash"
+    if t == "str_int_hash" || t == "str_str_hash" || t == "int_str_hash" || t == "int_int_hash"
       return 1
     end
     if t == "sym_int_hash" || t == "sym_str_hash"
@@ -5180,7 +5236,7 @@ class Compiler
     if t == "str_int_hash" || t == "str_str_hash" || t == "str_poly_hash"
       return "({ for (mrb_int _i = 0; _i < (" + rc + ")->cap; _i++) (" + rc + ")->keys[_i] = NULL; (" + rc + ")->len = 0; (" + rc + "); })"
     end
-    if t == "int_str_hash" || t == "int_poly_hash"
+    if t == "int_str_hash" || t == "int_int_hash" || t == "int_poly_hash"
       return "({ memset((" + rc + ")->used, 0, (" + rc + ")->cap); (" + rc + ")->len = 0; (" + rc + "); })"
     end
     if t == "poly_poly_hash"
@@ -5188,6 +5244,21 @@ class Compiler
     end
     ""
   end
+
+ # Per-variant info for the shared Hash#fetch(k) { block } arm.
+ # Returns a 4-tuple [value_type, value_c_type, has_key_fn,
+ # get_fn] or nil for unsupported variants. The block-form
+ # arm uses these to emit the runtime check + dispatch.
+  def hash_fetch_block_info(t)
+    if t == "sym_int_hash";  return ["int", "mrb_int", "sp_SymIntHash_has_key", "sp_SymIntHash_get"]; end
+    if t == "sym_str_hash";  return ["string", "const char *", "sp_SymStrHash_has_key", "sp_SymStrHash_get"]; end
+    if t == "sym_poly_hash"; return ["poly", "sp_RbVal", "sp_SymPolyHash_has_key", "sp_SymPolyHash_get"]; end
+    if t == "str_int_hash";  return ["int", "mrb_int", "sp_StrIntHash_has_key", "sp_StrIntHash_get"]; end
+    if t == "str_str_hash";  return ["string", "const char *", "sp_StrStrHash_has_key", "sp_StrStrHash_get"]; end
+    if t == "str_poly_hash"; return ["poly", "sp_RbVal", "sp_StrPolyHash_has_key", "sp_StrPolyHash_get"]; end
+    nil
+  end
+
 
  # CRuby returns nil for static mismatches (e.g. `{a: 1}.dig("a")`)
  # since no key compares equal — Hash#dig short-circuits to nil here.
@@ -7203,7 +7274,7 @@ class Compiler
     if t == "sym_int_hash" || t == "sym_str_hash" || t == "sym_poly_hash"
       return "sym"
     end
-    if t == "int_str_hash"
+    if t == "int_str_hash" || t == "int_int_hash"
       return "int"
     end
     if t == "poly_poly_hash"
@@ -7213,7 +7284,7 @@ class Compiler
   end
 
   def hash_value_part(t)
-    if t == "str_int_hash" || t == "sym_int_hash"
+    if t == "str_int_hash" || t == "sym_int_hash" || t == "int_int_hash"
       return "int"
     end
     if t == "str_str_hash" || t == "sym_str_hash" || t == "int_str_hash"
@@ -7715,6 +7786,8 @@ class Compiler
           if is_nullable_type(t) == 1
             result = t
           end
+        elsif (result == "encoding" && t == "int") || (result == "int" && t == "encoding")
+          return "poly"
         elsif result == "int"
  # int is default/unresolved — real type takes priority
           result = t
@@ -8439,8 +8512,9 @@ class Compiler
  # maps to Array / Hash / Range / Time / Proc. SP_TAG_CLASS
  # returns itself; SP_TAG_OBJ with non-negative cls_id is a
  # user-class instance.
+      enc_cls_id = builtin_class_id_for_name("Encoding")
       emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v) __attribute__((unused));")
-      emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v){switch(v.tag){case SP_TAG_NIL:return (sp_Class){5};case SP_TAG_BOOL:return (sp_Class){v.v.b?6:7};case SP_TAG_INT:return (sp_Class){9};case SP_TAG_FLT:return (sp_Class){10};case SP_TAG_STR:return (sp_Class){11};case SP_TAG_SYM:return (sp_Class){12};case SP_TAG_CLASS:return (sp_Class){(mrb_int)v.cls_id};case SP_TAG_OBJ:if(v.cls_id>=0)return (sp_Class){(mrb_int)v.cls_id};switch(v.cls_id){case SP_BUILTIN_INT_ARRAY:case SP_BUILTIN_STR_ARRAY:case SP_BUILTIN_FLT_ARRAY:case SP_BUILTIN_SYM_ARRAY:case SP_BUILTIN_PTR_ARRAY:case SP_BUILTIN_POLY_ARRAY:return (sp_Class){13};case SP_BUILTIN_STR_INT_HASH:case SP_BUILTIN_STR_STR_HASH:case SP_BUILTIN_INT_STR_HASH:case SP_BUILTIN_SYM_INT_HASH:case SP_BUILTIN_SYM_STR_HASH:case SP_BUILTIN_STR_POLY_HASH:case SP_BUILTIN_SYM_POLY_HASH:case SP_BUILTIN_POLY_POLY_HASH:return (sp_Class){14};case SP_BUILTIN_RANGE:return (sp_Class){15};case SP_BUILTIN_TIME:return (sp_Class){16};case SP_BUILTIN_PROC:return (sp_Class){20};default:return (sp_Class){-1};}}return (sp_Class){-1};}")
+      emit_raw("static sp_Class sp_class_for_poly(sp_RbVal v){switch(v.tag){case SP_TAG_NIL:return (sp_Class){5};case SP_TAG_BOOL:return (sp_Class){v.v.b?6:7};case SP_TAG_INT:return (sp_Class){9};case SP_TAG_FLT:return (sp_Class){10};case SP_TAG_STR:return (sp_Class){11};case SP_TAG_SYM:return (sp_Class){12};case SP_TAG_CLASS:return (sp_Class){(mrb_int)v.cls_id};case SP_TAG_ENCODING:return (sp_Class){" + enc_cls_id.to_s + "};case SP_TAG_OBJ:if(v.cls_id>=0)return (sp_Class){(mrb_int)v.cls_id};switch(v.cls_id){case SP_BUILTIN_INT_ARRAY:case SP_BUILTIN_STR_ARRAY:case SP_BUILTIN_FLT_ARRAY:case SP_BUILTIN_SYM_ARRAY:case SP_BUILTIN_PTR_ARRAY:case SP_BUILTIN_POLY_ARRAY:return (sp_Class){13};case SP_BUILTIN_STR_INT_HASH:case SP_BUILTIN_STR_STR_HASH:case SP_BUILTIN_INT_STR_HASH:case SP_BUILTIN_SYM_INT_HASH:case SP_BUILTIN_SYM_STR_HASH:case SP_BUILTIN_STR_POLY_HASH:case SP_BUILTIN_SYM_POLY_HASH:case SP_BUILTIN_POLY_POLY_HASH:return (sp_Class){14};case SP_BUILTIN_RANGE:return (sp_Class){15};case SP_BUILTIN_TIME:return (sp_Class){16};case SP_BUILTIN_PROC:return (sp_Class){20};default:return (sp_Class){-1};}}return (sp_Class){-1};}")
     end
     emit_raw("")
   end
@@ -8685,9 +8759,19 @@ class Compiler
     end
     pname = @cls_parents[cur_internal]
     if pname != ""
+      pp_uid = -1
       pp_internal = find_class_idx(pname)
       if pp_internal >= 0
-        psub = compute_ancestors_for_unified(cls_id_for_user_internal(pp_internal))
+        pp_uid = cls_id_for_user_internal(pp_internal)
+      else
+ # Parent is a built-in class (StandardError / Object /
+ # Numeric / etc.). find_class_idx only walks the user
+ # table — fall through to the unified name table so the
+ # MRO picks up the built-in ancestor chain.
+        pp_uid = unified_cls_id_for_name(pname)
+      end
+      if pp_uid >= 0
+        psub = compute_ancestors_for_unified(pp_uid)
         pj = 0
         while pj < psub.length
           if acc_includes(acc, psub[pj]) == 0
@@ -8806,6 +8890,9 @@ class Compiler
     t = infer_type(nid)
     if t == "symbol"
       return "sp_sym_to_s(" + s + ")"
+    end
+    if t == "encoding"
+      return "sp_encoding_name(" + s + ")"
     end
  # Issue #651: a poly-typed value (commonly an ivar inferred as
  # poly because a `kwarg: nil`-defaulted param writes it) flowing
@@ -13475,8 +13562,14 @@ class Compiler
         return "sp_ruby_platform_str()"
       end
       if is_known_constant_name(rname) == 0
-        warn_unresolved_const(rname)
-        return "0"
+ # Uninitialised constant — raise NameError at runtime (CRuby
+ # behaviour). Stmt-expression so the call site still gets an
+ # expression value of the inferred type (the cast is reached
+ # only after sp_raise_cls's longjmp, so it's dead code that
+ # has to type-check).
+        @needs_setjmp = 1
+        rt_uc = infer_type(nid)
+        return "({ sp_raise_cls(\"NameError\", \"uninitialized constant " + rname + "\"); " + c_default_val(rt_uc) + "; })"
       end
       return rname
     end
@@ -13869,9 +13962,9 @@ class Compiler
       return c_string_literal(@nd_content[nid])
     end
     if t == "SourceEncodingNode"
- # __ENCODING__ — Spinel has no Encoding runtime; we return
- # the canonical "UTF-8" string. Documented in test/source_encoding.rb.
-      return c_string_literal("UTF-8")
+ # __ENCODING__ — Spinel sources are UTF-8, represented as a
+ # small Encoding value so `.class` and `.name` match Ruby.
+      return "sp_encoding_utf8()"
     end
     if t == "ArgumentsNode"
       arg_ids = parse_id_list(@nd_args[nid])
@@ -14570,6 +14663,9 @@ class Compiler
                         @needs_class_table = 1
                         fmt = fmt + "%s"
                         arg_exprs.push("sp_class_to_s(" + compile_expr(inner) + ")")
+                      elsif it == "encoding"
+                        fmt = fmt + "%s"
+                        arg_exprs.push("sp_encoding_name(" + compile_expr(inner) + ")")
                       elsif it == "symbol"
  # Symbol values carry the sp_sym int id;
  # interpolation must render the registered
@@ -16316,6 +16412,12 @@ class Compiler
           "downcase!" => "sp_str_downcase",
         }[mname]
         return "(sp_String_replace(" + rc + ", " + helper_bang + "(" + rc + "->data)), " + rc + ")"
+      end
+ # `delete_prefix!` / `delete_suffix!` — bang variants of the
+ # non-mutating counterparts. Mutates self in place.
+      if mname == "delete_prefix!" || mname == "delete_suffix!"
+        helper_dp = (mname == "delete_prefix!") ? "sp_str_delete_prefix" : "sp_str_delete_suffix"
+        return "(sp_String_replace(" + rc + ", " + helper_dp + "(" + rc + "->data, " + compile_arg0(nid) + ")), " + rc + ")"
       end
       if mname == "insert"
         args_id_ms = @nd_arguments[nid]
@@ -18491,7 +18593,37 @@ class Compiler
               if lt == "mutable_str"
                 recv_c = recv_c + "->data"
               end
-              return "sp_str_format_strarr(" + recv_c + ", " + compile_expr(aargs[0]) + ")"
+ # The simple all-%s helper is fine when the format string
+ # uses only bare %s placeholders. For anything richer
+ # (`%-3s`, `%5s`, ...) box through the poly_array path.
+              if @nd_type[recv] == "StringNode"
+                lit_recv = @nd_unescaped[recv]
+                lit_recv = @nd_content[recv] if lit_recv == ""
+                if str_format_only_simple_s_p(lit_recv) == 1
+                  return "sp_str_format_strarr(" + recv_c + ", " + compile_expr(aargs[0]) + ")"
+                end
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_c + ", sp_StrArray_to_poly_fmt(" + compile_expr(aargs[0]) + "))"
+            end
+ # Heterogeneous / int: poly_array helper handles per-element
+ # type via the runtime box tag. int_array is boxed inline so
+ # the helper sees SP_TAG_INT slots.
+            if rt == "poly_array"
+              recv_pa = compile_expr(recv)
+              if lt == "mutable_str"
+                recv_pa = recv_pa + "->data"
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_pa + ", " + compile_expr(aargs[0]) + ")"
+            end
+            if rt == "int_array"
+              recv_ia = compile_expr(recv)
+              if lt == "mutable_str"
+                recv_ia = recv_ia + "->data"
+              end
+              @needs_rb_value = 1
+              return "sp_str_format_polyarr(" + recv_ia + ", sp_IntArray_to_poly(" + compile_expr(aargs[0]) + "))"
             end
           end
         end
@@ -19527,7 +19659,12 @@ class Compiler
     if mname == "to_f"
       return "atof(" + rc + ")"
     end
-    if mname == "inspect"
+    if mname == "inspect" || mname == "dump"
+ # String#dump and #inspect render the same quoted form for the
+ # subset of characters sp_str_inspect already handles (basic
+ # backslash escapes + \xHH for non-printable). CRuby's dump
+ # adds a forced ASCII-7 fallback for high-byte sequences; that
+ # divergence is documented but rare in practice.
       return "sp_str_inspect(" + rc + ")"
     end
     if mname == "upcase"
@@ -19611,11 +19748,8 @@ class Compiler
     if mname == "encode" || mname == "force_encoding" || mname == "b"
       return rc
     end
- # `.encoding` -- spinel doesn't model Encoding objects; return a
- # plain string label so `puts s.encoding` prints "UTF-8". Issue
- # #723.
     if mname == "encoding"
-      return "((const char*)\"UTF-8\")"
+      return "sp_encoding_utf8()"
     end
     if mname == "strip"
       return "sp_str_strip(" + rc + ")"
@@ -20145,6 +20279,31 @@ class Compiler
     if mname == "delete"
       return "sp_str_delete(" + rc + ", " + compile_arg0(nid) + ")"
     end
+    if mname == "crypt"
+ # 1-arg form (salt). 0-arg falls through (CRuby raises but
+ # spinel keeps the contract permissive — empty salt = "..").
+      args_id_cr = @nd_arguments[nid]
+      salt_cr = "(&(\"\\xff\" \"..\")[1])"
+      if args_id_cr >= 0
+        a_cr = get_args(args_id_cr)
+        if a_cr.length > 0
+          salt_cr = compile_expr(a_cr[0])
+        end
+      end
+      return "sp_str_crypt(" + rc + ", " + salt_cr + ")"
+    end
+    if mname == "scrub"
+ # 1-arg: replacement string. 0-arg: NULL (helper falls back to U+FFFD).
+      args_id_sc = @nd_arguments[nid]
+      rep_sc = "NULL"
+      if args_id_sc >= 0
+        a_sc = get_args(args_id_sc)
+        if a_sc.length > 0
+          rep_sc = compile_expr(a_sc[0])
+        end
+      end
+      return "sp_str_scrub(" + rc + ", " + rep_sc + ")"
+    end
     if mname == "squeeze"
       return "sp_str_squeeze(" + rc + ")"
     end
@@ -20247,24 +20406,53 @@ class Compiler
   end
 
   def compile_range_method_expr(nid, mname, rc)
-    if mname == "first"
+    if mname == "first" || mname == "begin" || mname == "min"
       return rc + ".first"
     end
-    if mname == "last"
+    if mname == "last" || mname == "end" || mname == "max"
       return rc + ".last"
     end
- # include? / cover? on a numeric range reduce to first <= x <= last
- # (inclusive form). The two methods are identical for numeric ranges
- # so they share the same emission. Exclude_end isn't tracked in the
- # runtime sp_Range struct; non-literal receivers fall back to the
- # inclusive form (matches length/size).
+ # String-range form: `("a".."z").include?("m")`. sp_Range only
+ # holds int fields, so a string-typed RangeNode receiver can't
+ # round-trip through it. When the receiver is a literal
+ # RangeNode with String children, ignore `rc` and emit inline
+ # strcmp bounds. Non-literal string ranges fall through to the
+ # numeric path (which still mis-compiles for them — those are
+ # explicitly outside the supported subset for now).
     if mname == "include?" || mname == "cover?" || mname == "==="
- # Range#=== is the case-when membership operator and behaves like
- # cover? for numeric ranges (Ruby docs: "tests for membership").
+      lit_rg = resolve_literal_range_recv(nid)
+      if lit_rg >= 0
+        l_nid = @nd_left[lit_rg]
+        r_nid = @nd_right[lit_rg]
+        if l_nid >= 0 && r_nid >= 0 && infer_type(l_nid) == "string" && infer_type(r_nid) == "string"
+          arg_s = compile_arg0(nid)
+          left_s = compile_expr(l_nid)
+          right_s = compile_expr(r_nid)
+          op_rhs = (range_excl_end(lit_rg) == 1) ? "< 0" : "<= 0"
+          return "(strcmp(" + arg_s + ", " + left_s + ") >= 0 && strcmp(" + arg_s + ", " + right_s + ") " + op_rhs + ")"
+        end
+      end
       tmp = new_temp
       emit("  sp_Range " + tmp + " = " + rc + ";")
       arg = compile_arg0_as_int(nid)
       return "(" + arg + " >= " + tmp + ".first && " + arg + " <= " + tmp + ".last)"
+    end
+    if mname == "overlap?"
+ # `(a..b).overlap?(c..d)` for two numeric ranges reduces to
+ # `a <= d && c <= b`. The arg must itself be a range (literal
+ # or evaluated) — compile to an sp_Range struct.
+      args_id_ov = @nd_arguments[nid]
+      if args_id_ov >= 0
+        a_ov = get_args(args_id_ov)
+        if a_ov.length >= 1
+          self_tmp = new_temp
+          other_tmp = new_temp
+          emit("  sp_Range " + self_tmp + " = " + rc + ";")
+          emit("  sp_Range " + other_tmp + " = " + compile_expr(a_ov[0]) + ";")
+          return "(" + self_tmp + ".first <= " + other_tmp + ".last && " + other_tmp + ".first <= " + self_tmp + ".last)"
+        end
+      end
+      return "FALSE"
     end
     if mname == "to_a"
       @needs_int_array = 1
@@ -21290,10 +21478,178 @@ class Compiler
         @needs_gc = 1
         return "sp_IntArray_combination(" + rc + ", " + compile_arg0_as_int(nid) + ")"
       end
+ # `arr.product(other)` for two int_arrays — 2-arg Cartesian
+ # product via the runtime helper.
+      if mname == "product"
+        args_id_pr = @nd_arguments[nid]
+        if args_id_pr >= 0
+          a_pr = get_args(args_id_pr)
+          if a_pr.length == 1 && infer_type(a_pr[0]) == "int_array"
+            @needs_int_array = 1
+            @needs_gc = 1
+            return "sp_IntArray_product(" + rc + ", " + compile_expr(a_pr[0]) + ")"
+          end
+        end
+      end
       if mname == "permutation"
         @needs_int_array = 1
         @needs_gc = 1
         return "sp_IntArray_permutation(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+ # `arr.slice_when { |a, b| pred }` materialises an array of
+ # contiguous chunks split where the block predicate is true.
+ # `.to_a` on the result is a no-op (int_array_ptr_array).
+      if mname == "slice_when" && @nd_block[nid] >= 0
+        @needs_int_array = 1
+        @needs_gc = 1
+        out_sw = new_temp
+        cur_sw = new_temp
+        ii_sw = new_temp
+        prev_sw = new_temp
+        has_prev_sw = new_temp
+        cur_val_sw = new_temp
+        emit("  sp_PtrArray *" + out_sw + " = sp_PtrArray_new();")
+        emit("  SP_GC_ROOT(" + out_sw + ");")
+        emit("  sp_IntArray *" + cur_sw + " = sp_IntArray_new();")
+        emit("  SP_GC_ROOT(" + cur_sw + ");")
+        emit("  mrb_int " + prev_sw + " = 0;")
+        emit("  int " + has_prev_sw + " = 0;")
+        emit("  for (mrb_int " + ii_sw + " = 0; " + ii_sw + " < sp_IntArray_length(" + rc + "); " + ii_sw + "++) {")
+        emit("    mrb_int " + cur_val_sw + " = sp_IntArray_get(" + rc + ", " + ii_sw + ");")
+        bp_a_sw = get_block_param(nid, 0)
+        bp_a_sw = "_a" if bp_a_sw == ""
+        bp_b_sw = get_block_param(nid, 1)
+        bp_b_sw = "_b" if bp_b_sw == ""
+        emit("    if (" + has_prev_sw + ") {")
+        emit("      mrb_int lv_" + bp_a_sw + " = " + prev_sw + ";")
+        emit("      mrb_int lv_" + bp_b_sw + " = " + cur_val_sw + ";")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_a_sw, "int")
+        declare_var(bp_b_sw, "int")
+        bbody_sw = @nd_body[@nd_block[nid]]
+        bexpr_sw = "FALSE"
+        if bbody_sw >= 0
+          bs_sw = get_stmts(bbody_sw)
+          ks_sw = 0
+          while ks_sw < bs_sw.length - 1
+            compile_stmt(bs_sw[ks_sw])
+            ks_sw = ks_sw + 1
+          end
+          if bs_sw.length > 0
+            bexpr_sw = compile_expr(bs_sw.last)
+          end
+        end
+        emit("      if (" + bexpr_sw + ") { sp_PtrArray_push(" + out_sw + ", " + cur_sw + "); " + cur_sw + " = sp_IntArray_new(); }")
+        pop_scope
+        @indent = @indent - 1
+        emit("    }")
+        emit("    sp_IntArray_push(" + cur_sw + ", " + cur_val_sw + ");")
+        emit("    " + prev_sw + " = " + cur_val_sw + ";")
+        emit("    " + has_prev_sw + " = 1;")
+        emit("  }")
+        emit("  if (" + cur_sw + "->len > 0) sp_PtrArray_push(" + out_sw + ", " + cur_sw + ");")
+        return out_sw
+      end
+ # `arr.slice_before(val)` / `slice_after(val)` — split before
+ # or after each matching element. Simple int-equality arg form
+ # only (no regexp / block); covers the common idiom.
+      if (mname == "slice_before" || mname == "slice_after") && @nd_block[nid] < 0
+        args_id_sb = @nd_arguments[nid]
+        if args_id_sb >= 0
+          a_sb = get_args(args_id_sb)
+          if a_sb.length == 1
+            @needs_int_array = 1
+            @needs_gc = 1
+            after_p = (mname == "slice_after") ? 1 : 0
+            pat_sb = compile_expr_as_int(a_sb[0])
+            out_sb = new_temp
+            cur_sb = new_temp
+            ii_sb = new_temp
+            v_sb = new_temp
+            pat_var = new_temp
+            emit("  sp_PtrArray *" + out_sb + " = sp_PtrArray_new();")
+            emit("  SP_GC_ROOT(" + out_sb + ");")
+            emit("  sp_IntArray *" + cur_sb + " = sp_IntArray_new();")
+            emit("  SP_GC_ROOT(" + cur_sb + ");")
+            emit("  mrb_int " + pat_var + " = " + pat_sb + ";")
+            emit("  for (mrb_int " + ii_sb + " = 0; " + ii_sb + " < sp_IntArray_length(" + rc + "); " + ii_sb + "++) {")
+            emit("    mrb_int " + v_sb + " = sp_IntArray_get(" + rc + ", " + ii_sb + ");")
+            if after_p == 0
+              emit("    if (" + v_sb + " == " + pat_var + " && " + cur_sb + "->len > 0) { sp_PtrArray_push(" + out_sb + ", " + cur_sb + "); " + cur_sb + " = sp_IntArray_new(); }")
+              emit("    sp_IntArray_push(" + cur_sb + ", " + v_sb + ");")
+            else
+              emit("    sp_IntArray_push(" + cur_sb + ", " + v_sb + ");")
+              emit("    if (" + v_sb + " == " + pat_var + ") { sp_PtrArray_push(" + out_sb + ", " + cur_sb + "); " + cur_sb + " = sp_IntArray_new(); }")
+            end
+            emit("  }")
+            emit("  if (" + cur_sb + "->len > 0) sp_PtrArray_push(" + out_sb + ", " + cur_sb + ");")
+            return out_sb
+          end
+        end
+      end
+ # `arr.chunk { |x| key }` materialises an array of [key,
+ # sub_array] pairs where consecutive elements with the same
+ # block-returned key are grouped.
+      if mname == "chunk" && @nd_block[nid] >= 0
+        @needs_int_array = 1
+        @needs_rb_value = 1
+        @needs_gc = 1
+        out_ck = new_temp
+        cur_ck = new_temp
+        cur_key_ck = new_temp
+        ii_ck = new_temp
+        has_prev_ck = new_temp
+        elem_ck = new_temp
+        key_ck = new_temp
+        emit("  sp_PolyArray *" + out_ck + " = sp_PolyArray_new();")
+        emit("  SP_GC_ROOT(" + out_ck + ");")
+        emit("  sp_IntArray *" + cur_ck + " = sp_IntArray_new();")
+        emit("  SP_GC_ROOT(" + cur_ck + ");")
+        emit("  mrb_int " + cur_key_ck + " = 0;")
+        emit("  int " + has_prev_ck + " = 0;")
+        emit("  for (mrb_int " + ii_ck + " = 0; " + ii_ck + " < sp_IntArray_length(" + rc + "); " + ii_ck + "++) {")
+        emit("    mrb_int " + elem_ck + " = sp_IntArray_get(" + rc + ", " + ii_ck + ");")
+        bp_x_ck = get_block_param(nid, 0)
+        bp_x_ck = "_x" if bp_x_ck == ""
+        emit("    mrb_int lv_" + bp_x_ck + " = " + elem_ck + ";")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_x_ck, "int")
+        bbody_ck = @nd_body[@nd_block[nid]]
+        bexpr_ck = "0"
+        if bbody_ck >= 0
+          bs_ck = get_stmts(bbody_ck)
+          kk_ck = 0
+          while kk_ck < bs_ck.length - 1
+            compile_stmt(bs_ck[kk_ck])
+            kk_ck = kk_ck + 1
+          end
+          if bs_ck.length > 0
+            bexpr_ck = compile_expr(bs_ck.last)
+          end
+        end
+        emit("    mrb_int " + key_ck + " = " + bexpr_ck + ";")
+        pop_scope
+        @indent = @indent - 1
+        emit("    if (" + has_prev_ck + " && " + key_ck + " != " + cur_key_ck + ") {")
+        emit("      sp_PolyArray *_pair = sp_PolyArray_new();")
+        emit("      sp_PolyArray_push(_pair, sp_box_int(" + cur_key_ck + "));")
+        emit("      sp_PolyArray_push(_pair, sp_box_poly_array((sp_PolyArray *)sp_IntArray_to_poly(" + cur_ck + ")));")
+        emit("      sp_PolyArray_push(" + out_ck + ", sp_box_poly_array(_pair));")
+        emit("      " + cur_ck + " = sp_IntArray_new();")
+        emit("    }")
+        emit("    sp_IntArray_push(" + cur_ck + ", " + elem_ck + ");")
+        emit("    " + cur_key_ck + " = " + key_ck + ";")
+        emit("    " + has_prev_ck + " = 1;")
+        emit("  }")
+        emit("  if (" + cur_ck + "->len > 0) {")
+        emit("    sp_PolyArray *_pair2 = sp_PolyArray_new();")
+        emit("    sp_PolyArray_push(_pair2, sp_box_int(" + cur_key_ck + "));")
+        emit("    sp_PolyArray_push(_pair2, sp_box_poly_array((sp_PolyArray *)sp_IntArray_to_poly(" + cur_ck + ")));")
+        emit("    sp_PolyArray_push(" + out_ck + ", sp_box_poly_array(_pair2));")
+        emit("  }")
+        return out_ck
       end
       if mname == "[]"
  # a[range] and a[start, len] return slices; bare a[i] stays a get.
@@ -21519,11 +21875,13 @@ class Compiler
         pop_scope
         return tmp
       end
- # tally: sym_array only — int_array would need an int_int_hash
- # variant which doesn't exist yet. Result is sym_int_hash.
+ # Array#tally — sym keys → sym_int_hash, int keys → int_int_hash.
       if mname == "tally" && recv_type == "sym_array"
         @needs_sym_int_hash = 1
         return "sp_SymArray_tally(" + rc + ")"
+      end
+      if mname == "tally" && recv_type == "int_array"
+        return "sp_IntArray_tally_int(" + rc + ")"
       end
       if mname == "first"
         return "sp_IntArray_get(" + rc + ", 0)"
@@ -22042,7 +22400,32 @@ class Compiler
       if mname == "length" || mname == "size"
         return "sp_PolyArray_length(" + rc + ")"
       end
- # poly_array#pack via the libspinel_rt.a helper (sp_pack.c).
+      if mname == "to_a"
+        return rc
+      end
+      if mname == "include?"
+        args_id_pinc = @nd_arguments[nid]
+        if args_id_pinc >= 0
+          a_pinc = get_args(args_id_pinc)
+          if a_pinc.length > 0
+            @needs_rb_value = 1
+            return "sp_PolyArray_include(" + rc + ", " + box_expr_to_poly(a_pinc[0]) + ")"
+          end
+        end
+        return "FALSE"
+      end
+      if mname == "assoc" || mname == "rassoc"
+        args_id_pa = @nd_arguments[nid]
+        if args_id_pa >= 0
+          a_pa = get_args(args_id_pa)
+          if a_pa.length > 0
+            @needs_rb_value = 1
+            helper_pa = (mname == "assoc") ? "sp_PolyArray_assoc" : "sp_PolyArray_rassoc"
+            return helper_pa + "(" + rc + ", " + box_expr_to_poly(a_pa[0]) + ")"
+          end
+        end
+        return "NULL"
+      end
       if mname == "pack"
         args_id_pkp = @nd_arguments[nid]
         if args_id_pkp >= 0
@@ -22085,7 +22468,16 @@ class Compiler
         return "sp_PolyArray_compact(" + rc + ")"
       end
       if mname == "flatten"
- # Recursive flatten into nested array-typed elements. Issue #739.
+ # Recursive flatten into nested array-typed elements. With a
+ # depth arg the depth-bounded variant runs; without, fully
+ # flatten.
+        args_id_fl = @nd_arguments[nid]
+        if args_id_fl >= 0
+          a_fl = get_args(args_id_fl)
+          if a_fl.length >= 1
+            return "sp_PolyArray_flatten_n(" + rc + ", " + compile_expr_as_int(a_fl[0]) + ")"
+          end
+        end
         return "sp_PolyArray_flatten(" + rc + ")"
       end
       if mname == "empty?"
@@ -22143,7 +22535,91 @@ class Compiler
         return ce
       end
     end
+ # Hash#fetch(k) { |k| default } — block form. `compile_body_into`
+ # walks the block body emitting all statements; the final
+ # expression assigns into a temp that we return. The non-block
+ # 2-arg fetch (default value) stays in the per-variant arms
+ # below; this arm is for the block-default form which they
+ # didn't cover.
+    if mname == "fetch" && @nd_block[nid] >= 0
+      fi = hash_fetch_block_info(recv_type)
+      if fi != nil
+        args_id_fb = @nd_arguments[nid]
+        if args_id_fb >= 0
+          aargs_fb = get_args(args_id_fb)
+          if aargs_fb.length >= 1
+            key_fb = compile_expr(aargs_fb[0])
+            tmp_fb = new_temp
+            emit("  " + fi[1] + " " + tmp_fb + ";")
+            emit("  if (" + fi[2] + "(" + rc + ", " + key_fb + ")) {")
+            emit("    " + tmp_fb + " = " + fi[3] + "(" + rc + ", " + key_fb + ");")
+            emit("  } else {")
+            @indent = @indent + 1
+            push_scope
+            compile_body_into(@nd_body[@nd_block[nid]], tmp_fb, fi[0])
+            pop_scope
+            @indent = @indent - 1
+            emit("  }")
+            return tmp_fb
+          end
+        end
+      end
+    end
     if recv_type == "sym_int_hash"
+      if mname == "map" && @nd_block[nid] >= 0
+ # Hash#map { |k, v| ... } walks the hash and accumulates the
+ # block's return into a result array. Result type comes from
+ # the block body's last expr (string → str_array, int → int_array,
+ # else poly_array). The previous fallthrough emitted a stale
+ # `_t = 0` and crashed on .inspect.
+        rc_hm = rc
+        bp_k_hm = get_block_param(nid, 0)
+        bp_k_hm = "_k" if bp_k_hm == ""
+        bp_v_hm = get_block_param(nid, 1)
+        bp_v_hm = "_v" if bp_v_hm == ""
+        blk_id_hm = @nd_block[nid]
+        body_id_hm = @nd_body[blk_id_hm]
+        body_stmts_hm = body_id_hm >= 0 ? get_stmts(body_id_hm) : []
+        body_ret_t_hm = "int"
+        if body_stmts_hm.length > 0
+          body_ret_t_hm = infer_type(body_stmts_hm.last)
+        end
+        out_hm = new_temp
+        iter_hm = new_temp
+        out_pfx = "IntArray"
+        if body_ret_t_hm == "string"
+          out_pfx = "StrArray"
+          @needs_str_array = 1
+        elsif body_ret_t_hm == "float"
+          out_pfx = "FloatArray"
+          @needs_float_array = 1
+        else
+          @needs_int_array = 1
+        end
+        emit("  sp_" + out_pfx + " *" + out_hm + " = sp_" + out_pfx + "_new();")
+        emit("  SP_GC_ROOT(" + out_hm + ");")
+        emit("  for (mrb_int " + iter_hm + " = 0; " + iter_hm + " < " + rc_hm + "->len; " + iter_hm + "++) {")
+        emit("    sp_sym lv_" + bp_k_hm + " = " + rc_hm + "->order[" + iter_hm + "];")
+        emit("    mrb_int lv_" + bp_v_hm + " = sp_SymIntHash_get(" + rc_hm + ", lv_" + bp_k_hm + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_k_hm, "symbol")
+        declare_var(bp_v_hm, "int")
+        bexpr_hm = "0"
+        if body_stmts_hm.length > 0
+          k_hm = 0
+          while k_hm < body_stmts_hm.length - 1
+            compile_stmt(body_stmts_hm[k_hm])
+            k_hm = k_hm + 1
+          end
+          bexpr_hm = compile_expr(body_stmts_hm.last)
+        end
+        emit("    sp_" + out_pfx + "_push(" + out_hm + ", " + bexpr_hm + ");")
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        return out_hm
+      end
       if mname == "[]"
         args_id0 = @nd_arguments[nid]
         if args_id0 >= 0
@@ -22270,6 +22746,60 @@ class Compiler
  # merge / dup / delete -- sibling of #510 (which fixed
  # sym_str_hash / sym_poly_hash) but for sym_int_hash. Issue
  # #546.
+      if mname == "merge" && @nd_block[nid] >= 0
+ # `h1.merge(h2) { |k, v1, v2| ... }` — conflict-resolution
+ # block form. Only support sym_int_hash + sym_int_hash with
+ # an int-returning block (most common shape); other variant
+ # combinations fall through to the block-less path below.
+        args_id_mb = @nd_arguments[nid]
+        if args_id_mb >= 0
+          a_mb = get_args(args_id_mb)
+          if a_mb.length >= 1 && infer_type(a_mb[0]) == "sym_int_hash"
+            arg_mb = compile_expr_gc_rooted(a_mb[0])
+            result_mb = new_temp
+            iter_mb = new_temp
+            bp_k_mb = get_block_param(nid, 0)
+            bp_k_mb = "_mk" if bp_k_mb == ""
+            bp_v1_mb = get_block_param(nid, 1)
+            bp_v1_mb = "_mv1" if bp_v1_mb == ""
+            bp_v2_mb = get_block_param(nid, 2)
+            bp_v2_mb = "_mv2" if bp_v2_mb == ""
+            emit("  sp_SymIntHash *" + result_mb + " = sp_SymIntHash_dup(" + rc + ");")
+            emit("  SP_GC_ROOT(" + result_mb + ");")
+            emit("  for (mrb_int " + iter_mb + " = 0; " + iter_mb + " < " + arg_mb + "->len; " + iter_mb + "++) {")
+            emit("    sp_sym lv_" + bp_k_mb + " = " + arg_mb + "->order[" + iter_mb + "];")
+            emit("    mrb_int lv_" + bp_v2_mb + " = sp_SymIntHash_get(" + arg_mb + ", lv_" + bp_k_mb + ");")
+            emit("    if (sp_SymIntHash_has_key(" + result_mb + ", lv_" + bp_k_mb + ")) {")
+            emit("      mrb_int lv_" + bp_v1_mb + " = sp_SymIntHash_get(" + result_mb + ", lv_" + bp_k_mb + ");")
+            @indent = @indent + 2
+            push_scope
+            declare_var(bp_k_mb, "symbol")
+            declare_var(bp_v1_mb, "int")
+            declare_var(bp_v2_mb, "int")
+            bbody_mb = @nd_body[@nd_block[nid]]
+            bexpr_mb = "0"
+            if bbody_mb >= 0
+              bs_mb = get_stmts(bbody_mb)
+              k_mb = 0
+              while k_mb < bs_mb.length - 1
+                compile_stmt(bs_mb[k_mb])
+                k_mb = k_mb + 1
+              end
+              if bs_mb.length > 0
+                bexpr_mb = compile_expr(bs_mb.last)
+              end
+            end
+            emit("    sp_SymIntHash_set(" + result_mb + ", lv_" + bp_k_mb + ", " + bexpr_mb + ");")
+            pop_scope
+            @indent = @indent - 2
+            emit("    } else {")
+            emit("      sp_SymIntHash_set(" + result_mb + ", lv_" + bp_k_mb + ", lv_" + bp_v2_mb + ");")
+            emit("    }")
+            emit("  }")
+            return result_mb
+          end
+        end
+      end
       if mname == "merge"
         args_id_m546 = @nd_arguments[nid]
         if args_id_m546 >= 0
@@ -22337,7 +22867,10 @@ class Compiler
         return "(" + rc + "->default_v = (mrb_int)(" + compile_arg0(nid) + "))"
       end
       if mname == "delete"
-        return "(sp_SymIntHash_delete(" + rc + ", " + compile_arg0(nid) + "), 0)"
+ # Return the deleted value (or 0 / default_v when absent) — CRuby
+ # returns the prior value. Pre-eval the key once so has_key /
+ # get / delete all see the same sp_sym.
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; mrb_int _v = sp_SymIntHash_has_key(" + rc + ", _k) ? sp_SymIntHash_get(" + rc + ", _k) : 0; sp_SymIntHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "sym_str_hash"
@@ -22467,7 +23000,7 @@ class Compiler
         return "(" + rc + "->default_v = " + compile_expr_as_string(get_args(@nd_arguments[nid])[0]) + ")"
       end
       if mname == "delete"
-        return "(sp_SymStrHash_delete(" + rc + ", " + compile_arg0(nid) + "), 0)"
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; const char *_v = sp_SymStrHash_has_key(" + rc + ", _k) ? sp_SymStrHash_get(" + rc + ", _k) : NULL; sp_SymStrHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "sym_poly_hash"
@@ -22600,7 +23133,7 @@ class Compiler
         return "(" + rc + "->default_v = " + box_expr_to_poly(get_args(@nd_arguments[nid])[0]) + ")"
       end
       if mname == "delete"
-        return "(sp_SymPolyHash_delete(" + rc + ", " + compile_arg0(nid) + "), sp_box_nil())"
+        return "({ sp_sym _k = " + compile_arg0(nid) + "; sp_RbVal _v = sp_SymPolyHash_has_key(" + rc + ", _k) ? sp_SymPolyHash_get(" + rc + ", _k) : sp_box_nil(); sp_SymPolyHash_delete(" + rc + ", _k); _v; })"
       end
     end
     if recv_type == "str_poly_hash"
@@ -22946,6 +23479,26 @@ class Compiler
           emit("  }")
           return tmp
         end
+      end
+    end
+    if recv_type == "int_int_hash"
+      if mname == "[]"
+        return "sp_IntIntHash_get(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "has_key?" || mname == "key?" || mname == "include?" || mname == "member?"
+        return "sp_IntIntHash_has_key(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "length" || mname == "size" || (mname == "count" && @nd_block[nid] < 0 && @nd_arguments[nid] < 0)
+        return "sp_IntIntHash_length(" + rc + ")"
+      end
+      if mname == "empty?"
+        return "(sp_IntIntHash_length(" + rc + ") == 0)"
+      end
+      if mname == "any?" && @nd_block[nid] < 0
+        return "(sp_IntIntHash_length(" + rc + ") > 0)"
+      end
+      if mname == "dup" || mname == "clone"
+        return "sp_IntIntHash_dup(" + rc + ")"
       end
     end
     if recv_type == "int_str_hash"
@@ -24082,6 +24635,20 @@ class Compiler
  # is_a? / kind_of? — kind_of? is an exact alias of is_a? in MRI.
  # Both walk the class hierarchy: cname is or inherits from arg0 → TRUE.
     if mname == "is_a?" || mname == "kind_of?"
+      if base_type(recv_type) == "encoding"
+        arg0_enc_isa = ""
+        args_id_enc_isa = @nd_arguments[nid]
+        if args_id_enc_isa >= 0
+          a_enc_isa = get_args(args_id_enc_isa)
+          if a_enc_isa.length > 0
+            arg0_enc_isa = resolve_introspection_arg_name(a_enc_isa[0])
+          end
+        end
+        if arg0_enc_isa == "Encoding" || arg0_enc_isa == "Object" || arg0_enc_isa == "Kernel" || arg0_enc_isa == "BasicObject"
+          return "TRUE"
+        end
+        return "FALSE"
+      end
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
         arg0 = ""
@@ -24160,6 +24727,12 @@ class Compiler
       end
       if arg0 == "Hash" && is_hash_type(recv_type) == 1
         return "TRUE"
+      end
+      if base_type(recv_type) == "encoding"
+        if arg0 == "Encoding"
+          return "TRUE"
+        end
+        return "FALSE"
       end
       if is_obj_type(recv_type) == 1
         cname = recv_type[4, recv_type.length - 4]
@@ -24301,6 +24874,52 @@ class Compiler
         return "sp_class_to_s(((sp_Class){" + cls_id_for_user_internal(@current_class_idx).to_s + "LL}))"
       end
     end
+    if recv_type == "encoding"
+      if mname == "name" || mname == "to_s"
+        return "sp_encoding_name(" + rc + ")"
+      end
+      if mname == "inspect"
+        return "sp_encoding_inspect(" + rc + ")"
+      end
+      if mname == "==" || mname == "eql?"
+        arg0_enc_eq = -1
+        if @nd_arguments[nid] >= 0
+          args_enc_eq = get_args(@nd_arguments[nid])
+          if args_enc_eq.length > 0
+            arg0_enc_eq = args_enc_eq[0]
+          end
+        end
+        if arg0_enc_eq >= 0 && infer_type(arg0_enc_eq) == "encoding"
+          rhs_enc_eq = compile_expr(arg0_enc_eq)
+          return "sp_encoding_eq(" + rc + ", " + rhs_enc_eq + ")"
+        end
+        return "FALSE"
+      end
+      if mname == "!="
+        arg0_enc_ne = -1
+        if @nd_arguments[nid] >= 0
+          args_enc_ne = get_args(@nd_arguments[nid])
+          if args_enc_ne.length > 0
+            arg0_enc_ne = args_enc_ne[0]
+          end
+        end
+        if arg0_enc_ne >= 0 && infer_type(arg0_enc_ne) == "encoding"
+          rhs_enc_ne = compile_expr(arg0_enc_ne)
+          return "(!sp_encoding_eq(" + rc + ", " + rhs_enc_ne + "))"
+        end
+        return "TRUE"
+      end
+      if mname == "class"
+        bid_enc = builtin_class_id_for_name("Encoding")
+        if bid_enc >= 0
+          @needs_class_table = 1
+          return "((sp_Class){" + bid_enc.to_s + "LL})"
+        end
+      end
+      if mname == "nil?"
+        return "FALSE"
+      end
+    end
  # methods on a sp_Class value.
  #
  # Phase 1: `.to_s` -> sp_class_to_s(c) (per-program
@@ -24336,6 +24955,27 @@ class Compiler
       if mname == "to_s" || mname == "name" || mname == "inspect"
         @needs_class_table = 1
         return "sp_class_to_s(" + rc + ")"
+      end
+ # Module#const_defined?(:X) — static-class + literal-symbol-arg
+ # fast path. Spinel emits one C global per user-class constant
+ # named `cst_<Class>_<X>`, and the analyzer tracks those names
+ # in `@const_names`. Look up via `find_const_idx` to fold to
+ # TRUE / FALSE at compile time. Dynamic receivers or non-
+ # literal symbol args (or builtin classes whose constants live
+ # outside @const_names — Math::PI etc.) keep falling through.
+      if mname == "const_defined?"
+        recv_id_cd = @nd_receiver[nid]
+        args_id_cd = @nd_arguments[nid]
+        if recv_id_cd >= 0 && @nd_type[recv_id_cd] == "ConstantReadNode" && args_id_cd >= 0
+          aa_cd = get_args(args_id_cd)
+          if aa_cd.length >= 1 && @nd_type[aa_cd[0]] == "SymbolNode"
+            qname_cd = @nd_name[recv_id_cd] + "_" + @nd_content[aa_cd[0]]
+            if find_const_idx(qname_cd) >= 0
+              return "TRUE"
+            end
+            return "FALSE"
+          end
+        end
       end
       if mname == "==" || mname == "eql?"
         rhs_eq = compile_arg0(nid)
@@ -24589,6 +25229,8 @@ class Compiler
         prim_class_name_pc = "Range"
       elsif bt_pc == "time"
         prim_class_name_pc = "Time"
+      elsif bt_pc == "encoding"
+        prim_class_name_pc = "Encoding"
       elsif is_array_type(bt_pc) == 1
         prim_class_name_pc = "Array"
       elsif is_hash_type(bt_pc) == 1
@@ -25161,6 +25803,9 @@ class Compiler
     end
     if klass == "Symbol"
       return "(" + recv_tmp + ".tag == SP_TAG_SYM)"
+    end
+    if klass == "Encoding"
+      return "(" + recv_tmp + ".tag == SP_TAG_ENCODING)"
     end
     if klass == "NilClass"
       return "(" + recv_tmp + ".tag == SP_TAG_NIL)"
@@ -26534,6 +27179,18 @@ class Compiler
       end
       return "(!sp_class_eq(" + lc_cls + ", " + rc_cls + "))"
     end
+ # Encoding is a value-type struct, so plain C `==` is invalid.
+ # Encoding only compares equal to another Encoding value.
+    if lt == "encoding" && at == "encoding"
+      lc_enc = compile_expr(recv)
+      rc_enc = arg_id >= 0 ? compile_expr(arg_id) : "sp_encoding_utf8()"
+      if op == "=="
+        return "sp_encoding_eq(" + lc_enc + ", " + rc_enc + ")"
+      end
+      return "(!sp_encoding_eq(" + lc_enc + ", " + rc_enc + "))"
+    elsif (lt == "encoding" || at == "encoding") && lt != "poly" && at != "poly"
+      return op == "==" ? "FALSE" : "TRUE"
+    end
  # Time == Time / != — equal instant (tv_sec and tv_nsec). Plain
  # `==` on the struct isn't valid C. Same-instant times compare
  # equal regardless of the is_utc presentation flag.
@@ -26836,6 +27493,9 @@ class Compiler
     if base == "symbol"
       return "(sp_sym)(" + val + ").v.i"
     end
+    if base == "encoding"
+      return "((sp_Encoding){(" + val + ").v.s})"
+    end
     if base == "int_array"
       return "(sp_IntArray *)(" + val + ").v.p"
     end
@@ -26966,6 +27626,9 @@ class Compiler
     end
     if at == "symbol"
       return "sp_box_sym(" + val + ")"
+    end
+    if at == "encoding"
+      return "sp_box_encoding(" + val + ")"
     end
     if at == "int_array"
       return "sp_box_int_array(" + val + ")"
@@ -33525,7 +34188,7 @@ class Compiler
 
   def compile_block_iteration_stmt(nid, mname, recv)
  # each with block
-    if mname == "each" || (mname == "each_pair" && recv >= 0)
+    if mname == "each" || mname == "each_entry" || (mname == "each_pair" && recv >= 0)
       if @nd_block[nid] >= 0
  # For object types with yield-using each, use yield method call
         if recv >= 0
@@ -33540,6 +34203,141 @@ class Compiler
           compile_each_block(nid)
           return 1
         end
+      end
+    end
+
+ # Hash#delete_if / #select! / #reject! on typed hashes —
+ # walk the hash, evaluate block on each (k, v), collect keys
+ # to drop, then delete in a second pass (modify-during-iter is
+ # not safe with the open-addressing layout). select! inverts
+ # the predicate (keep iff true).
+    if (mname == "delete_if" || mname == "reject!" || mname == "select!") && @nd_block[nid] >= 0 && recv >= 0
+      rt_dh = infer_type(recv)
+      pfx_dh = ""
+      key_ty_dh = ""
+      val_ty_dh = ""
+      key_arr_pfx = "IntArray" # default sym ids stored in int array
+      if rt_dh == "sym_int_hash"
+        pfx_dh = "SymIntHash"; key_ty_dh = "symbol"; val_ty_dh = "int"
+      elsif rt_dh == "str_int_hash"
+        pfx_dh = "StrIntHash"; key_ty_dh = "string"; val_ty_dh = "int"; key_arr_pfx = "StrArray"
+      end
+      if pfx_dh != ""
+        old_dh = @in_loop
+        @in_loop = 1
+        rc_dh = compile_expr_gc_rooted(recv)
+        bp_k = get_block_param(nid, 0)
+        bp_k = "_k" if bp_k == ""
+        bp_v = get_block_param(nid, 1)
+        bp_v = "_v" if bp_v == ""
+        rm_arr = new_temp
+        idx_dh = new_temp
+        @needs_int_array = 1
+        @needs_str_array = 1 if key_arr_pfx == "StrArray"
+        @needs_gc = 1
+        emit("  sp_" + key_arr_pfx + " *" + rm_arr + " = sp_" + key_arr_pfx + "_new();")
+        emit("  SP_GC_ROOT(" + rm_arr + ");")
+        emit("  for (mrb_int " + idx_dh + " = 0; " + idx_dh + " < " + rc_dh + "->len; " + idx_dh + "++) {")
+        key_c_decl = (key_ty_dh == "symbol") ? "sp_sym" : "const char *"
+        emit("    " + key_c_decl + " lv_" + bp_k + " = " + rc_dh + "->order[" + idx_dh + "];")
+        emit("    mrb_int lv_" + bp_v + " = sp_" + pfx_dh + "_get(" + rc_dh + ", lv_" + bp_k + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_k, key_ty_dh)
+        declare_var(bp_v, val_ty_dh)
+        bbody_dh = @nd_body[@nd_block[nid]]
+        bexpr_dh = "FALSE"
+        if bbody_dh >= 0
+          bs_dh = get_stmts(bbody_dh)
+          kk = 0
+          while kk < bs_dh.length - 1
+            compile_stmt(bs_dh[kk])
+            kk = kk + 1
+          end
+          if bs_dh.length > 0
+            bexpr_dh = compile_expr(bs_dh.last)
+          end
+        end
+        cond_dh = (mname == "select!") ? "!(" + bexpr_dh + ")" : "(" + bexpr_dh + ")"
+        push_arg = (key_ty_dh == "symbol") ? "(mrb_int)lv_" + bp_k : "lv_" + bp_k
+        emit("    if (" + cond_dh + ") sp_" + key_arr_pfx + "_push(" + rm_arr + ", " + push_arg + ");")
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        rm_idx_dh = new_temp
+        get_call = (key_ty_dh == "symbol") ? "(sp_sym)sp_IntArray_get(" + rm_arr + ", " + rm_idx_dh + ")" : "sp_StrArray_get(" + rm_arr + ", " + rm_idx_dh + ")"
+        emit("  for (mrb_int " + rm_idx_dh + " = 0; " + rm_idx_dh + " < " + rm_arr + "->len; " + rm_idx_dh + "++) {")
+        emit("    sp_" + pfx_dh + "_delete(" + rc_dh + ", " + get_call + ");")
+        emit("  }")
+        @in_loop = old_dh
+        return 1
+      end
+    end
+
+ # `arr.combination(k) { |c| ... }` on int_array — call the
+ # blockless helper to materialise all combinations, then loop
+ # them and bind each sub-array to the block param.
+    if mname == "combination" && @nd_block[nid] >= 0 && recv >= 0
+      rt_co = infer_type(recv)
+      if rt_co == "int_array"
+        old_co = @in_loop
+        @in_loop = 1
+        rc_co = compile_expr_gc_rooted(recv)
+        bp_co = get_block_param(nid, 0)
+        bp_co = "_c" if bp_co == ""
+        @needs_int_array = 1
+        @needs_gc = 1
+        combos_co = new_temp
+        iter_co = new_temp
+        emit("  sp_PtrArray *" + combos_co + " = sp_IntArray_combination(" + rc_co + ", " + compile_arg0_as_int(nid) + ");")
+        emit("  SP_GC_ROOT(" + combos_co + ");")
+        emit("  for (mrb_int " + iter_co + " = 0; " + iter_co + " < " + combos_co + "->len; " + iter_co + "++) {")
+        emit("    sp_IntArray * lv_" + bp_co + " = (sp_IntArray *)" + combos_co + "->data[" + iter_co + "];")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_co, "int_array")
+        compile_stmts_body(@nd_body[@nd_block[nid]])
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        @in_loop = old_co
+        return 1
+      end
+    end
+
+ # `reverse_each` on a typed array: walk indices backwards.
+    if mname == "reverse_each" && @nd_block[nid] >= 0 && recv >= 0
+      rt_re = infer_type(recv)
+      pfx_re = ""
+      ety_re = ""
+      if rt_re == "int_array"
+        pfx_re = "IntArray"; ety_re = "int"
+      elsif rt_re == "str_array"
+        pfx_re = "StrArray"; ety_re = "string"
+      elsif rt_re == "float_array"
+        pfx_re = "FloatArray"; ety_re = "float"
+      elsif rt_re == "sym_array"
+        pfx_re = "SymArray"; ety_re = "symbol"
+        rt_re = "int_array"; pfx_re = "IntArray" # sym storage shares IntArray
+      end
+      if pfx_re != ""
+        old_re = @in_loop
+        @in_loop = 1
+        rc_re = compile_expr_gc_rooted(recv)
+        bp_re = get_block_param(nid, 0)
+        bp_re = "_x" if bp_re == ""
+        tmp_re = new_temp
+        emit("  for (mrb_int " + tmp_re + " = sp_" + pfx_re + "_length(" + rc_re + ") - 1; " + tmp_re + " >= 0; " + tmp_re + "--) {")
+        emit("    " + c_type(ety_re) + " lv_" + bp_re + " = sp_" + pfx_re + "_get(" + rc_re + ", " + tmp_re + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_re, ety_re)
+        compile_stmts_body(@nd_body[@nd_block[nid]])
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        @in_loop = old_re
+        return 1
       end
     end
 
@@ -36118,6 +36916,47 @@ class Compiler
            ", sp_SymIntHash_get(" + tt + ", " + ti + ") " + op + " (" + val + ")); }")
       return
     end
+ # sym_str_hash / str_str_hash with `+= str` — string concat
+ # (the only sensible compound op for string-valued hashes).
+    if rt == "sym_str_hash" && op == "+"
+      tt = new_temp
+      ti = new_temp
+      emit("  { sp_SymStrHash *" + tt + " = " + rc + "; sp_sym " + ti + " = " + idx +
+           "; sp_SymStrHash_set(" + tt + ", " + ti +
+           ", sp_str_concat(sp_SymStrHash_get(" + tt + ", " + ti + "), " + val + ")); }")
+      return
+    end
+    if rt == "str_str_hash" && op == "+"
+      tt = new_temp
+      ti = new_temp
+      idx_s2 = compile_expr_as_string(arg_ids[0])
+      emit("  { sp_StrStrHash *" + tt + " = " + rc + "; const char *" + ti + " = " + idx_s2 +
+           "; sp_StrStrHash_set(" + tt + ", " + ti +
+           ", sp_str_concat(sp_StrStrHash_get(" + tt + ", " + ti + "), " + val + ")); }")
+      return
+    end
+ # sym_poly_hash / str_poly_hash with `+= int` — unbox the
+ # current sp_RbVal, run the op, re-box. Only int-valued slots
+ # are supported here; other op-arg shapes fall through.
+    if rt == "sym_poly_hash" && op == "+" && infer_type(@nd_expression[nid]) == "int"
+      @needs_rb_value = 1
+      tt = new_temp
+      ti = new_temp
+      emit("  { sp_SymPolyHash *" + tt + " = " + rc + "; sp_sym " + ti + " = " + idx +
+           "; sp_SymPolyHash_set(" + tt + ", " + ti +
+           ", sp_box_int(sp_SymPolyHash_get(" + tt + ", " + ti + ").v.i " + op + " (" + val + "))); }")
+      return
+    end
+    if rt == "str_poly_hash" && op == "+" && infer_type(@nd_expression[nid]) == "int"
+      @needs_rb_value = 1
+      tt = new_temp
+      ti = new_temp
+      idx_s3 = compile_expr_as_string(arg_ids[0])
+      emit("  { sp_StrPolyHash *" + tt + " = " + rc + "; const char *" + ti + " = " + idx_s3 +
+           "; sp_StrPolyHash_set(" + tt + ", " + ti +
+           ", sp_box_int(sp_StrPolyHash_get(" + tt + ", " + ti + ").v.i " + op + " (" + val + "))); }")
+      return
+    end
  # Poly recv + symbol idx: surfaces in `arr[i][:k] += v` (and the
  # each-block analog `f[:k] += v` where f is destructured from a
  # poly_array of boxed hashes — block param type is widened to
@@ -36691,6 +37530,9 @@ class Compiler
     if at == "int_str_hash"
       return "sp_IntStrHash_inspect(" + val + ")"
     end
+    if at == "int_int_hash"
+      return "sp_IntIntHash_inspect(" + val + ")"
+    end
     if at == "str_poly_hash"
       @needs_rb_value = 1
       return "sp_StrPolyHash_inspect(" + val + ")"
@@ -36824,6 +37666,10 @@ class Compiler
       emit("  { const char *_rs = sp_rational_inspect(" + val + "); fputs(_rs, stdout); putchar('" + bsl_n + "'); }")
       return
     end
+    if at == "encoding"
+      emit("  puts(sp_encoding_name(" + val + "));")
+      return
+    end
     if at == "time"
       emit("  { const char *_ts = sp_time_inspect_v(" + val + "); fputs(_ts, stdout); putchar('" + bsl_n + "'); }")
       return
@@ -36935,6 +37781,11 @@ class Compiler
         k = k + 1
         next
       end
+      if at == "encoding"
+        emit("  puts(sp_encoding_name(" + val + "));")
+        k = k + 1
+        next
+      end
  # `puts <exc>` -- print the message (CRuby calls to_s).
       if at == "exception"
         emit("  { const char *_ps = sp_exc_message(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
@@ -37032,6 +37883,8 @@ class Compiler
       val = compile_expr(arg_ids[k])
       if at == "string"
         emit("  fprintf(stderr, \"%s" + bsl_n + "\", " + val + ");")
+      elsif at == "encoding"
+        emit("  fprintf(stderr, \"%s" + bsl_n + "\", sp_encoding_name(" + val + "));")
       else
         emit("  fprintf(stderr, \"%lld" + bsl_n + "\", (long long)" + val + ");")
       end
@@ -37139,6 +37992,11 @@ class Compiler
         k = k + 1
         next
       end
+      if at == "encoding"
+        emit("  fputs(sp_encoding_name(" + val + "), stdout);")
+        k = k + 1
+        next
+      end
       if at == "int"
         emit("  printf(\"%lld\", (long long)" + val + ");")
       elsif at == "mutable_str"
@@ -37243,38 +38101,70 @@ class Compiler
     rt = infer_type(@nd_receiver[nid])
     rc = compile_expr_gc_rooted(@nd_receiver[nid])
     n = compile_arg0(nid)
-    bp1 = get_block_param(nid, 0)
-    if bp1 == ""
-      bp1 = "_cons"
+    pfx = array_c_prefix(rt)
+    elem_t_ec = elem_type_of_array(rt)
+    @needs_gc = 1
+
+ # Multi-param block on each_cons(k) — bind one block param
+ # per pair element instead of materialising a sub-array.
+ # Detect by counting RequiredParameter slots and matching
+ # against the literal numeric arg `k`.
+    blk_id_ec = @nd_block[nid]
+    n_int_ec = -1
+    args_id_ec = @nd_arguments[nid]
+    if args_id_ec >= 0
+      a_list_ec = get_args(args_id_ec)
+      if a_list_ec.length > 0 && @nd_type[a_list_ec[0]] == "IntegerNode"
+        n_int_ec = @nd_value[a_list_ec[0]].to_i
+      end
     end
+    bp_params_ec = blk_id_ec >= 0 ? @nd_parameters[blk_id_ec] : -1
+    inner_params_ec = bp_params_ec >= 0 ? @nd_parameters[bp_params_ec] : -1
+    reqs_ec = inner_params_ec >= 0 ? parse_id_list(@nd_requireds[inner_params_ec]) : []
+    can_destruct_ec = (n_int_ec > 0 && reqs_ec.length == n_int_ec && reqs_ec.length >= 2 && @nd_type[reqs_ec[0]] != "MultiTargetNode")
+
     tmp_i = new_temp
     tmp_j = new_temp
     tmp_len = new_temp
-    pfx = array_c_prefix(rt)
-    @needs_gc = 1
     emit("  mrb_int " + tmp_len + " = sp_" + pfx + "_length(" + rc + ");")
     emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " + " + n + " <= " + tmp_len + "; " + tmp_i + "++) {")
- # See compile_each_slice_block: shadow case needs a fresh typed slot with
- # its own GC root.
-    outer_t = find_var_type(bp1)
-    if outer_t != "" && outer_t != rt
-      emit("    SP_GC_SAVE();")
-      emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
-      emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+
+    if can_destruct_ec
+      push_scope
+      di_ec = 0
+      while di_ec < reqs_ec.length
+        bpn_ec = @nd_name[reqs_ec[di_ec]]
+        emit("    " + c_type(elem_t_ec) + " lv_" + bpn_ec + " = sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + di_ec.to_s + ");")
+        declare_var(bpn_ec, elem_t_ec)
+        di_ec = di_ec + 1
+      end
+      @indent = @indent + 1
+      compile_stmts_body(@nd_body[blk_id_ec])
+      @indent = @indent - 1
+      pop_scope
     else
-      emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      bp1 = get_block_param(nid, 0)
+      bp1 = "_cons" if bp1 == ""
+      outer_t = find_var_type(bp1)
+      if outer_t != "" && outer_t != rt
+        emit("    SP_GC_SAVE();")
+        emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
+        emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+      else
+        emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      end
+      emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
+      emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
+      @indent = @indent + 1
+      push_scope
+      declare_var(bp1, rt)
+      redo_label = push_redo_label
+      emit_redo_label(redo_label)
+      compile_stmts_body(@nd_body[blk_id_ec])
+      pop_redo_label
+      pop_scope
+      @indent = @indent - 1
     end
-    emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
-    emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
-    @indent = @indent + 1
-    push_scope
-    declare_var(bp1, rt)
-    redo_label = push_redo_label
-    emit_redo_label(redo_label)
-    compile_stmts_body(@nd_body[@nd_block[nid]])
-    pop_redo_label
-    pop_scope
-    @indent = @indent - 1
     emit("  }")
     @in_loop = old
   end
@@ -42399,6 +43289,8 @@ class Compiler
     elsif base_type(return_type) == "int" && last_t_cbi == "bigint"
       @needs_bigint = 1
       expr = "sp_bigint_to_int((sp_Bigint *)" + expr + ")"
+    elsif base_type(return_type) == "poly" && last_t_cbi != "poly" && last_t_cbi != ""
+      expr = box_value_to_poly(last_t_cbi, expr)
     end
     emit("  " + ret_tmp + " = " + expr + ";")
   end

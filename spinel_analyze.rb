@@ -1225,6 +1225,9 @@ class Compiler
     if cname == "Range"
       return "range"
     end
+    if cname == "Encoding"
+      return "encoding"
+    end
  # User-defined class: narrow to obj_<C> when the class is
  # registered. Otherwise return "" — narrow is a no-op.
     if find_class_idx(cname) >= 0
@@ -2006,7 +2009,7 @@ class Compiler
       return "string"
     end
     if t == "SourceEncodingNode"
-      return "string"
+      return "encoding"
     end
     if t == "SymbolNode"
       return "symbol"
@@ -4007,6 +4010,9 @@ class Compiler
  # a string. Aliases `.to_s` at the runtime helper level
  # (sp_class_to_s), so the return type is the same.
     if mname == "name"
+      if recv >= 0 && infer_type(recv) == "encoding"
+        return "string"
+      end
       if recv >= 0 && infer_type(recv) == "class"
         return "string"
       end
@@ -4117,12 +4123,13 @@ class Compiler
           return "class"
         end
  # Primitive .class -- Integer / Float / String / Symbol /
- # NilClass / TrueClass / FalseClass / Range / Time / Array /
- # Hash / Proc -- all return a `class` value. Issue #715.
+ # NilClass / TrueClass / FalseClass / Range / Time / Encoding /
+ # Array / Hash / Proc -- all return a `class` value. Issue #715.
         bt_pc = base_type(rt)
         if bt_pc == "int" || bt_pc == "bigint" || bt_pc == "float" ||
            bt_pc == "string" || bt_pc == "mutable_str" || bt_pc == "symbol" ||
            bt_pc == "bool" || bt_pc == "nil" || bt_pc == "range" || bt_pc == "time" ||
+           bt_pc == "encoding" ||
            is_array_type(bt_pc) == 1 || is_hash_type(bt_pc) == 1 ||
            bt_pc == "proc" || bt_pc == "lambda"
           return "class"
@@ -4246,6 +4253,27 @@ class Compiler
     if mname == "delete_prefix" || mname == "delete_suffix"
       return "string"
     end
+    if mname == "dump"
+      return "string"
+    end
+    if mname == "scrub"
+      return "string"
+    end
+    if mname == "crypt"
+      return "string"
+    end
+    if mname == "delete_prefix!" || mname == "delete_suffix!"
+ # Bang variants mutate self in place. When recv is mutable_str
+ # the call returns the same mutable_str; on a frozen literal
+ # the codegen path would already FrozenError before this fires.
+      if recv >= 0
+        rt_dpb = infer_type(recv)
+        if rt_dpb == "mutable_str"
+          return "mutable_str"
+        end
+      end
+      return "string"
+    end
     if mname == "eql?"
       return "bool"
     end
@@ -4278,12 +4306,10 @@ class Compiler
  # the shortest collision target; struct field accessors etc.
  # commonly take that single-letter shape).
     if mname == "encoding"
- # spinel doesn't model Encoding objects; treat the return as a
- # plain string label (`"UTF-8"`). Issue #723.
       if recv >= 0
         rt_enc = infer_type(recv)
         if rt_enc == "string" || rt_enc == "mutable_str"
-          return "string"
+          return "encoding"
         end
       end
     end
@@ -4309,6 +4335,12 @@ class Compiler
       return "bool"
     end
     if mname == "cover?"
+      return "bool"
+    end
+    if mname == "const_defined?"
+      return "bool"
+    end
+    if mname == "overlap?"
       return "bool"
     end
     if mname == "==="
@@ -4444,6 +4476,18 @@ class Compiler
     end
     if mname == "pack"
       return "string"
+    end
+    if mname == "assoc" || mname == "rassoc"
+      return "poly_array"
+    end
+    if mname == "product"
+      return "int_array_ptr_array"
+    end
+    if mname == "slice_when" || mname == "chunk_while" || mname == "slice_before" || mname == "slice_after"
+      return "int_array_ptr_array"
+    end
+    if mname == "chunk"
+      return "poly_array"
     end
  # Issue #889: String#unpack returns Array of mixed-type elements;
  # spinel boxes through poly_array.
@@ -4721,6 +4765,15 @@ class Compiler
         if rt == "string"
           return "string"
         end
+        if rt == "sym_int_hash" || rt == "str_int_hash"
+          return "int"
+        end
+        if rt == "sym_str_hash" || rt == "str_str_hash" || rt == "int_str_hash"
+          return "string"
+        end
+        if rt == "sym_poly_hash" || rt == "str_poly_hash" || rt == "poly_poly_hash"
+          return "poly"
+        end
       end
     end
     if mname == "squeeze"
@@ -4963,8 +5016,10 @@ class Compiler
       return "int"
     end
     if mname == "tally"
-      if recv >= 0 && infer_type(recv) == "sym_array"
-        return "sym_int_hash"
+      if recv >= 0
+        rt_ta = infer_type(recv)
+        return "sym_int_hash" if rt_ta == "sym_array"
+        return "int_int_hash" if rt_ta == "int_array"
       end
       return "str_int_hash"
     end
@@ -5101,7 +5156,7 @@ class Compiler
       end
       return "int_array"
     end
-    if mname == "first" || mname == "last"
+    if mname == "first" || mname == "last" || mname == "begin" || mname == "end"
       if recv >= 0
         rt = infer_type(recv)
  # Literal `[nil, ...].first` / `.last`: every element is nil so
@@ -7942,7 +7997,7 @@ class Compiler
   end
 
  # built-in class / module names that
- # get a reserved cls_id (0..20). Kept in sync with
+ # get a reserved cls_id. Kept in sync with
  # spinel_codegen.rb's @builtin_class_names array.
   def is_builtin_class_const_name(name)
     if name == "BasicObject" || name == "Object" || name == "Kernel" || name == "Comparable" || name == "Enumerable"
@@ -7985,6 +8040,9 @@ class Compiler
       return 1
     end
     if name == "LocalJumpError" || name == "FiberError"
+      return 1
+    end
+    if name == "Encoding"
       return 1
     end
     0
@@ -19887,6 +19945,8 @@ class Compiler
           if is_nullable_type(t) == 1
             result = t
           end
+        elsif (result == "encoding" && t == "int") || (result == "int" && t == "encoding")
+          return "poly"
         elsif result == "int"
  # int is default/unresolved — real type takes priority
           result = t
@@ -30259,8 +30319,32 @@ class Compiler
       return "int"
     end
     if mname == "each_slice" || mname == "each_cons"
- # Block param is sub-array of recv's element type — keep recv's
- # array type (slice of int_array is still int_array).
+ # Multi-param block on each_cons(k) / each_slice(k) — when the
+ # req-param count matches the literal k, codegen destructures
+ # the pair into scalar element-type slots. Mirror that here
+ # so the block body's type inference sees the right shape.
+      n_ec_bp = -1
+      ec_args_bp = @nd_arguments[call_nid]
+      if ec_args_bp >= 0
+        ec_alist_bp = get_args(ec_args_bp)
+        if ec_alist_bp.length > 0 && @nd_type[ec_alist_bp[0]] == "IntegerNode"
+          n_ec_bp = @nd_value[ec_alist_bp[0]].to_i
+        end
+      end
+      blk_ec_bp = @nd_block[call_nid]
+      if blk_ec_bp >= 0 && n_ec_bp > 0
+        ec_bp_node = @nd_parameters[blk_ec_bp]
+        if ec_bp_node >= 0
+          ec_inner_pn = @nd_parameters[ec_bp_node]
+          if ec_inner_pn >= 0
+            ec_reqs_bp = parse_id_list(@nd_requireds[ec_inner_pn])
+            if ec_reqs_bp.length == n_ec_bp && ec_reqs_bp.length >= 2 && @nd_type[ec_reqs_bp[0]] != "MultiTargetNode"
+              return elem_type_of_array(recv_t)
+            end
+          end
+        end
+      end
+ # Default: bind the whole pair as a sub-array of recv's element type.
       return recv_t
     end
     if mname == "chunk_while" || mname == "slice_when"

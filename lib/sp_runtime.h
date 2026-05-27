@@ -589,6 +589,18 @@ static inline mrb_int sp_process_ppid(void) {
 }
 
 static void sp_oom_die(void);
+
+/* ---- Encoding runtime ----
+   Spinel currently assumes UTF-8 source and string data. Keep Encoding
+   as a tiny value type so `__ENCODING__` and `String#encoding` can
+   answer Ruby's Encoding-shaped protocol without carrying full
+   transcoding state. */
+typedef struct{const char *name;}sp_Encoding;
+static inline sp_Encoding sp_encoding_utf8(void){return(sp_Encoding){"UTF-8"};}
+static inline const char*sp_encoding_name(sp_Encoding e){return e.name?e.name:sp_str_empty;}
+static inline const char*sp_encoding_inspect(sp_Encoding e){return sp_sprintf("#<Encoding:%s>",sp_encoding_name(e));}
+static inline mrb_bool sp_encoding_eq(sp_Encoding a,sp_Encoding b){const char*an=sp_encoding_name(a);const char*bn=sp_encoding_name(b);return strcmp(an,bn)==0;}
+
 static char *sp_str_alloc(size_t len) {
   size_t total = sizeof(sp_str_hdr) + 1 + len + 1;
   sp_str_hdr *h = (sp_str_hdr *)malloc(total);
@@ -1443,6 +1455,24 @@ static sp_StrArray*sp_IntStrHash_values(sp_IntStrHash*h){sp_StrArray*a=sp_StrArr
 static sp_IntStrHash*sp_IntStrHash_dup(sp_IntStrHash*h){sp_IntStrHash*r=sp_IntStrHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_IntStrHash_set(r,h->order[i],sp_IntStrHash_get(h,h->order[i]));return r;}
 static mrb_bool sp_IntStrHash_eq(sp_IntStrHash*a,sp_IntStrHash*b){if(!a||!b)return a==b;if(a->len!=b->len)return FALSE;for(mrb_int i=0;i<a->len;i++){mrb_int k=a->order[i];if(!sp_IntStrHash_has_key(b,k))return FALSE;if(!sp_str_eq(sp_IntStrHash_get(a,k),sp_IntStrHash_get(b,k)))return FALSE;}return TRUE;}
 
+/* Int → Int typed hash. Mirrors sp_IntStrHash's open-addressing
+   layout (used[] bitmap so 0/-1 keys are distinguishable from
+   empty), with int-valued slots. Used by Array#tally on int
+   arrays — see #865. */
+typedef struct{mrb_int*keys;mrb_int*vals;mrb_int*order;mrb_bool*used;mrb_int len;mrb_int cap;mrb_int mask;mrb_int default_v;}sp_IntIntHash;
+static void sp_IntIntHash_fin(void*p){sp_IntIntHash*h=(sp_IntIntHash*)p;free(h->keys);free(h->vals);free(h->order);free(h->used);}
+static sp_IntIntHash*sp_IntIntHash_new(void){sp_IntIntHash*h=(sp_IntIntHash*)sp_gc_alloc(sizeof(sp_IntIntHash),sp_IntIntHash_fin,NULL);h->cap=16;h->mask=15;h->keys=(mrb_int*)calloc(h->cap,sizeof(mrb_int));h->vals=(mrb_int*)calloc(h->cap,sizeof(mrb_int));h->order=(mrb_int*)malloc(sizeof(mrb_int)*h->cap);h->used=(mrb_bool*)calloc(h->cap,sizeof(mrb_bool));h->len=0;h->default_v=0;return h;}
+static sp_IntIntHash*sp_IntIntHash_new_with_default(mrb_int d){sp_IntIntHash*h=sp_IntIntHash_new();h->default_v=d;return h;}
+static void sp_IntIntHash_grow(sp_IntIntHash*h){mrb_int oc=h->cap,ol=h->len;mrb_int*ok=h->keys;mrb_int*ov=h->vals;mrb_bool*ou=h->used;mrb_int*oo=h->order;h->cap*=2;h->mask=h->cap-1;h->keys=(mrb_int*)calloc(h->cap,sizeof(mrb_int));h->vals=(mrb_int*)calloc(h->cap,sizeof(mrb_int));h->order=(mrb_int*)malloc(sizeof(mrb_int)*h->cap);h->used=(mrb_bool*)calloc(h->cap,sizeof(mrb_bool));h->len=ol;for(mrb_int i=0;i<oc;i++){if(!ou[i])continue;mrb_int k=ok[i];mrb_int v=ov[i];mrb_int di=_sp_istr_idx(h->mask,k);while(h->used[di])di=(di+1)&h->mask;h->used[di]=TRUE;h->keys[di]=k;h->vals[di]=v;}for(mrb_int i=0;i<ol;i++)h->order[i]=oo[i];free(ok);free(ov);free(ou);free(oo);}
+static void sp_IntIntHash_set(sp_IntIntHash*h,mrb_int k,mrb_int v){if(h->len*2>=h->cap)sp_IntIntHash_grow(h);mrb_int idx=_sp_istr_idx(h->mask,k);while(h->used[idx]){if(h->keys[idx]==k){h->vals[idx]=v;return;}idx=(idx+1)&h->mask;}h->used[idx]=TRUE;h->keys[idx]=k;h->vals[idx]=v;h->order[h->len++]=k;}
+static mrb_int sp_IntIntHash_get(sp_IntIntHash*h,mrb_int k){if(!h)return 0;mrb_int idx=_sp_istr_idx(h->mask,k);while(h->used[idx]){if(h->keys[idx]==k)return h->vals[idx];idx=(idx+1)&h->mask;}return h->default_v;}
+static mrb_bool sp_IntIntHash_has_key(sp_IntIntHash*h,mrb_int k){mrb_int idx=_sp_istr_idx(h->mask,k);while(h->used[idx]){if(h->keys[idx]==k)return TRUE;idx=(idx+1)&h->mask;}return FALSE;}
+static mrb_int sp_IntIntHash_length(sp_IntIntHash*h){return h?h->len:0;}
+static sp_IntIntHash*sp_IntIntHash_dup(sp_IntIntHash*h){sp_IntIntHash*r=sp_IntIntHash_new();r->default_v=h->default_v;for(mrb_int i=0;i<h->len;i++)sp_IntIntHash_set(r,h->order[i],sp_IntIntHash_get(h,h->order[i]));return r;}
+/* Array#tally on int_array. CRuby returns an Integer-keyed Hash
+   mapping each distinct element to its occurrence count. */
+static sp_IntIntHash*sp_IntArray_tally_int(sp_IntArray*a){sp_IntIntHash*h=sp_IntIntHash_new();if(!a)return h;for(mrb_int i=0;i<a->len;i++){mrb_int k=a->data[a->start+i];sp_IntIntHash_set(h,k,sp_IntIntHash_get(h,k)+1);}return h;}
+
 /* Reuse an existing StrArray for split, avoiding GC alloc.
    Clears a->len and refills.  Substring strings are still malloc'd. */
 static void sp_str_split_into(sp_StrArray*a,const char*s,const char*sep){
@@ -1651,6 +1681,7 @@ static const char*sp_sprintf(const char*fmt,...){char _sp_tmp[4096];va_list ap;v
    on allocation failure. Match the perror+exit pattern used elsewhere
    (see sp_IntArray_replace) instead of returning a partial result. */
 static const char*sp_str_format_strarr(const char*fmt,sp_StrArray*a){size_t cap=strlen(fmt)+64;char*buf=(char*)malloc(cap);if(!buf){perror("malloc");exit(1);}size_t out=0;mrb_int idx=0;const char*p=fmt;while(*p){if(*p=='%'){if(p[1]=='s'){const char*s=(idx<a->len)?a->data[idx]:"";size_t sl=strlen(s);if(out+sl>=cap){size_t nc=(out+sl)*2+1;char*nb=(char*)realloc(buf,nc);if(!nb){free(buf);perror("realloc");exit(1);}buf=nb;cap=nc;}memcpy(buf+out,s,sl);out+=sl;idx++;p+=2;}else if(p[1]=='%'){if(out+1>=cap){size_t nc=cap*2;char*nb=(char*)realloc(buf,nc);if(!nb){free(buf);perror("realloc");exit(1);}buf=nb;cap=nc;}buf[out++]='%';p+=2;}else{if(out+1>=cap){size_t nc=cap*2;char*nb=(char*)realloc(buf,nc);if(!nb){free(buf);perror("realloc");exit(1);}buf=nb;cap=nc;}buf[out++]=*p++;}}else{if(out+1>=cap){size_t nc=cap*2;char*nb=(char*)realloc(buf,nc);if(!nb){free(buf);perror("realloc");exit(1);}buf=nb;cap=nc;}buf[out++]=*p++;}}buf[out]=0;char*r=sp_str_alloc(out);memcpy(r,buf,out);free(buf);return r;}
+
 static const char*sp_str_reverse(const char*s){if(!s)return sp_str_empty;size_t bl=strlen(s);char*r=sp_str_alloc_raw(bl+1);size_t end=bl;const char*p=s;while(*p){int cn=sp_utf8_advance(p);end-=cn;memcpy(r+end,p,cn);p+=cn;}r[bl]=0;return r;}
 static const char*sp_str_sub(const char*s,const char*pat,const char*rep){if(!s)return sp_str_empty;if(!pat||!rep)return s;const char*f=strstr(s,pat);if(!f)return s;size_t pl=strlen(pat),rl=strlen(rep),sl=strlen(s);char*r=sp_str_alloc_raw(sl-pl+rl+1);size_t n=f-s;memcpy(r,s,n);memcpy(r+n,rep,rl);memcpy(r+n+rl,f+pl,sl-n-pl+1);return r;}
 static const char*sp_str_capitalize(const char*s){if(!s)return sp_str_empty;size_t l=strlen(s);char*r=sp_str_alloc_raw(l+1);for(size_t i=0;i<=l;i++)r[i]=tolower((unsigned char)s[i]);if(l>0)r[0]=toupper((unsigned char)r[0]);return r;}
@@ -1734,6 +1765,89 @@ static const char*sp_str_delete(const char*s,const char*chars){if(!s)return sp_s
    `bytes` / `length` consult the header (not strlen), so callers
    would see the alloc size and trailing NULs. */
 static const char*sp_str_squeeze(const char*s){if(!s)return sp_str_empty;size_t bl=strlen(s);char*r=sp_str_alloc_raw(bl+1);size_t n=0;uint32_t prev=0xFFFFFFFFu;const char*p=s;while(*p){uint32_t cp;int cn=sp_utf8_decode(p,&cp);if(cp!=prev){memcpy(r+n,p,cn);n+=cn;prev=cp;}p+=cn;}r[n]=0;sp_str_set_len(r,n);return r;}
+
+/* Forward decl from sp_crypto.h (libspinel_rt.a). Used by
+   sp_str_crypt below to provide a deterministic crypt-like
+   hash without dragging in libc crypt(3). */
+const char *sp_crypto_hmac_sha256_b64url(const char *key, const char *msg);
+
+/* String#crypt — Spinel's crypt is NOT the libc DES crypt. It
+   returns `salt[0..1] || hmac_sha256(salt, password)[0..10]` as
+   a 13-char string (same length as DES crypt, deterministic,
+   stronger primitive). CRuby's spec says String#crypt is impl-
+   defined and "should not be used for security"; this matches
+   that contract while keeping outputs reproducible across
+   spinel builds. Short salts get padded with '.' so the result
+   still has the canonical first-2-chars-are-salt shape. */
+static const char *sp_str_crypt(const char *s, const char *salt) {
+  if (!salt) salt = "";
+  char salt2[3];
+  salt2[0] = salt[0] ? salt[0] : '.';
+  salt2[1] = (salt[0] && salt[1]) ? salt[1] : '.';
+  salt2[2] = 0;
+  const char *digest = sp_crypto_hmac_sha256_b64url(salt2, s ? s : "");
+  char *r = sp_str_alloc(13);
+  r[0] = salt2[0];
+  r[1] = salt2[1];
+  for (int i = 0; i < 11; i++) {
+    char c = digest[i];
+    /* Map b64url's `-`/`_` to crypt-alphabet `.`/`/` so the
+       output stays in `[./0-9A-Za-z]` like the historical
+       crypt result. */
+    if (c == '-') c = '.';
+    else if (c == '_') c = '/';
+    r[2 + i] = c;
+  }
+  r[13] = 0;
+  sp_str_set_len(r, 13);
+  return r;
+}
+
+/* String#scrub — walk the bytes; for each valid UTF-8 lead +
+   continuation sequence, copy through. For invalid bytes (lone
+   continuation, truncated multi-byte, overlong, etc.), emit the
+   replacement string and skip one byte. NULL replacement uses
+   U+FFFD (3 UTF-8 bytes: EF BF BD), matching CRuby. */
+static const char *sp_str_scrub(const char *s, const char *repl) {
+  if (!s) return sp_str_empty;
+  static const char fffd[] = "\xEF\xBF\xBD";
+  const char *r = repl ? repl : fffd;
+  size_t rlen = strlen(r);
+  size_t bl = sp_str_byte_len(s);
+  size_t cap = bl + 64;
+  char *out = sp_str_alloc_raw(cap);
+  size_t olen = 0;
+  size_t i = 0;
+  while (i < bl) {
+    unsigned char c = (unsigned char)s[i];
+    int expected = sp_utf8_char_len(c);
+    int valid = 1;
+    if (expected == 1) {
+      if (c >= 0x80) valid = 0;
+    } else {
+      if (i + (size_t)expected > bl) valid = 0;
+      else {
+        for (int k = 1; k < expected; k++) {
+          if (((unsigned char)s[i + k] & 0xC0) != 0x80) { valid = 0; break; }
+        }
+      }
+    }
+    if (valid) {
+      if (olen + (size_t)expected + 1 >= cap) { cap = (olen + expected) * 2 + 64; out = (char*)realloc(out, cap); }
+      memcpy(out + olen, s + i, (size_t)expected);
+      olen += (size_t)expected;
+      i += (size_t)expected;
+    } else {
+      if (olen + rlen + 1 >= cap) { cap = (olen + rlen) * 2 + 64; out = (char*)realloc(out, cap); }
+      memcpy(out + olen, r, rlen);
+      olen += rlen;
+      i += 1;
+    }
+  }
+  out[olen] = 0;
+  sp_str_set_len(out, olen);
+  return out;
+}
 static const char*sp_str_ljust(const char*s,mrb_int w){if(!s)return sp_str_empty;mrb_int cl=sp_str_length(s);if(cl>=w)return s;size_t bl=strlen(s);size_t pad=(size_t)(w-cl);char*r=sp_str_alloc_raw(bl+pad+1);memcpy(r,s,bl);memset(r+bl,' ',pad);r[bl+pad]=0;return r;}
 static const char*sp_str_rjust(const char*s,mrb_int w){if(!s)return sp_str_empty;mrb_int cl=sp_str_length(s);if(cl>=w)return s;size_t bl=strlen(s);size_t pad=(size_t)(w-cl);char*r=sp_str_alloc_raw(bl+pad+1);memset(r,' ',pad);memcpy(r+pad,s,bl);r[bl+pad]=0;return r;}
 static const char*sp_str_center(const char*s,mrb_int w){if(!s)return sp_str_empty;mrb_int cl=sp_str_length(s);if(cl>=w)return s;size_t bl=strlen(s);mrb_int pad=w-cl;mrb_int left=pad/2;mrb_int right=pad-left;char*r=sp_str_alloc_raw(bl+pad+1);memset(r,' ',left);memcpy(r+left,s,bl);memset(r+left+bl,' ',right);r[bl+pad]=0;return r;}
@@ -1826,6 +1940,7 @@ static const char*sp_PtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_String_new("
 static const char*sp_StrIntHash_inspect(sp_StrIntHash*h){sp_String*s=sp_String_new("{");if(h){for(mrb_int i=0;i<h->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_str_inspect(h->order[i]));sp_String_append(s,"=>");sp_String_append(s,sp_int_to_s(sp_StrIntHash_get(h,h->order[i])));}}sp_String_append(s,"}");return s->data;}
 static const char*sp_StrStrHash_inspect(sp_StrStrHash*h){sp_String*s=sp_String_new("{");if(h){for(mrb_int i=0;i<h->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_str_inspect(h->order[i]));sp_String_append(s,"=>");sp_String_append(s,sp_str_inspect(sp_StrStrHash_get(h,h->order[i])));}}sp_String_append(s,"}");return s->data;}
 static const char*sp_IntStrHash_inspect(sp_IntStrHash*h){sp_String*s=sp_String_new("{");if(h){for(mrb_int i=0;i<h->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_int_to_s(h->order[i]));sp_String_append(s,"=>");sp_String_append(s,sp_str_inspect(sp_IntStrHash_get(h,h->order[i])));}}sp_String_append(s,"}");return s->data;}
+static const char*sp_IntIntHash_inspect(sp_IntIntHash*h){sp_String*s=sp_String_new("{");if(h){for(mrb_int i=0;i<h->len;i++){if(i>0)sp_String_append(s,", ");sp_String_append(s,sp_int_to_s(h->order[i]));sp_String_append(s,"=>");sp_String_append(s,sp_int_to_s(sp_IntIntHash_get(h,h->order[i])));}}sp_String_append(s,"}");return s->data;}
 /* Nested-array inspect: when codegen knows the ptr_array's element
    type is one of the four built-in T_array shapes, recurse into the
    matching primitive inspect . */
@@ -1834,6 +1949,22 @@ static const char*sp_IntArrayPtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_Stri
    k-element ordered combinations as a PtrArray of IntArrays. */
 static void sp_int_combination_recur(sp_IntArray*src,mrb_int start,mrb_int k,sp_IntArray*acc,sp_PtrArray*out){if(k==0){sp_IntArray*cp=sp_IntArray_new();for(mrb_int i=0;i<acc->len;i++)sp_IntArray_push(cp,acc->data[acc->start+i]);sp_PtrArray_push(out,cp);return;}for(mrb_int i=start;i<=src->len-k;i++){sp_IntArray_push(acc,src->data[src->start+i]);sp_int_combination_recur(src,i+1,k-1,acc,out);acc->len--;}}
 static sp_PtrArray*sp_IntArray_combination(sp_IntArray*a,mrb_int k){sp_PtrArray*out=sp_PtrArray_new();if(!a||k<0||k>a->len)return out;sp_IntArray*acc=sp_IntArray_new();sp_int_combination_recur(a,0,k,acc,out);return out;}
+
+/* Cartesian product of two int arrays. Returns a PtrArray of
+   2-element IntArrays. */
+static sp_PtrArray *sp_IntArray_product(sp_IntArray *a, sp_IntArray *b) {
+  sp_PtrArray *out = sp_PtrArray_new();
+  if (!a || !b) return out;
+  for (mrb_int i = 0; i < a->len; i++) {
+    for (mrb_int j = 0; j < b->len; j++) {
+      sp_IntArray *pair = sp_IntArray_new();
+      sp_IntArray_push(pair, a->data[a->start + i]);
+      sp_IntArray_push(pair, b->data[b->start + j]);
+      sp_PtrArray_push(out, pair);
+    }
+  }
+  return out;
+}
 /* Array#permutation(k) -- ordered k-permutations. */
 static void sp_int_permutation_recur(sp_IntArray*src,mrb_int k,sp_IntArray*used,sp_IntArray*acc,sp_PtrArray*out){if(k==0){sp_IntArray*cp=sp_IntArray_new();for(mrb_int i=0;i<acc->len;i++)sp_IntArray_push(cp,acc->data[acc->start+i]);sp_PtrArray_push(out,cp);return;}for(mrb_int i=0;i<src->len;i++){if(used->data[used->start+i])continue;used->data[used->start+i]=1;sp_IntArray_push(acc,src->data[src->start+i]);sp_int_permutation_recur(src,k-1,used,acc,out);acc->len--;used->data[used->start+i]=0;}}
 static sp_PtrArray*sp_IntArray_permutation(sp_IntArray*a,mrb_int k){sp_PtrArray*out=sp_PtrArray_new();if(!a||k<0||k>a->len)return out;sp_IntArray*used=sp_IntArray_new();for(mrb_int i=0;i<a->len;i++)sp_IntArray_push(used,0);sp_IntArray*acc=sp_IntArray_new();sp_int_permutation_recur(a,k,used,acc,out);return out;}
@@ -2251,6 +2382,9 @@ typedef uint64_t sp_RbValue;
    the boxed sp_Class's cls_id directly so unboxing is just a
    field read. */
 #define SP_TAG_CLASS 7
+/* Encoding values boxed into a poly slot. v.s carries the canonical
+   encoding name (`"UTF-8"` in Spinel's current runtime model). */
+#define SP_TAG_ENCODING 8
 /* Negative cls_id values let SP_TAG_OBJ also carry built-in pointer
    types (IntArray, FloatArray, ...) — avoids minting a new SP_TAG_*
    per type. Non-negative cls_id stays an index into the user-class
@@ -2286,6 +2420,7 @@ static sp_RbVal sp_box_obj(void *p, int cls_id) { sp_RbVal r; r.tag = SP_TAG_OBJ
 static sp_RbVal sp_box_sym(sp_sym v) { sp_RbVal r; r.tag = SP_TAG_SYM; r.cls_id = 0; r.v.i = (mrb_int)v; return r; }
 /* box a sp_Class into a poly slot. */
 static sp_RbVal sp_box_class(sp_Class c) { sp_RbVal r; r.tag = SP_TAG_CLASS; r.cls_id = (int)c.cls_id; r.v.i = c.cls_id; return r; }
+static sp_RbVal sp_box_encoding(sp_Encoding e) { sp_RbVal r; r.tag = SP_TAG_ENCODING; r.cls_id = 0; r.v.s = sp_encoding_name(e); return r; }
 
 /* every non-value-type sp_<C> starts
    with `mrb_int cls_id`. Read it back from a void* when
@@ -2456,6 +2591,7 @@ static inline void sp_poly_puts(sp_RbVal v) {
     case SP_TAG_BOOL: puts(v.v.b ? "true" : "false"); break;
     case SP_TAG_NIL: putchar('\n'); break;
     case SP_TAG_SYM: { const char *_ss = sp_sym_to_s((sp_sym)v.v.i); fputs(_ss, stdout); putchar('\n'); break; }
+    case SP_TAG_ENCODING: { const char *_es = v.v.s ? v.v.s : sp_str_empty; fputs(_es, stdout); putchar('\n'); break; }
     case SP_TAG_OBJ: {
       /* MRI's `puts arr` iterates an Array, printing one element per
          line (using to_s on each); a non-Array OBJ falls back to
@@ -2517,6 +2653,7 @@ static inline const char *sp_poly_to_s(sp_RbVal v) {
     case SP_TAG_NIL: return sp_str_empty;
     case SP_TAG_SYM: return sp_sym_to_s((sp_sym)v.v.i);
     case SP_TAG_CLASS: { sp_Class c = {v.v.i}; return sp_class_to_s(c); }
+    case SP_TAG_ENCODING: return v.v.s ? v.v.s : sp_str_empty;
     case SP_TAG_OBJ:
       switch (v.cls_id) {
         case SP_BUILTIN_INT_ARRAY: return sp_IntArray_inspect((sp_IntArray *)v.v.p);
@@ -2537,7 +2674,7 @@ static sp_RbVal sp_poly_mul(sp_RbVal a, sp_RbVal b) { if (a.tag == SP_TAG_INT &&
 static mrb_int sp_poly_to_i(sp_RbVal v) { if (v.tag == SP_TAG_INT || v.tag == SP_TAG_SYM) return v.v.i; if (v.tag == SP_TAG_STR) return (mrb_int)strtoll(v.v.s ? v.v.s : sp_str_empty, NULL, 10); if (v.tag == SP_TAG_FLT) return (mrb_int)v.v.f; if (v.tag == SP_TAG_BOOL) return v.v.b ? 1 : 0; return 0; }
 static mrb_float sp_poly_to_f(sp_RbVal v) { if (v.tag == SP_TAG_FLT) return v.v.f; if (v.tag == SP_TAG_INT || v.tag == SP_TAG_SYM) return (mrb_float)v.v.i; if (v.tag == SP_TAG_BOOL) return v.v.b ? 1.0 : 0.0; return 0.0; }
 static mrb_bool sp_poly_numeric_p(sp_RbVal v) { return v.tag == SP_TAG_INT || v.tag == SP_TAG_FLT; }
-static mrb_bool sp_poly_eq(sp_RbVal a, sp_RbVal b) { if (sp_poly_numeric_p(a) && sp_poly_numeric_p(b)) return sp_poly_to_f(a) == sp_poly_to_f(b); if (a.tag != b.tag) return FALSE; switch (a.tag) { case SP_TAG_INT: return a.v.i == b.v.i; case SP_TAG_STR: return (a.v.s == NULL || b.v.s == NULL) ? (a.v.s == b.v.s) : (strcmp(a.v.s, b.v.s) == 0); case SP_TAG_FLT: return a.v.f == b.v.f; case SP_TAG_BOOL: return a.v.b == b.v.b; case SP_TAG_NIL: return TRUE; case SP_TAG_SYM: return a.v.i == b.v.i; case SP_TAG_OBJ: return a.cls_id == b.cls_id && a.v.p == b.v.p; default: return FALSE; } }
+static mrb_bool sp_poly_eq(sp_RbVal a, sp_RbVal b) { if (sp_poly_numeric_p(a) && sp_poly_numeric_p(b)) return sp_poly_to_f(a) == sp_poly_to_f(b); if (a.tag != b.tag) return FALSE; switch (a.tag) { case SP_TAG_INT: return a.v.i == b.v.i; case SP_TAG_STR: return (a.v.s == NULL || b.v.s == NULL) ? (a.v.s == b.v.s) : (strcmp(a.v.s, b.v.s) == 0); case SP_TAG_FLT: return a.v.f == b.v.f; case SP_TAG_BOOL: return a.v.b == b.v.b; case SP_TAG_NIL: return TRUE; case SP_TAG_SYM: return a.v.i == b.v.i; case SP_TAG_ENCODING: return (a.v.s == NULL || b.v.s == NULL) ? (a.v.s == b.v.s) : (strcmp(a.v.s, b.v.s) == 0); case SP_TAG_OBJ: return a.cls_id == b.cls_id && a.v.p == b.v.p; default: return FALSE; } }
 static mrb_int sp_poly_cmp(sp_RbVal a, sp_RbVal b, mrb_bool *comparable) { if (sp_poly_numeric_p(a) && sp_poly_numeric_p(b)) { mrb_float af = sp_poly_to_f(a), bf = sp_poly_to_f(b); *comparable = TRUE; return (af > bf) - (af < bf); } if (a.tag == SP_TAG_STR && b.tag == SP_TAG_STR) { if (a.v.s == NULL || b.v.s == NULL) { *comparable = (a.v.s == b.v.s); return 0; } *comparable = TRUE; return strcmp(a.v.s, b.v.s); } if (a.tag == SP_TAG_SYM && b.tag == SP_TAG_SYM) { *comparable = TRUE; return (a.v.i > b.v.i) - (a.v.i < b.v.i); } *comparable = FALSE; return 0; }
 static mrb_bool sp_poly_lt(sp_RbVal a, sp_RbVal b) { mrb_bool comparable; mrb_int cmp = sp_poly_cmp(a, b, &comparable); return comparable ? (cmp < 0) : FALSE; }
 static mrb_bool sp_poly_le(sp_RbVal a, sp_RbVal b) { mrb_bool comparable; mrb_int cmp = sp_poly_cmp(a, b, &comparable); return comparable ? (cmp <= 0) : FALSE; }
@@ -2630,6 +2767,140 @@ static void sp_PolyArray_flatten_into(sp_PolyArray *dst, sp_RbVal v) {
   sp_PolyArray_push(dst, v);
 }
 static sp_PolyArray *sp_PolyArray_flatten(sp_PolyArray *a) { sp_PolyArray *b = sp_PolyArray_new(); if (!a) return b; for (mrb_int i = 0; i < a->len; i++) sp_PolyArray_flatten_into(b, a->data[i]); return b; }
+
+/* Box-into-poly converters used by the printf-with-array codegen
+   (`"%fmt" % typed_array`). The format helper expects sp_RbVal
+   slots so it can dispatch per-element. */
+static sp_PolyArray *sp_IntArray_to_poly(sp_IntArray *a) {
+  sp_PolyArray *r = sp_PolyArray_new();
+  if (!a) return r;
+  for (mrb_int i = 0; i < a->len; i++) sp_PolyArray_push(r, sp_box_int(a->data[a->start + i]));
+  return r;
+}
+static sp_PolyArray *sp_StrArray_to_poly_fmt(sp_StrArray *a) {
+  sp_PolyArray *r = sp_PolyArray_new();
+  if (!a) return r;
+  for (mrb_int i = 0; i < a->len; i++) sp_PolyArray_push(r, sp_box_str(a->data[i]));
+  return r;
+}
+
+/* String#% with a poly_array argument. Walks the format and for
+   each spec ("%s", "%d", "%f", "%x", "%o", etc.) pulls the next
+   array element. Width / flag chars between `%` and the conv
+   letter (`-+0 #`, digits, `.`) are copied verbatim so printf
+   does the substitution work. */
+static const char *sp_str_format_polyarr(const char *fmt, sp_PolyArray *a) {
+  size_t cap = strlen(fmt) + 64;
+  char *buf = (char *)malloc(cap);
+  if (!buf) { perror("malloc"); exit(1); }
+  size_t out = 0; mrb_int idx = 0; const char *p = fmt;
+  while (*p) {
+    if (*p != '%') {
+      if (out + 1 >= cap) { cap = cap * 2; buf = (char *)realloc(buf, cap); }
+      buf[out++] = *p++; continue;
+    }
+    if (p[1] == '%') {
+      if (out + 1 >= cap) { cap = cap * 2; buf = (char *)realloc(buf, cap); }
+      buf[out++] = '%'; p += 2; continue;
+    }
+    char spec[64]; size_t sl = 0; spec[sl++] = *p++;
+    while (*p && sl < sizeof(spec) - 4) {
+      char c = *p;
+      if (c == '-' || c == '+' || c == ' ' || c == '#' || c == '0' || c == '.' || (c >= '0' && c <= '9')) { spec[sl++] = c; p++; }
+      else break;
+    }
+    if (!*p) break;
+    char conv = *p++; spec[sl++] = conv;
+    char fmt_use[80];
+    if (conv == 'd' || conv == 'i' || conv == 'x' || conv == 'X' || conv == 'o') {
+      memcpy(fmt_use, spec, sl - 1);
+      fmt_use[sl - 1] = 'l'; fmt_use[sl] = 'l'; fmt_use[sl + 1] = conv; fmt_use[sl + 2] = 0;
+    } else {
+      memcpy(fmt_use, spec, sl); fmt_use[sl] = 0;
+    }
+    char tmp[256]; int wn = 0;
+    sp_RbVal v = (idx < a->len) ? a->data[idx] : sp_box_nil();
+    idx++;
+    if (conv == 'd' || conv == 'i' || conv == 'x' || conv == 'X' || conv == 'o') {
+      long long lv = 0;
+      if (v.tag == SP_TAG_INT) lv = (long long)v.v.i;
+      else if (v.tag == SP_TAG_FLT) lv = (long long)v.v.f;
+      else if (v.tag == SP_TAG_STR && v.v.s) lv = strtoll(v.v.s, NULL, 10);
+      wn = snprintf(tmp, sizeof(tmp), fmt_use, lv);
+    } else if (conv == 'f' || conv == 'e' || conv == 'E' || conv == 'g' || conv == 'G') {
+      double dv = 0;
+      if (v.tag == SP_TAG_FLT) dv = v.v.f;
+      else if (v.tag == SP_TAG_INT) dv = (double)v.v.i;
+      wn = snprintf(tmp, sizeof(tmp), fmt_use, dv);
+    } else if (conv == 's') {
+      const char *sv = "";
+      char num_buf[32];
+      if (v.tag == SP_TAG_STR) sv = v.v.s ? v.v.s : "";
+      else if (v.tag == SP_TAG_INT) { snprintf(num_buf, sizeof(num_buf), "%lld", (long long)v.v.i); sv = num_buf; }
+      else if (v.tag == SP_TAG_FLT) { snprintf(num_buf, sizeof(num_buf), "%g", v.v.f); sv = num_buf; }
+      wn = snprintf(tmp, sizeof(tmp), fmt_use, sv);
+    } else if (conv == 'c') {
+      int cv = 0;
+      if (v.tag == SP_TAG_INT) cv = (int)v.v.i;
+      else if (v.tag == SP_TAG_STR && v.v.s && v.v.s[0]) cv = (unsigned char)v.v.s[0];
+      wn = snprintf(tmp, sizeof(tmp), fmt_use, cv);
+    } else {
+      memcpy(tmp, spec, sl); tmp[sl] = 0; wn = (int)sl; idx--;
+    }
+    if (wn < 0) continue;
+    if (out + (size_t)wn + 1 >= cap) { cap = (out + wn) * 2 + 64; buf = (char *)realloc(buf, cap); }
+    memcpy(buf + out, tmp, wn); out += wn;
+  }
+  buf[out] = 0;
+  char *r = sp_str_alloc(out); memcpy(r, buf, out); free(buf); return r;
+}
+
+/* Array#assoc — return the first sub-array (poly_array element)
+   whose first element equals `key`. Returns NULL when no match
+   so the caller's `.inspect` round-trips to "nil". */
+static sp_PolyArray *sp_PolyArray_assoc(sp_PolyArray *a, sp_RbVal key) {
+  if (!a) return NULL;
+  for (mrb_int i = 0; i < a->len; i++) {
+    sp_RbVal el = a->data[i];
+    if (el.tag != SP_TAG_OBJ) continue;
+    if (el.cls_id != SP_BUILTIN_POLY_ARRAY) continue;
+    sp_PolyArray *sub = (sp_PolyArray *)el.v.p;
+    if (sub && sub->len >= 1 && sp_poly_eq(sub->data[0], key)) return sub;
+  }
+  return NULL;
+}
+
+/* Array#rassoc — same as assoc but matches against the second
+   element of each sub-array. */
+static sp_PolyArray *sp_PolyArray_rassoc(sp_PolyArray *a, sp_RbVal val) {
+  if (!a) return NULL;
+  for (mrb_int i = 0; i < a->len; i++) {
+    sp_RbVal el = a->data[i];
+    if (el.tag != SP_TAG_OBJ) continue;
+    if (el.cls_id != SP_BUILTIN_POLY_ARRAY) continue;
+    sp_PolyArray *sub = (sp_PolyArray *)el.v.p;
+    if (sub && sub->len >= 2 && sp_poly_eq(sub->data[1], val)) return sub;
+  }
+  return NULL;
+}
+/* Depth-bounded variant. depth==0 returns a shallow copy; each
+   recursive step decrements depth, and a negative depth means
+   "unlimited" (same as flatten without arg). Used by
+   `Array#flatten(n)`. */
+static void sp_PolyArray_flatten_into_n(sp_PolyArray *dst, sp_RbVal v, mrb_int depth) {
+  if (depth == 0 || v.tag != SP_TAG_OBJ) { sp_PolyArray_push(dst, v); return; }
+  if (v.cls_id == SP_BUILTIN_INT_ARRAY) { sp_IntArray *ia = (sp_IntArray *)v.v.p; for (mrb_int i = 0; i < ia->len; i++) sp_PolyArray_push(dst, sp_box_int(ia->data[ia->start + i])); return; }
+  if (v.cls_id == SP_BUILTIN_STR_ARRAY) { sp_StrArray *sa = (sp_StrArray *)v.v.p; for (mrb_int i = 0; i < sa->len; i++) sp_PolyArray_push(dst, sp_box_str(sa->data[i])); return; }
+  if (v.cls_id == SP_BUILTIN_POLY_ARRAY) { sp_PolyArray *pa = (sp_PolyArray *)v.v.p; for (mrb_int i = 0; i < pa->len; i++) sp_PolyArray_flatten_into_n(dst, pa->data[i], depth - 1); return; }
+  sp_PolyArray_push(dst, v);
+}
+static sp_PolyArray *sp_PolyArray_flatten_n(sp_PolyArray *a, mrb_int depth) {
+  sp_PolyArray *b = sp_PolyArray_new();
+  if (!a) return b;
+  if (depth < 0) depth = INT64_MAX;
+  for (mrb_int i = 0; i < a->len; i++) sp_PolyArray_flatten_into_n(b, a->data[i], depth);
+  return b;
+}
 /* Sum the integer-tagged elements of a poly_array. Used by
    `Array#sum` on a poly_array whose runtime tags are uniform int
    (e.g. the result of `arr.map { _1[:int_key] }`). Non-int tags
@@ -2658,6 +2929,7 @@ static inline const char *sp_poly_inspect(sp_RbVal v) {
     case SP_TAG_BOOL: return v.v.b ? SPL("true") : SPL("false");
     case SP_TAG_NIL:  return SPL("nil");
     case SP_TAG_SYM:  return sp_str_concat(SPL(":"), sp_sym_to_s((sp_sym)v.v.i));
+    case SP_TAG_ENCODING: return sp_sprintf("#<Encoding:%s>", v.v.s ? v.v.s : "");
     case SP_TAG_OBJ:
  /* Built-in container / value-type tags get their typed inspect
     helper. Matches the dispatch shape in sp_poly_to_s above and the
@@ -2682,8 +2954,11 @@ static inline const char *sp_poly_inspect(sp_RbVal v) {
 }
 /* Array#inspect for heterogeneous poly arrays. Each element dispatches
    through sp_poly_inspect, so a mixed `[1, "x", :y]` renders
-   `[1, "x", :y]` byte-for-byte identical to CRuby. */
+   `[1, "x", :y]` byte-for-byte identical to CRuby. NULL renders
+   "nil" so callers that store a nil-returning slot (assoc/rassoc
+   miss, etc.) round-trip cleanly through `.inspect`. */
 static const char *sp_PolyArray_inspect(sp_PolyArray *a) {
+  if (!a) { char *r = sp_str_alloc(3); r[0] = 'n'; r[1] = 'i'; r[2] = 'l'; r[3] = 0; sp_str_set_len(r, 3); return r; }
   sp_String *s = sp_String_new("[");
   for (mrb_int i = 0; i < a->len; i++) {
     if (i > 0) sp_String_append(s, ", ");
@@ -2787,6 +3062,8 @@ static mrb_int sp_rbval_hash_key(sp_RbVal v) {
       return (mrb_int)v.v.i;
     case SP_TAG_STR:
       return v.v.s ? (mrb_int)sp_str_hash(v.v.s) : 0;
+    case SP_TAG_ENCODING:
+      return v.v.s ? (mrb_int)sp_str_hash(v.v.s) : 0;
     case SP_TAG_FLT: { uint64_t b; memcpy(&b, &v.v.f, sizeof(b)); return (mrb_int)b; }
     case SP_TAG_OBJ:
       if (sp_obj_hash_hook) return sp_obj_hash_hook(v.cls_id, v.v.p);
@@ -2800,6 +3077,10 @@ static mrb_bool sp_rbval_eql_key(sp_RbVal a, sp_RbVal b) {
     case SP_TAG_INT: case SP_TAG_BOOL: case SP_TAG_NIL: case SP_TAG_SYM:
       return a.v.i == b.v.i;
     case SP_TAG_STR:
+      if (a.v.s == b.v.s) return TRUE;
+      if (!a.v.s || !b.v.s) return FALSE;
+      return strcmp(a.v.s, b.v.s) == 0;
+    case SP_TAG_ENCODING:
       if (a.v.s == b.v.s) return TRUE;
       if (!a.v.s || !b.v.s) return FALSE;
       return strcmp(a.v.s, b.v.s) == 0;
