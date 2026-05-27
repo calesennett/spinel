@@ -4246,6 +4246,9 @@ class Compiler
     if mname == "delete_prefix" || mname == "delete_suffix"
       return "string"
     end
+    if mname == "dump"
+      return "string"
+    end
     if mname == "delete_prefix!" || mname == "delete_suffix!"
  # Bang variants mutate self in place. When recv is mutable_str
  # the call returns the same mutable_str; on a frozen literal
@@ -4459,6 +4462,9 @@ class Compiler
     end
     if mname == "pack"
       return "string"
+    end
+    if mname == "assoc" || mname == "rassoc"
+      return "poly_array"
     end
  # Issue #889: String#unpack returns Array of mixed-type elements;
  # spinel boxes through poly_array.

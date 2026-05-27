@@ -8663,9 +8663,19 @@ class Compiler
     end
     pname = @cls_parents[cur_internal]
     if pname != ""
+      pp_uid = -1
       pp_internal = find_class_idx(pname)
       if pp_internal >= 0
-        psub = compute_ancestors_for_unified(cls_id_for_user_internal(pp_internal))
+        pp_uid = cls_id_for_user_internal(pp_internal)
+      else
+ # Parent is a built-in class (StandardError / Object /
+ # Numeric / etc.). find_class_idx only walks the user
+ # table — fall through to the unified name table so the
+ # MRO picks up the built-in ancestor chain.
+        pp_uid = unified_cls_id_for_name(pname)
+      end
+      if pp_uid >= 0
+        psub = compute_ancestors_for_unified(pp_uid)
         pj = 0
         while pj < psub.length
           if acc_includes(acc, psub[pj]) == 0
@@ -19511,7 +19521,12 @@ class Compiler
     if mname == "to_f"
       return "atof(" + rc + ")"
     end
-    if mname == "inspect"
+    if mname == "inspect" || mname == "dump"
+ # String#dump and #inspect render the same quoted form for the
+ # subset of characters sp_str_inspect already handles (basic
+ # backslash escapes + \xHH for non-printable). CRuby's dump
+ # adds a forced ASCII-7 fallback for high-byte sequences; that
+ # divergence is documented but rare in practice.
       return "sp_str_inspect(" + rc + ")"
     end
     if mname == "upcase"
@@ -20237,14 +20252,26 @@ class Compiler
     if mname == "last" || mname == "end" || mname == "max"
       return rc + ".last"
     end
- # include? / cover? on a numeric range reduce to first <= x <= last
- # (inclusive form). The two methods are identical for numeric ranges
- # so they share the same emission. Exclude_end isn't tracked in the
- # runtime sp_Range struct; non-literal receivers fall back to the
- # inclusive form (matches length/size).
+ # String-range form: `("a".."z").include?("m")`. sp_Range only
+ # holds int fields, so a string-typed RangeNode receiver can't
+ # round-trip through it. When the receiver is a literal
+ # RangeNode with String children, ignore `rc` and emit inline
+ # strcmp bounds. Non-literal string ranges fall through to the
+ # numeric path (which still mis-compiles for them — those are
+ # explicitly outside the supported subset for now).
     if mname == "include?" || mname == "cover?" || mname == "==="
- # Range#=== is the case-when membership operator and behaves like
- # cover? for numeric ranges (Ruby docs: "tests for membership").
+      lit_rg = resolve_literal_range_recv(nid)
+      if lit_rg >= 0
+        l_nid = @nd_left[lit_rg]
+        r_nid = @nd_right[lit_rg]
+        if l_nid >= 0 && r_nid >= 0 && infer_type(l_nid) == "string" && infer_type(r_nid) == "string"
+          arg_s = compile_arg0(nid)
+          left_s = compile_expr(l_nid)
+          right_s = compile_expr(r_nid)
+          op_rhs = (range_excl_end(lit_rg) == 1) ? "< 0" : "<= 0"
+          return "(strcmp(" + arg_s + ", " + left_s + ") >= 0 && strcmp(" + arg_s + ", " + right_s + ") " + op_rhs + ")"
+        end
+      end
       tmp = new_temp
       emit("  sp_Range " + tmp + " = " + rc + ";")
       arg = compile_arg0_as_int(nid)
@@ -22053,6 +22080,18 @@ class Compiler
           end
         end
         return "FALSE"
+      end
+      if mname == "assoc" || mname == "rassoc"
+        args_id_pa = @nd_arguments[nid]
+        if args_id_pa >= 0
+          a_pa = get_args(args_id_pa)
+          if a_pa.length > 0
+            @needs_rb_value = 1
+            helper_pa = (mname == "assoc") ? "sp_PolyArray_assoc" : "sp_PolyArray_rassoc"
+            return helper_pa + "(" + rc + ", " + box_expr_to_poly(a_pa[0]) + ")"
+          end
+        end
+        return "NULL"
       end
       if mname == "pack"
         args_id_pkp = @nd_arguments[nid]

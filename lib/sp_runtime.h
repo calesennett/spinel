@@ -2630,6 +2630,35 @@ static void sp_PolyArray_flatten_into(sp_PolyArray *dst, sp_RbVal v) {
   sp_PolyArray_push(dst, v);
 }
 static sp_PolyArray *sp_PolyArray_flatten(sp_PolyArray *a) { sp_PolyArray *b = sp_PolyArray_new(); if (!a) return b; for (mrb_int i = 0; i < a->len; i++) sp_PolyArray_flatten_into(b, a->data[i]); return b; }
+
+/* Array#assoc — return the first sub-array (poly_array element)
+   whose first element equals `key`. Returns NULL when no match
+   so the caller's `.inspect` round-trips to "nil". */
+static sp_PolyArray *sp_PolyArray_assoc(sp_PolyArray *a, sp_RbVal key) {
+  if (!a) return NULL;
+  for (mrb_int i = 0; i < a->len; i++) {
+    sp_RbVal el = a->data[i];
+    if (el.tag != SP_TAG_OBJ) continue;
+    if (el.cls_id != SP_BUILTIN_POLY_ARRAY) continue;
+    sp_PolyArray *sub = (sp_PolyArray *)el.v.p;
+    if (sub && sub->len >= 1 && sp_poly_eq(sub->data[0], key)) return sub;
+  }
+  return NULL;
+}
+
+/* Array#rassoc — same as assoc but matches against the second
+   element of each sub-array. */
+static sp_PolyArray *sp_PolyArray_rassoc(sp_PolyArray *a, sp_RbVal val) {
+  if (!a) return NULL;
+  for (mrb_int i = 0; i < a->len; i++) {
+    sp_RbVal el = a->data[i];
+    if (el.tag != SP_TAG_OBJ) continue;
+    if (el.cls_id != SP_BUILTIN_POLY_ARRAY) continue;
+    sp_PolyArray *sub = (sp_PolyArray *)el.v.p;
+    if (sub && sub->len >= 2 && sp_poly_eq(sub->data[1], val)) return sub;
+  }
+  return NULL;
+}
 /* Depth-bounded variant. depth==0 returns a shallow copy; each
    recursive step decrements depth, and a negative depth means
    "unlimited" (same as flatten without arg). Used by
@@ -2700,8 +2729,11 @@ static inline const char *sp_poly_inspect(sp_RbVal v) {
 }
 /* Array#inspect for heterogeneous poly arrays. Each element dispatches
    through sp_poly_inspect, so a mixed `[1, "x", :y]` renders
-   `[1, "x", :y]` byte-for-byte identical to CRuby. */
+   `[1, "x", :y]` byte-for-byte identical to CRuby. NULL renders
+   "nil" so callers that store a nil-returning slot (assoc/rassoc
+   miss, etc.) round-trip cleanly through `.inspect`. */
 static const char *sp_PolyArray_inspect(sp_PolyArray *a) {
+  if (!a) { char *r = sp_str_alloc(3); r[0] = 'n'; r[1] = 'i'; r[2] = 'l'; r[3] = 0; sp_str_set_len(r, 3); return r; }
   sp_String *s = sp_String_new("[");
   for (mrb_int i = 0; i < a->len; i++) {
     if (i > 0) sp_String_append(s, ", ");
