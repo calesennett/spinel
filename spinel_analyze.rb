@@ -30273,8 +30273,32 @@ class Compiler
       return "int"
     end
     if mname == "each_slice" || mname == "each_cons"
- # Block param is sub-array of recv's element type — keep recv's
- # array type (slice of int_array is still int_array).
+ # Multi-param block on each_cons(k) / each_slice(k) — when the
+ # req-param count matches the literal k, codegen destructures
+ # the pair into scalar element-type slots. Mirror that here
+ # so the block body's type inference sees the right shape.
+      n_ec_bp = -1
+      ec_args_bp = @nd_arguments[call_nid]
+      if ec_args_bp >= 0
+        ec_alist_bp = get_args(ec_args_bp)
+        if ec_alist_bp.length > 0 && @nd_type[ec_alist_bp[0]] == "IntegerNode"
+          n_ec_bp = @nd_value[ec_alist_bp[0]].to_i
+        end
+      end
+      blk_ec_bp = @nd_block[call_nid]
+      if blk_ec_bp >= 0 && n_ec_bp > 0
+        ec_bp_node = @nd_parameters[blk_ec_bp]
+        if ec_bp_node >= 0
+          ec_inner_pn = @nd_parameters[ec_bp_node]
+          if ec_inner_pn >= 0
+            ec_reqs_bp = parse_id_list(@nd_requireds[ec_inner_pn])
+            if ec_reqs_bp.length == n_ec_bp && ec_reqs_bp.length >= 2 && @nd_type[ec_reqs_bp[0]] != "MultiTargetNode"
+              return elem_type_of_array(recv_t)
+            end
+          end
+        end
+      end
+ # Default: bind the whole pair as a sub-array of recv's element type.
       return recv_t
     end
     if mname == "chunk_while" || mname == "slice_when"

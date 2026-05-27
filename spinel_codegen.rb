@@ -33534,7 +33534,7 @@ class Compiler
 
   def compile_block_iteration_stmt(nid, mname, recv)
  # each with block
-    if mname == "each" || (mname == "each_pair" && recv >= 0)
+    if mname == "each" || mname == "each_entry" || (mname == "each_pair" && recv >= 0)
       if @nd_block[nid] >= 0
  # For object types with yield-using each, use yield method call
         if recv >= 0
@@ -33549,6 +33549,42 @@ class Compiler
           compile_each_block(nid)
           return 1
         end
+      end
+    end
+
+ # `reverse_each` on a typed array: walk indices backwards.
+    if mname == "reverse_each" && @nd_block[nid] >= 0 && recv >= 0
+      rt_re = infer_type(recv)
+      pfx_re = ""
+      ety_re = ""
+      if rt_re == "int_array"
+        pfx_re = "IntArray"; ety_re = "int"
+      elsif rt_re == "str_array"
+        pfx_re = "StrArray"; ety_re = "string"
+      elsif rt_re == "float_array"
+        pfx_re = "FloatArray"; ety_re = "float"
+      elsif rt_re == "sym_array"
+        pfx_re = "SymArray"; ety_re = "symbol"
+        rt_re = "int_array"; pfx_re = "IntArray" # sym storage shares IntArray
+      end
+      if pfx_re != ""
+        old_re = @in_loop
+        @in_loop = 1
+        rc_re = compile_expr_gc_rooted(recv)
+        bp_re = get_block_param(nid, 0)
+        bp_re = "_x" if bp_re == ""
+        tmp_re = new_temp
+        emit("  for (mrb_int " + tmp_re + " = sp_" + pfx_re + "_length(" + rc_re + ") - 1; " + tmp_re + " >= 0; " + tmp_re + "--) {")
+        emit("    " + c_type(ety_re) + " lv_" + bp_re + " = sp_" + pfx_re + "_get(" + rc_re + ", " + tmp_re + ");")
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_re, ety_re)
+        compile_stmts_body(@nd_body[@nd_block[nid]])
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        @in_loop = old_re
+        return 1
       end
     end
 
@@ -37252,38 +37288,70 @@ class Compiler
     rt = infer_type(@nd_receiver[nid])
     rc = compile_expr_gc_rooted(@nd_receiver[nid])
     n = compile_arg0(nid)
-    bp1 = get_block_param(nid, 0)
-    if bp1 == ""
-      bp1 = "_cons"
+    pfx = array_c_prefix(rt)
+    elem_t_ec = elem_type_of_array(rt)
+    @needs_gc = 1
+
+ # Multi-param block on each_cons(k) — bind one block param
+ # per pair element instead of materialising a sub-array.
+ # Detect by counting RequiredParameter slots and matching
+ # against the literal numeric arg `k`.
+    blk_id_ec = @nd_block[nid]
+    n_int_ec = -1
+    args_id_ec = @nd_arguments[nid]
+    if args_id_ec >= 0
+      a_list_ec = get_args(args_id_ec)
+      if a_list_ec.length > 0 && @nd_type[a_list_ec[0]] == "IntegerNode"
+        n_int_ec = @nd_value[a_list_ec[0]].to_i
+      end
     end
+    bp_params_ec = blk_id_ec >= 0 ? @nd_parameters[blk_id_ec] : -1
+    inner_params_ec = bp_params_ec >= 0 ? @nd_parameters[bp_params_ec] : -1
+    reqs_ec = inner_params_ec >= 0 ? parse_id_list(@nd_requireds[inner_params_ec]) : []
+    can_destruct_ec = (n_int_ec > 0 && reqs_ec.length == n_int_ec && reqs_ec.length >= 2 && @nd_type[reqs_ec[0]] != "MultiTargetNode")
+
     tmp_i = new_temp
     tmp_j = new_temp
     tmp_len = new_temp
-    pfx = array_c_prefix(rt)
-    @needs_gc = 1
     emit("  mrb_int " + tmp_len + " = sp_" + pfx + "_length(" + rc + ");")
     emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " + " + n + " <= " + tmp_len + "; " + tmp_i + "++) {")
- # See compile_each_slice_block: shadow case needs a fresh typed slot with
- # its own GC root.
-    outer_t = find_var_type(bp1)
-    if outer_t != "" && outer_t != rt
-      emit("    SP_GC_SAVE();")
-      emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
-      emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+
+    if can_destruct_ec
+      push_scope
+      di_ec = 0
+      while di_ec < reqs_ec.length
+        bpn_ec = @nd_name[reqs_ec[di_ec]]
+        emit("    " + c_type(elem_t_ec) + " lv_" + bpn_ec + " = sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + di_ec.to_s + ");")
+        declare_var(bpn_ec, elem_t_ec)
+        di_ec = di_ec + 1
+      end
+      @indent = @indent + 1
+      compile_stmts_body(@nd_body[blk_id_ec])
+      @indent = @indent - 1
+      pop_scope
     else
-      emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      bp1 = get_block_param(nid, 0)
+      bp1 = "_cons" if bp1 == ""
+      outer_t = find_var_type(bp1)
+      if outer_t != "" && outer_t != rt
+        emit("    SP_GC_SAVE();")
+        emit("    " + c_type(rt) + " lv_" + bp1 + " = sp_" + pfx + "_new();")
+        emit("    SP_GC_ROOT(lv_" + bp1 + ");")
+      else
+        emit("    lv_" + bp1 + " = sp_" + pfx + "_new();")
+      end
+      emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
+      emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
+      @indent = @indent + 1
+      push_scope
+      declare_var(bp1, rt)
+      redo_label = push_redo_label
+      emit_redo_label(redo_label)
+      compile_stmts_body(@nd_body[blk_id_ec])
+      pop_redo_label
+      pop_scope
+      @indent = @indent - 1
     end
-    emit("    for (mrb_int " + tmp_j + " = 0; " + tmp_j + " < " + n + "; " + tmp_j + "++)")
-    emit("      sp_" + pfx + "_push(lv_" + bp1 + ", sp_" + pfx + "_get(" + rc + ", " + tmp_i + " + " + tmp_j + "));")
-    @indent = @indent + 1
-    push_scope
-    declare_var(bp1, rt)
-    redo_label = push_redo_label
-    emit_redo_label(redo_label)
-    compile_stmts_body(@nd_body[@nd_block[nid]])
-    pop_redo_label
-    pop_scope
-    @indent = @indent - 1
     emit("  }")
     @in_loop = old
   end
