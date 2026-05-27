@@ -4246,6 +4246,18 @@ class Compiler
     if mname == "delete_prefix" || mname == "delete_suffix"
       return "string"
     end
+    if mname == "delete_prefix!" || mname == "delete_suffix!"
+ # Bang variants mutate self in place. When recv is mutable_str
+ # the call returns the same mutable_str; on a frozen literal
+ # the codegen path would already FrozenError before this fires.
+      if recv >= 0
+        rt_dpb = infer_type(recv)
+        if rt_dpb == "mutable_str"
+          return "mutable_str"
+        end
+      end
+      return "string"
+    end
     if mname == "eql?"
       return "bool"
     end
@@ -5100,7 +5112,7 @@ class Compiler
       end
       return "int_array"
     end
-    if mname == "first" || mname == "last"
+    if mname == "first" || mname == "last" || mname == "begin" || mname == "end"
       if recv >= 0
         rt = infer_type(recv)
  # Literal `[nil, ...].first` / `.last`: every element is nil so

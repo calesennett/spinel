@@ -16295,6 +16295,12 @@ class Compiler
         }[mname]
         return "(sp_String_replace(" + rc + ", " + helper_bang + "(" + rc + "->data)), " + rc + ")"
       end
+ # `delete_prefix!` / `delete_suffix!` — bang variants of the
+ # non-mutating counterparts. Mutates self in place.
+      if mname == "delete_prefix!" || mname == "delete_suffix!"
+        helper_dp = (mname == "delete_prefix!") ? "sp_str_delete_prefix" : "sp_str_delete_suffix"
+        return "(sp_String_replace(" + rc + ", " + helper_dp + "(" + rc + "->data, " + compile_arg0(nid) + ")), " + rc + ")"
+      end
       if mname == "insert"
         args_id_ms = @nd_arguments[nid]
         if args_id_ms >= 0
@@ -20225,10 +20231,10 @@ class Compiler
   end
 
   def compile_range_method_expr(nid, mname, rc)
-    if mname == "first"
+    if mname == "first" || mname == "begin" || mname == "min"
       return rc + ".first"
     end
-    if mname == "last"
+    if mname == "last" || mname == "end" || mname == "max"
       return rc + ".last"
     end
  # include? / cover? on a numeric range reduce to first <= x <= last
@@ -22020,7 +22026,17 @@ class Compiler
       if mname == "length" || mname == "size"
         return "sp_PolyArray_length(" + rc + ")"
       end
- # poly_array#pack via the libspinel_rt.a helper (sp_pack.c).
+      if mname == "include?"
+        args_id_pinc = @nd_arguments[nid]
+        if args_id_pinc >= 0
+          a_pinc = get_args(args_id_pinc)
+          if a_pinc.length > 0
+            @needs_rb_value = 1
+            return "sp_PolyArray_include(" + rc + ", " + box_expr_to_poly(a_pinc[0]) + ")"
+          end
+        end
+        return "FALSE"
+      end
       if mname == "pack"
         args_id_pkp = @nd_arguments[nid]
         if args_id_pkp >= 0
