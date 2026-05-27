@@ -5642,6 +5642,9 @@ class Compiler
         if rt == "float_array"
           return "float_array_ptr_array"
         end
+        if rt == "poly_array"
+          return "poly_array_ptr_array"
+        end
       end
       return "int_array_ptr_array"
     end

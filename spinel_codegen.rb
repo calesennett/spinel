@@ -38623,6 +38623,10 @@ class Compiler
       @needs_int_array = 1
       return "sp_SymArrayPtrArray_inspect(" + val + ")"
     end
+    if at == "poly_array_ptr_array"
+      @needs_rb_value = 1
+      return "sp_PolyArrayPtrArray_inspect(" + val + ")"
+    end
  # Tuples produced by methods that return Ruby Arrays of fixed
  # arity (Integer#divmod, Array#minmax, etc.). Without an inspect
  # path here, `p arr.minmax` would fall through to printf("%lld",...)
