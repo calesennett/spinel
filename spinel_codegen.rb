@@ -16769,9 +16769,9 @@ class Compiler
       if mname == "replace"
         return "(sp_String_replace(" + rc + ", " + compile_arg0(nid) + "), " + rc + ")"
       end
- # Issue #972: freeze flag rides in the GC header of the sp_String
- # wrapper. Literal `const char *` strings handle freeze via the
- # 0xff marker byte at offset -1 instead.
+ # Freeze flag rides in the GC header of the sp_String wrapper.
+ # Literal `const char *` strings handle freeze via the 0xff
+ # marker byte at offset -1 instead.
       if mname == "freeze"
         return "sp_String_freeze(" + rc + ")"
       end
@@ -31955,10 +31955,10 @@ class Compiler
       if vt == "mutable_str"
         rhs_type = infer_type(@nd_expression[nid])
         val = compile_expr(@nd_expression[nid])
- # Issue #972: `s = "hello".freeze` widens to mutable_str storage
- # for later mutation, but the user-visible intent is a frozen
- # string. After wrapping, mark the sp_String frozen so a
- # subsequent `s << x` raises FrozenError.
+ # `s = "hello".freeze` widens to mutable_str storage for later
+ # mutation, but the user-visible intent is a frozen string. After
+ # wrapping, mark the sp_String frozen so a subsequent `s << x`
+ # raises FrozenError.
         rhs_is_freeze = 0
         rhs_eid = @nd_expression[nid]
         if rhs_eid >= 0 && @nd_type[rhs_eid] == "CallNode" && @nd_name[rhs_eid] == "freeze"
@@ -35218,9 +35218,9 @@ class Compiler
         if rt == "mutable_str"
           rc = compile_expr_gc_rooted(recv)
           val = compile_arg0(nid)
- # Issue #972: route through sp_String_replace so the frozen-flag
- # guard fires. The earlier inline `->len = 0; ->data[0] = 0; append`
- # bypassed the check and mutated a frozen string before raising.
+ # Route through sp_String_replace so the frozen-flag guard fires.
+ # The earlier inline `->len = 0; ->data[0] = 0; append` bypassed
+ # the check and mutated a frozen string before raising.
           emit("  sp_String_replace(" + rc + ", " + val + ");")
           return 1
         end
@@ -35278,8 +35278,8 @@ class Compiler
         rt = infer_type(recv)
         if rt == "mutable_str"
           rc = compile_expr_gc_rooted(recv)
- # Issue #972: route through sp_String_replace("") so the
- # frozen-flag guard fires before any mutation.
+ # Route through sp_String_replace("") so the frozen-flag guard
+ # fires before any mutation.
           emit("  sp_String_replace(" + rc + ", \"\");")
           return 1
         end

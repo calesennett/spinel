@@ -1727,9 +1727,9 @@ static inline mrb_int sp_str_setbyte(const char *s, mrb_int i, mrb_int v) {
 }
 
 typedef struct{char*data;int64_t len;int64_t cap;}sp_String;
-/* Issue #972: per-mutable-string freeze flag rides in the GC header
-   alongside `marked`. sp_String_freeze sets it; the in-place mutators
-   below raise FrozenError when the bit is set. Literal `const char *`
+/* Per-mutable-string freeze flag rides in the GC header alongside
+   `marked`. sp_String_freeze sets it; the in-place mutators below
+   raise FrozenError when the bit is set. Literal `const char *`
    strings stay frozen via the 0xff marker byte (see sp_str_setbyte). */
 static inline mrb_bool sp_String_is_frozen(sp_String*s){if(!s)return TRUE;sp_gc_hdr*h=(sp_gc_hdr*)((char*)s-sizeof(sp_gc_hdr));return h->frozen;}
 static inline sp_String*sp_String_freeze(sp_String*s){if(s){sp_gc_hdr*h=(sp_gc_hdr*)((char*)s-sizeof(sp_gc_hdr));h->frozen=1;}return s;}

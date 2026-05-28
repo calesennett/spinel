@@ -254,8 +254,7 @@ parse_escape(re_compiler *c)
      consumes `\1`-`\9` as backref, so the only octal-leading digit
      that reaches here from the top level is `\0` -- but parse_escape
      also fires from read_class_atom inside `[...]`, where backref
-     parsing does not apply, so the full 0-7 range needs handling.
-     Issue #1009. */
+     parsing does not apply, so the full 0-7 range needs handling. */
   case '0': case '1': case '2': case '3':
   case '4': case '5': case '6': case '7': {
     int val = ch - '0';
