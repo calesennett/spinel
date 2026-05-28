@@ -12957,6 +12957,18 @@ class Compiler
   def compile_cond_expr(nid)
     expr = compile_expr(nid)
     t = infer_type(nid)
+ # compile_expr lowers an And/Or node using and_result_type /
+ # or_result_type, which materialises an sp_RbVal temp when the
+ # branches' types don't unify. infer_type may return a stale,
+ # non-poly cache entry for the same node in an inlined context (the
+ # cache was filled against the un-inlined scope), so trust the
+ # result-type helpers here too. Otherwise `!(temp)` / a missing
+ # sp_poly_truthy wrap on the sp_RbVal trips a C compile.
+    if nid >= 0 && @nd_type[nid] == "AndNode"
+      t = and_result_type(nid)
+    elsif nid >= 0 && @nd_type[nid] == "OrNode"
+      t = or_result_type(nid)
+    end
     if t == "poly"
       return "sp_poly_truthy(" + expr + ")"
     end
@@ -44037,6 +44049,33 @@ class Compiler
     0
   end
 
+ # Remap-aware truthy condition for the inlined statement path. The
+ # raw `compile_expr_remap` result needs the same truthy-wrapping
+ # compile_cond_expr applies: a poly predicate (e.g. a mixed-type
+ # `a && b` materialised as sp_RbVal) must go through sp_poly_truthy,
+ # an int? through the nil sentinel, a nullable pointer through a
+ # NULL check. Without this, `if (sp_RbVal)` / `!(sp_RbVal)` trips a
+ # C compile in inlined bodies.
+  def compile_cond_remap(pred, map_from, map_to)
+    cond = compile_expr_remap(pred, map_from, map_to)
+    ct = infer_type(pred)
+    if pred >= 0 && @nd_type[pred] == "AndNode"
+      ct = and_result_type(pred)
+    elsif pred >= 0 && @nd_type[pred] == "OrNode"
+      ct = or_result_type(pred)
+    end
+    if ct == "poly"
+      return "sp_poly_truthy(" + cond + ")"
+    end
+    if is_scalar_nullable_type(ct) == 1
+      return "(!sp_int_is_nil(" + cond + "))"
+    end
+    if is_nullable_type(ct) == 1
+      return "(" + cond + " != NULL)"
+    end
+    cond
+  end
+
   def compile_stmt_with_block(nid, blk, bp_names, map_from, map_to)
     if nid < 0
       return
@@ -44187,7 +44226,7 @@ class Compiler
       return
     end
     if t == "IfNode"
-      cond = compile_expr_remap(@nd_predicate[nid], map_from, map_to)
+      cond = compile_cond_remap(@nd_predicate[nid], map_from, map_to)
       emit("  if (" + cond + ") {")
       @indent = @indent + 1
  # Mirror compile_if_stmt's is_a? narrow push so the y1-inlined
@@ -44291,7 +44330,7 @@ class Compiler
  # compile_expr_remap's default, which emitted the cond as a
  # no-op ternary AND the raise unconditionally as a separate
  # statement. Inline as `if (!cond) { body } [else { else }]`.
-      cond = compile_expr_remap(@nd_predicate[nid], map_from, map_to)
+      cond = compile_cond_remap(@nd_predicate[nid], map_from, map_to)
       emit("  if (!(" + cond + ")) {")
       @indent = @indent + 1
       body = @nd_body[nid]
