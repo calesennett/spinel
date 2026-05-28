@@ -4962,7 +4962,28 @@ class Compiler
         if rt_match == "string" || rt_match == "regexp"
           @needs_rb_value = 1
           @needs_gc = 1
-          return "poly_array?"
+ # nullable: NULL on no-match (so `.nil?` / truthiness work).
+          return "matchdata?"
+        end
+      end
+    end
+ # MatchData instance method return types.
+    if recv >= 0
+      rt_md = base_type(infer_type(recv))
+      if rt_md == "matchdata"
+        if mname == "[]" || mname == "to_s" || mname == "pre_match" || mname == "post_match"
+          return "string"
+        end
+        if mname == "length" || mname == "size" || mname == "begin" || mname == "end"
+          return "int"
+        end
+        if mname == "offset"
+          @needs_int_array = 1
+          return "int_array"
+        end
+        if mname == "to_a" || mname == "captures"
+          @needs_rb_value = 1
+          return "poly_array"
         end
       end
     end

@@ -2733,6 +2733,108 @@ static sp_PolyArray *sp_re_match_data(mrb_regexp_pattern *pat, const char *str) 
   }
   return arr;
 }
+/* MatchData — holds the source string and the per-group byte offsets
+   the engine produced. `[]`/captures extract substrings on demand;
+   offset/begin/end report CHARACTER offsets (CRuby semantics), so
+   byte offsets are converted via sp_str_count_chars. Group i occupies
+   caps[2i] (begin) and caps[2i+1] (end); -1 marks a non-participating
+   group. Issue #974. */
+typedef struct { const char *source; int caps[64]; int ncap; } sp_MatchData;
+static void sp_MatchData_scan(void *p) { sp_MatchData *m = (sp_MatchData *)p; if (m->source) sp_mark_string(m->source); }
+static sp_MatchData *sp_re_matchdata(mrb_regexp_pattern *pat, const char *str) {
+  int64_t slen = (int64_t)strlen(str);
+  int caps[64];
+  int n = re_exec(pat, str, slen, 0, caps, 64);
+  if (n <= 0 || caps[0] < 0) {
+    for (int i = 0; i < 10; i++) sp_re_captures[i] = NULL;
+    sp_re_last_str = NULL; sp_re_match_str = NULL;
+    sp_re_match_pre = NULL; sp_re_match_post = NULL;
+    return NULL;
+  }
+  int pairs = (n > 64 ? 64 : n) / 2;
+  sp_re_set_captures(str, caps, pairs);
+  sp_MatchData *m = (sp_MatchData *)sp_gc_alloc(sizeof(sp_MatchData), NULL, sp_MatchData_scan);
+  m->source = str;
+  m->ncap = pairs;
+  for (int i = 0; i < pairs * 2; i++) m->caps[i] = caps[i];
+  return m;
+}
+/* group i substring, or NULL for a non-participating / out-of-range group */
+static const char *sp_MatchData_aref(sp_MatchData *m, mrb_int i) {
+  if (!m || i < 0 || i >= m->ncap) return NULL;
+  int s = m->caps[i * 2], e = m->caps[i * 2 + 1];
+  if (s < 0 || e < s) return NULL;
+  int len = e - s;
+  char *b = sp_str_alloc((size_t)len);
+  memcpy(b, m->source + s, len);
+  b[len] = 0;
+  sp_str_set_len(b, (size_t)len);
+  return b;
+}
+static mrb_int sp_MatchData_length(sp_MatchData *m) { return m ? m->ncap : 0; }
+/* char offset of a byte position within source */
+static mrb_int sp_md_char_off(sp_MatchData *m, int byteoff) {
+  if (byteoff < 0) return SP_INT_NIL;
+  return sp_str_count_chars(m->source, (size_t)byteoff);
+}
+static mrb_int sp_MatchData_begin(sp_MatchData *m, mrb_int i) {
+  if (!m || i < 0 || i >= m->ncap) return SP_INT_NIL;
+  return sp_md_char_off(m, m->caps[i * 2]);
+}
+static mrb_int sp_MatchData_end(sp_MatchData *m, mrb_int i) {
+  if (!m || i < 0 || i >= m->ncap) return SP_INT_NIL;
+  return sp_md_char_off(m, m->caps[i * 2 + 1]);
+}
+static sp_IntArray *sp_MatchData_offset(sp_MatchData *m, mrb_int i) {
+  sp_IntArray *a = sp_IntArray_new();
+  if (!m || i < 0 || i >= m->ncap) { sp_IntArray_push(a, SP_INT_NIL); sp_IntArray_push(a, SP_INT_NIL); return a; }
+  sp_IntArray_push(a, sp_md_char_off(m, m->caps[i * 2]));
+  sp_IntArray_push(a, sp_md_char_off(m, m->caps[i * 2 + 1]));
+  return a;
+}
+/* whole-match string (group 0) — also MatchData#to_s */
+static const char *sp_MatchData_to_s(sp_MatchData *m) { const char *r = sp_MatchData_aref(m, 0); return r ? r : sp_str_empty; }
+/* captures: groups 1..n-1 as a poly array (nil for non-participating) */
+static sp_PolyArray *sp_MatchData_captures(sp_MatchData *m) {
+  sp_PolyArray *r = sp_PolyArray_new();
+  if (!m) return r;
+  SP_GC_ROOT(r);
+  for (mrb_int i = 1; i < m->ncap; i++) {
+    const char *g = sp_MatchData_aref(m, i);
+    sp_PolyArray_push(r, g ? sp_box_str(g) : sp_box_nil());
+  }
+  return r;
+}
+/* to_a: group 0 + captures */
+static sp_PolyArray *sp_MatchData_to_a(sp_MatchData *m) {
+  sp_PolyArray *r = sp_PolyArray_new();
+  if (!m) return r;
+  SP_GC_ROOT(r);
+  for (mrb_int i = 0; i < m->ncap; i++) {
+    const char *g = sp_MatchData_aref(m, i);
+    sp_PolyArray_push(r, g ? sp_box_str(g) : sp_box_nil());
+  }
+  return r;
+}
+static const char *sp_MatchData_pre_match(sp_MatchData *m) {
+  if (!m) return sp_str_empty;
+  int e = m->caps[0];
+  if (e <= 0) return sp_str_empty;
+  char *b = sp_str_alloc((size_t)e);
+  memcpy(b, m->source, e); b[e] = 0; sp_str_set_len(b, (size_t)e);
+  return b;
+}
+static const char *sp_MatchData_post_match(sp_MatchData *m) {
+  if (!m) return sp_str_empty;
+  int s = m->caps[1];
+  size_t sl = strlen(m->source);
+  if (s < 0 || (size_t)s >= sl) return sp_str_empty;
+  size_t len = sl - (size_t)s;
+  char *b = sp_str_alloc(len);
+  memcpy(b, m->source + s, len); b[len] = 0; sp_str_set_len(b, len);
+  return b;
+}
+
 static sp_RbVal sp_poly_shl(sp_RbVal a, sp_RbVal b) {
   /* Dispatch by recv cls_id: an IntArray / PolyArray / etc. boxed
      into a poly slot still wants Array#<< (push), not Integer#<<

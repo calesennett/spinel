@@ -4365,6 +4365,9 @@ class Compiler
     if t == "stringscanner"
       return 1
     end
+    if t == "matchdata"
+      return 1
+    end
     if is_obj_type(t) == 1
       cname = t[4, t.length - 4]
       ci = find_class_idx(cname)
@@ -4649,6 +4652,10 @@ class Compiler
  # Random — per-instance xorshift PRNG.
     if t == "random"
       return "sp_Random *"
+    end
+ # MatchData — source string + capture byte offsets.
+    if t == "matchdata"
+      return "sp_MatchData *"
     end
  # FFI raw C pointer (void *). See type_is_pointer for GC rules.
     if t == "ptr"
@@ -16458,7 +16465,7 @@ class Compiler
             end
             @needs_rb_value = 1
             @needs_gc = 1
-            return "sp_re_match_data(" + rpat + ", " + sc + ")"
+            return "sp_re_matchdata(" + rpat + ", " + sc + ")"
           end
         end
       end
@@ -20340,7 +20347,7 @@ class Compiler
           if rpat_m != ""
             @needs_rb_value = 1
             @needs_gc = 1
-            return "sp_re_match_data(" + rpat_m + ", " + rc + ")"
+            return "sp_re_matchdata(" + rpat_m + ", " + rc + ")"
           end
         end
       end
@@ -26545,6 +26552,42 @@ class Compiler
       end
       if mname == "path" || mname == "to_path"
         return "sp_File_path(" + rc + ")"
+      end
+    end
+ # MatchData methods (sp_MatchData * from String/Regexp#match).
+    if recv_type == "matchdata"
+      if mname == "[]"
+        return "sp_MatchData_aref(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "length" || mname == "size"
+        return "sp_MatchData_length(" + rc + ")"
+      end
+      if mname == "offset"
+        @needs_int_array = 1
+        return "sp_MatchData_offset(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "begin"
+        return "sp_MatchData_begin(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "end"
+        return "sp_MatchData_end(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
+      if mname == "to_a"
+        @needs_rb_value = 1
+        return "sp_MatchData_to_a(" + rc + ")"
+      end
+      if mname == "captures"
+        @needs_rb_value = 1
+        return "sp_MatchData_captures(" + rc + ")"
+      end
+      if mname == "pre_match"
+        return "sp_MatchData_pre_match(" + rc + ")"
+      end
+      if mname == "post_match"
+        return "sp_MatchData_post_match(" + rc + ")"
+      end
+      if mname == "to_s"
+        return "sp_MatchData_to_s(" + rc + ")"
       end
     end
  # Random instance methods.
