@@ -3301,6 +3301,11 @@ class Compiler
         end
       end
     end
+ # Method#name returns the bound method's name as a String. Issue
+ # #960. (Dispatched explicitly, not via attr_reader.)
+    if mname == "name" && recv >= 0 && base_type(infer_type(recv)) == "obj_Method"
+      return "string"
+    end
  # Fiber[:k] / Fiber.current[:k] / fiber[:k] — per-fiber storage
  # read. Returns poly (sp_RbVal) since storage values are
  # arbitrary Ruby objects, matching MRI's Hash[Symbol, Object]
@@ -3332,7 +3337,10 @@ class Compiler
  # the binding and `m.call(x)` rewrites to a direct `sp_<foo>(x)`
  # call. .
     if mname == "method"
-      if recv < 0 && @current_class_idx >= 0
+      if recv < 0
+ # `method(:sym)` — bound Method object, whether inside a class
+ # (binds to self) or at top level (a top-level/Kernel method).
+ # Issue #960.
         return "obj_Method"
       end
       if recv >= 0
@@ -12881,19 +12889,25 @@ class Compiler
     @cls_is_sra.push(0)
     @cls_parents.push("")
     @cls_includes.push("")
-    @cls_ivar_names.push("@self_obj;@fn_ptr")
-    @cls_ivar_types.push("obj_Method;int")
-    @cls_ivar_init_definite.push("1;1")
-    @cls_ivar_observed_types.push("obj_Method;int")
+ # @name (string) carries the method's symbol name so Method#name
+ # works; exposed as an attr_reader. Issue #960.
+    @cls_ivar_names.push("@self_obj;@fn_ptr;@name")
+    @cls_ivar_types.push("obj_Method;int;string")
+    @cls_ivar_init_definite.push("1;1;1")
+    @cls_ivar_observed_types.push("obj_Method;int;string")
     @cls_ivar_nil_checked.push("")
-    @cls_ivar_rbs_types.push(";")
+    @cls_ivar_rbs_types.push(";;")
     @cls_meth_names.push("initialize")
-    @cls_meth_params.push("self_obj,fn_ptr")
-    @cls_meth_ptypes.push("obj_Method,int")
+    @cls_meth_params.push("self_obj,fn_ptr,name")
+    @cls_meth_ptypes.push("obj_Method,int,string")
     @cls_meth_returns.push("void")
     @cls_meth_bodies.push("-2")
-    @cls_meth_defaults.push("0,0")
+    @cls_meth_defaults.push("0,0,0")
     @cls_meth_ptypes_empty.push("")
+ # `name` is dispatched explicitly for obj_Method recv (see codegen)
+ # rather than as an attr_reader — registering it would make
+ # any_user_class_defines_imeth("name") true and mis-route `.name`
+ # on class values / other objects. Issue #960.
     @cls_attr_readers.push("")
     @cls_attr_writers.push("")
     @cls_meth_prep_chain.push("")

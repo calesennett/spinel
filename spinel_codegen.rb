@@ -16244,7 +16244,24 @@ class Compiler
  # is stashed in a temp first so a side-effecting receiver (e.g.
  # `factory().method(:foo).call(x)`) evaluates exactly once. .
     if (mname == "call" || mname == "[]") && recv >= 0
-      if base_type(infer_type(recv)) == "obj_Method"
+ # A top-level `m = method(:foo)` ref-var binds fn_ptr to the plain
+ # `sp_foo` (NOT the (void*self, ...) Method ABI), so its `.call`
+ # must use the ref-var rewrite (compile_dot_call_expr), not this
+ # obj_Method.call path. Skip here for those vars. Issue #960.
+      is_ref_var_mc = 0
+      if @nd_type[recv] == "LocalVariableReadNode"
+        rn_mc = @nd_name[recv]
+        rvi_mc = 0
+        while rvi_mc < @method_ref_vars.length
+          if @method_ref_vars[rvi_mc] == rn_mc
+            is_ref_var_mc = 1
+            rvi_mc = @method_ref_vars.length
+          else
+            rvi_mc = rvi_mc + 1
+          end
+        end
+      end
+      if base_type(infer_type(recv)) == "obj_Method" && is_ref_var_mc == 0
         rc = compile_expr(recv)
         bm_tmp = new_temp
         emit("  sp_Method *" + bm_tmp + " = " + rc + ";")
@@ -16305,9 +16322,9 @@ class Compiler
             owner_cname = find_defining_class_name(find_class_idx(recv_cname), mref)
             rc = compile_expr(recv)
             if owner_cname != ""
-              return "sp_Method_new((sp_Method *)(" + rc + "), (mrb_int)(uintptr_t)&sp_" + owner_cname + "_" + sanitize_name(mref) + ")"
+              return "sp_Method_new((sp_Method *)(" + rc + "), (mrb_int)(uintptr_t)&sp_" + owner_cname + "_" + sanitize_name(mref) + ", " + c_string_literal(mref) + ")"
             else
-              return "sp_Method_new((sp_Method *)(" + rc + "), (mrb_int)0)"
+              return "sp_Method_new((sp_Method *)(" + rc + "), (mrb_int)0, " + c_string_literal(mref) + ")"
             end
           end
  # Built-in array `<arr>.method(:op)`: emit a trampoline
@@ -16325,7 +16342,7 @@ class Compiler
             pfx_b = builtin_array_type_pfx(recv_t)
             adapter_name_b = "sp_" + pfx_b + "_" + sanitize_name(mref_b) + "_builtin_method_adapter"
             rc_b = compile_expr(recv)
-            return "sp_Method_new((sp_Method *)(" + rc_b + "), (mrb_int)(uintptr_t)&" + adapter_name_b + ")"
+            return "sp_Method_new((sp_Method *)(" + rc_b + "), (mrb_int)(uintptr_t)&" + adapter_name_b + ", " + c_string_literal(mref_b) + ")"
           end
         end
       end
@@ -17598,6 +17615,13 @@ class Compiler
       if args_id >= 0
         arg_ids = get_args(args_id)
         if arg_ids.length >= 1
+ # The method name must be a symbol/string literal — a dynamic
+ # `method(expr)` can't be resolved to a C symbol at compile time.
+ # Documented limitation: error out clearly. Issue #960.
+          if @nd_type[arg_ids[0]] != "SymbolNode" && @nd_type[arg_ids[0]] != "StringNode"
+            $stderr.puts "error: Kernel#method requires a symbol/string literal argument (dynamic method(expr) is unsupported)"
+            exit(1)
+          end
           mref = @nd_content[arg_ids[0]]
           if mref == ""
             mref = @nd_name[arg_ids[0]]
@@ -17610,17 +17634,21 @@ class Compiler
           if @current_class_idx >= 0
             owner_cname = find_defining_class_name(@current_class_idx, mref)
             if owner_cname != ""
-              return "sp_Method_new((sp_Method *)self, (mrb_int)(uintptr_t)&sp_" + owner_cname + "_" + sanitize_name(mref) + ")"
+              return "sp_Method_new((sp_Method *)self, (mrb_int)(uintptr_t)&sp_" + owner_cname + "_" + sanitize_name(mref) + ", " + c_string_literal(mref) + ")"
             else
-              return "sp_Method_new((sp_Method *)self, (mrb_int)0)"
+              return "sp_Method_new((sp_Method *)self, (mrb_int)0, " + c_string_literal(mref) + ")"
             end
           end
- # Top-level: keep the static-alias placeholder. The matching
- # LocalVariableWriteNode handler in compile_stmt picks up
- # @pending_method_ref and records (lname, mref) so a later
- # `m.call(x)` rewrites to a direct `sp_<mref>(x)`.
-          @pending_method_ref = mref
-          return "0 /* method:" + mref + " */"
+ # Top-level `method(:sym)` — a real Method object so .class /
+ # .name work (Issue #960). fn_ptr binds to the top-level user
+ # method `sp_<sym>` when one is defined (so .call works); else
+ # 0 (Kernel methods like puts have no simple fn pointer — .call
+ # on those is unsupported, but .class / .name still work).
+          mi_tl = find_method_idx(mref)
+          if mi_tl >= 0
+            return "sp_Method_new((sp_Method *)0, (mrb_int)(uintptr_t)&sp_" + sanitize_name(mref) + ", " + c_string_literal(mref) + ")"
+          end
+          return "sp_Method_new((sp_Method *)0, (mrb_int)0, " + c_string_literal(mref) + ")"
         end
       end
       return "0"
@@ -25618,7 +25646,7 @@ class Compiler
                 owner_cm_name = @cls_names[owner_cm]
                 emit_cls_method_adapter(owner_cm, cm_ref)
                 adapter_name = "sp_" + owner_cm_name + "_" + sanitize_name(cm_ref) + "_cls_method_adapter"
-                return "sp_Method_new((sp_Method *)0, (mrb_int)(uintptr_t)&" + adapter_name + ")"
+                return "sp_Method_new((sp_Method *)0, (mrb_int)(uintptr_t)&" + adapter_name + ", " + c_string_literal(cm_ref) + ")"
               end
             end
           end
@@ -26727,6 +26755,11 @@ class Compiler
         arrow = "->"
         if @cls_is_value_type[ci] == 1
           arrow = "."
+        end
+ # Method#name -- explicit (not an attr_reader, to avoid polluting
+ # any_user_class_defines_imeth). Reads the @name ivar. Issue #960.
+        if cname == "Method" && mname == "name"
+          return rc + "->iv_name"
         end
  # attr_reader -- walks the parent chain for inherited
  # attr_accessor / attr_reader (issue #508).
@@ -32082,10 +32115,11 @@ class Compiler
                 if mref == ""
                   mref = @nd_name[arg_ids[0]]
                 end
+ # Record the ref so `m.call(x)` still rewrites to a direct
+ # `sp_<name>(x)` fast path, but ALSO emit the real obj_Method
+ # assignment (fall through) so m.class / m.name work. Issue #960.
                 @method_ref_vars.push(lname)
                 @method_ref_names.push(mref)
-                emit("  /* " + lname + " = method(:" + mref + ") */")
-                return
               end
             end
           end
