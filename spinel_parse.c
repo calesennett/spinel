@@ -785,12 +785,18 @@ static int flatten(pm_node_t *node) {
     R("arguments", n->arguments);
     break;
   }
-  case PM_BREAK_NODE:
+  case PM_BREAK_NODE: {
+    pm_break_node_t *n = (pm_break_node_t *)node;
     N("BreakNode");
+    R("arguments", n->arguments);
     break;
-  case PM_NEXT_NODE:
+  }
+  case PM_NEXT_NODE: {
+    pm_next_node_t *n = (pm_next_node_t *)node;
     N("NextNode");
+    R("arguments", n->arguments);
     break;
+  }
   case PM_RETRY_NODE:
     N("RetryNode");
     break;

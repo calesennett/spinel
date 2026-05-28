@@ -356,6 +356,12 @@ class Compiler
     @redo_label_stack = "".split(",", -1)
     @redo_label_counter = 0
 
+ # `loop { break VAL }` as expression — stack of temp variable names
+ # holding the captured break value. Pushed by compile_loop_expr,
+ # consulted by compile_break_stmt which writes VAL into the top var
+ # before the `break;`.
+    @loop_expr_break_var = "".split(",", -1)
+
  # `alias $copy $orig` -- maps new gvar name to its target.
  # Populated by collect_all from AliasGlobalVariableNode
  # statements; consulted by sanitize_gvar / scan_features /
@@ -17352,6 +17358,12 @@ class Compiler
         return compile_catch_expr(nid)
       end
     end
+ # Kernel#loop as expression — captures `break VAL` into a tmp.
+    if mname == "loop"
+      if @nd_block[nid] >= 0
+        return compile_loop_expr(nid)
+      end
+    end
     if mname == "block_given?"
       return compile_block_given_expr
     end
@@ -32643,7 +32655,7 @@ class Compiler
       return
     end
     if t == "BreakNode"
-      emit("  break;")
+      compile_break_stmt(nid)
       return
     end
     if t == "NextNode"
@@ -42701,6 +42713,40 @@ class Compiler
       k = k + 1
     end
     result + ")"
+  end
+
+  def compile_loop_expr(nid)
+    blk = @nd_block[nid]
+    tmp = new_temp
+    emit("  mrb_int " + tmp + " = 0;")
+
+    old_in_loop = @in_loop
+    @in_loop = 1
+    @loop_expr_break_var.push(tmp)
+    emit("  while (1) {")
+    @indent = @indent + 1
+    redo_label = push_redo_label
+    emit_redo_label(redo_label)
+    compile_stmts_body(@nd_body[blk])
+    pop_redo_label
+    @indent = @indent - 1
+    emit("  }")
+    @loop_expr_break_var.pop
+    @in_loop = old_in_loop
+    tmp
+  end
+
+  def compile_break_stmt(nid)
+    args_id = @nd_arguments[nid]
+    if args_id >= 0 && @loop_expr_break_var.length > 0
+      arg_ids = get_args(args_id)
+      if arg_ids.length >= 1
+        tmp = @loop_expr_break_var.last
+        val = compile_expr(arg_ids[0])
+        emit("  " + tmp + " = " + val + ";")
+      end
+    end
+    emit("  break;")
   end
 
   def compile_catch_expr(nid)
