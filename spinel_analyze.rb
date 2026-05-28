@@ -5277,7 +5277,16 @@ class Compiler
       return "int_array"
     end
     if mname == "invert"
-      return "str_str_hash"
+ # Hash#invert -- fallback; normally handled in infer_operator_type.
+      if recv >= 0
+        rt_inv = infer_type(recv)
+        if rt_inv == "str_str_hash" || rt_inv == "int_str_hash"
+          return "str_str_hash"
+        end
+        if is_hash_type(rt_inv) == 1
+          return "poly_poly_hash"
+        end
+      end
     end
     if mname == "push" || mname == "append"
       if recv >= 0
