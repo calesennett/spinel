@@ -1350,6 +1350,11 @@ static mrb_int sp_str_index(const char*s,const char*sub){if(!s)return -1;if(!sub
    matches" loop is O(N) total rather than O(N^2). */
 static mrb_int sp_str_index_from(const char*s,const char*sub,mrb_int start){mrb_int cl=sp_str_length(s);if(start<0)start+=cl;if(start<0)start=0;if(start>cl)return -1;size_t boff=sp_utf8_byte_offset(s,start);const char*f=strstr(s+boff,sub);if(!f)return -1;mrb_int n=start;const char*p=s+boff;while(p<f){p+=sp_utf8_advance(p);n++;}return n;}
 static mrb_int sp_str_rindex(const char*s,const char*sub){if(!sub)sp_raise_cls("TypeError","no implicit conversion of nil into String");size_t sl=strlen(sub);if(sl==0)return sp_str_length(s);const char*last=NULL;const char*p=s;while((p=strstr(p,sub))){last=p;p++;}if(!last)return -1;mrb_int n=0;const char*q=s;while(q<last){q+=sp_utf8_advance(q);n++;}return n;}
+/* `s.rindex(sub, pos)` — find the rightmost occurrence of sub at or
+   before codepoint index pos. Walks all matches and keeps the last
+   one whose codepoint index <= pos. */
+static mrb_int sp_str_rindex_from(const char*s,const char*sub,mrb_int pos){if(!sub)sp_raise_cls("TypeError","no implicit conversion of nil into String");mrb_int cl=sp_str_length(s);if(pos<0)pos=cl+pos;if(pos<0)return SP_INT_NIL;size_t sl=strlen(sub);if(sl==0){if(pos>=cl)return cl;return pos;}const char*p=s;mrb_int best=-1;while((p=strstr(p,sub))!=NULL){mrb_int cur_n=0;const char*r=s;while(r<p){r+=sp_utf8_advance(r);cur_n++;}if(cur_n>pos)break;best=cur_n;p++;}return best<0?SP_INT_NIL:best;}
+
 static char sp_char_cache[256][3];
 static int sp_char_cache_init = 0;
 /* start/len are codepoint indices/counts. */

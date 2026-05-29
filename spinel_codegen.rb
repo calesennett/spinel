@@ -21019,6 +21019,11 @@ class Compiler
             return "sp_re_rindex_poly(" + rpat_ri + ", " + rc + ")"
           end
         end
+ # `s.rindex(sub, pos)` -- 2-arg form. The position limits the
+ # backward search to codepoint index <= pos.
+        if a_ri.length >= 2
+          return "sp_str_rindex_from(" + rc + ", " + compile_expr(a_ri[0]) + ", " + compile_expr_as_int(a_ri[1]) + ")"
+        end
       end
  # Plain `s.rindex("needle")` returns int? via sp_str_rindex_opt
  # (SP_INT_NIL sentinel for not-found). The matching analyze-side
