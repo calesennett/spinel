@@ -5192,6 +5192,9 @@ class Compiler
     if mname == "scan_until"
       return "sp_StringScanner_scan_until(" + rc + ", " + strscan_pat_arg(nid) + ")"
     end
+    if mname == "[]"
+      return "sp_StringScanner_aref(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+    end
     if mname == "matched"
       return "sp_StringScanner_matched(" + rc + ")"
     end

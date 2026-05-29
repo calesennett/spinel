@@ -3882,6 +3882,7 @@ sp_StringScanner *sp_StringScanner_new(const char *str);
 const char *sp_StringScanner_scan(sp_StringScanner *sc, mrb_regexp_pattern *pat);
 const char *sp_StringScanner_check(sp_StringScanner *sc, mrb_regexp_pattern *pat);
 const char *sp_StringScanner_scan_until(sp_StringScanner *sc, mrb_regexp_pattern *pat);
+const char *sp_StringScanner_aref(sp_StringScanner *sc, mrb_int n);
 const char *sp_StringScanner_matched(sp_StringScanner *sc);
 mrb_bool    sp_StringScanner_matched_p(sp_StringScanner *sc);
 mrb_int     sp_StringScanner_pos(sp_StringScanner *sc);

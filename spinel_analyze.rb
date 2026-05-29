@@ -3074,7 +3074,7 @@ class Compiler
  # the standard class-method inference path). For methods that
  # "return self" the table reports "stringscanner".
   def strscan_return_type(mname)
-    return "string" if mname == "scan" || mname == "check" || mname == "scan_until" || mname == "matched" || mname == "getch" || mname == "peek" || mname == "rest" || mname == "string" || mname == "pre_match" || mname == "post_match"
+    return "string" if mname == "scan" || mname == "check" || mname == "scan_until" || mname == "matched" || mname == "getch" || mname == "peek" || mname == "rest" || mname == "string" || mname == "pre_match" || mname == "post_match" || mname == "[]"
     return "bool" if mname == "matched?" || mname == "eos?" || mname == "rest?"
     return "int" if mname == "pos" || mname == "pos=" || mname == "rest_size"
     return "stringscanner" if mname == "unscan" || mname == "terminate" || mname == "reset"
