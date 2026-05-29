@@ -16642,6 +16642,11 @@ class Compiler
     if @nd_type[nid] == "InstanceVariableAndWriteNode" && @nd_name[nid] == iname
       return 1
     end
+ # Destructuring target: `@a, @b = ...` writes @a / @b via
+ # InstanceVariableTargetNode, not InstanceVariableWriteNode.
+    if @nd_type[nid] == "InstanceVariableTargetNode" && @nd_name[nid] == iname
+      return 1
+    end
     cs = []
     push_child_ids(nid, cs)
     k = 0
