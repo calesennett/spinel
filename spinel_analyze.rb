@@ -5709,6 +5709,9 @@ class Compiler
         if rt == "poly_array"
           return "poly"
         end
+        if rt == "int_array"
+          return "int?"
+        end
       end
       return "int"
     end
