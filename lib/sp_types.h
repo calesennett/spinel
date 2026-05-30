@@ -18,18 +18,32 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef int64_t mrb_int;
+/* mrb_int follows pointer width (decided at compile time via intptr_t):
+   int64_t on 64-bit hosts -- PCs, no behavior change -- and int32_t on
+   32-bit embedded targets, where it gives native-word arithmetic, half
+   the memory for every integer/array/hash slot, and a pointer-width
+   sp_RbVal union. The two paths differ only in that the 32-bit build
+   overflows / narrows foreign 64-bit values (e.g. Time#to_i) at
+   INT32 limits; see the overflow-mode handling. */
+#if INTPTR_MAX == INT64_MAX
+#elif INTPTR_MAX == INT32_MAX
+#else
+#error "spinel: unsupported intptr_t width (need 32- or 64-bit)"
+#endif
+typedef intptr_t mrb_int;
 typedef double mrb_float;
 typedef bool mrb_bool;
 
 /* Sentinel value reserved by the int? (scalar-nullable int) type. An
    int? slot is bit-compatible with mrb_int; SP_INT_NIL marks the
-   "nil" inhabitant. The chosen pattern is INT64_MIN, which Ruby's
-   Integer would auto-promote to Bignum (#597 limitation), so the
-   reservation lines up with spinel's existing fast-path-only spec.
+   "nil" inhabitant. The pattern is INTPTR_MIN -- INT64_MIN on 64-bit
+   (unchanged), INT32_MIN on 32-bit. On 64-bit this value would auto-
+   promote to Bignum in CRuby so the reservation is safe; on 32-bit
+   INT32_MIN is a representable Integer, so the sentinel can collide
+   with a genuine -2147483648 (an accepted 32-bit-build limitation).
    `sp_int_is_nil(v)` is the canonical predicate; treat any int? value
    produced by runtime helpers as opaque outside this macro. */
-#define SP_INT_NIL ((mrb_int)INT64_MIN)
+#define SP_INT_NIL ((mrb_int)INTPTR_MIN)
 #define sp_int_is_nil(v) ((v) == SP_INT_NIL)
 
 /* sp_sym is defined per-program in emit_sym_runtime, but poly helpers

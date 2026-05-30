@@ -5,8 +5,17 @@
 #include <ctype.h>
 #include <errno.h>
 
-typedef int64_t mrb_int;
+/* Must match sp_types.h: mrb_int is pointer-width (int64 on 64-bit,
+   int32 on 32-bit) so this TU's helper ABI agrees with the generated TU. */
+typedef intptr_t mrb_int;
 typedef double  mrb_float;
+/* 10^p fits mrb_int only up to this exponent (p>= it collapses to 0):
+   10^19 > INT64_MAX, 10^10 > INT32_MAX. */
+#if INTPTR_MAX == INT32_MAX
+#define SP_INT_POW10_LIMIT 10
+#else
+#define SP_INT_POW10_LIMIT 19
+#endif
 
 /* Defined in the generated translation unit (sp_runtime.h); referenced
    here and resolved at link time. */
@@ -224,10 +233,10 @@ mrb_int sp_int_sqrt(mrb_int n){if(n<0)return 0;if(n<2)return n;mrb_int x=n,y=(x+
    only for p<=18; p>=19 collapses to 0. Round-up multiply is overflow-
    guarded and falls back to the truncated value. */
 mrb_int sp_ipow10(mrb_int p){mrb_int f=1;mrb_int i=0;while(i<p){f*=10;i++;}return f;}
-mrb_int sp_int_round(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=19)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f,half=f/2;if(v>=0){if(r>=half&&q<INT64_MAX/f)return(q+1)*f;return q*f;}if(-r>=half&&q>INT64_MIN/f)return(q-1)*f;return q*f;}
-mrb_int sp_int_ceil(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=19)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f;if(r!=0&&v>0&&q<INT64_MAX/f)return(q+1)*f;return q*f;}
-mrb_int sp_int_floor(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=19)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f;if(r!=0&&v<0&&q>INT64_MIN/f)return(q-1)*f;return q*f;}
-mrb_int sp_int_truncate(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=19)return 0;mrb_int f=sp_ipow10(p);return(v/f)*f;}
+mrb_int sp_int_round(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=SP_INT_POW10_LIMIT)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f,half=f/2;if(v>=0){if(r>=half&&q<INTPTR_MAX/f)return(q+1)*f;return q*f;}if(-r>=half&&q>INTPTR_MIN/f)return(q-1)*f;return q*f;}
+mrb_int sp_int_ceil(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=SP_INT_POW10_LIMIT)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f;if(r!=0&&v>0&&q<INTPTR_MAX/f)return(q+1)*f;return q*f;}
+mrb_int sp_int_floor(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=SP_INT_POW10_LIMIT)return 0;mrb_int f=sp_ipow10(p);mrb_int q=v/f,r=v%f;if(r!=0&&v<0&&q>INTPTR_MIN/f)return(q-1)*f;return q*f;}
+mrb_int sp_int_truncate(mrb_int v,mrb_int nd){if(nd>=0)return v;mrb_int p=-nd;if(p>=SP_INT_POW10_LIMIT)return 0;mrb_int f=sp_ipow10(p);return(v/f)*f;}
 /* String#oct: prefix auto-detection (0x=hex, 0b=bin, 0o/0=oct, else
    base-8). Matches CRuby. */
 mrb_int sp_str_oct(const char*s){if(!s)return 0;const char*p=s;while(*p==' '||*p=='\t')p++;if(p[0]=='0'){if(p[1]=='x'||p[1]=='X')return(mrb_int)strtoll(p,NULL,16);if(p[1]=='b'||p[1]=='B')return(mrb_int)strtoll(p+2,NULL,2);if(p[1]=='o'||p[1]=='O')return(mrb_int)strtoll(p+2,NULL,8);return(mrb_int)strtoll(p,NULL,8);}return(mrb_int)strtoll(p,NULL,8);}

@@ -2,7 +2,7 @@
  * libspinel_rt.a so they are compiled once rather than re-parsed and
  * re-codegen'd in every generated translation unit.
  *
- * Signatures use int64_t / double directly (== mrb_int / mrb_float)
+ * Signatures use intptr_t / double directly (== mrb_int / mrb_float)
  * to stay decoupled from the runtime's typedefs and the mrb_bool
  * conflict between sp_runtime.h and mruby_shim.h -- same convention as
  * sp_time.h. These helpers call sp_raise_cls / sp_sprintf, which live
@@ -14,24 +14,24 @@
 #include <stdint.h>
 
 /* String -> number parsers (cold, I/O-boundary). */
-int64_t sp_str_to_i_cruby(const char *s);
-int64_t sp_str_to_i_base(const char *s, int64_t base);
-int64_t sp_str_to_i_strict(const char *s);
-int64_t sp_str_to_i_strict_base(const char *s, int64_t base);
+intptr_t sp_str_to_i_cruby(const char *s);
+intptr_t sp_str_to_i_base(const char *s, intptr_t base);
+intptr_t sp_str_to_i_strict(const char *s);
+intptr_t sp_str_to_i_strict_base(const char *s, intptr_t base);
 double  sp_str_to_f_strict(const char *s);
 
 /* Cold integer-math + String#oct helpers. */
-int64_t sp_gcd(int64_t a, int64_t b);
-int64_t sp_lcm(int64_t a, int64_t b);
-int64_t sp_powmod(int64_t base, int64_t exp, int64_t mod);
-int64_t sp_ceildiv(int64_t a, int64_t b);
-int64_t sp_int_clamp(int64_t v, int64_t lo, int64_t hi);
-int64_t sp_int_sqrt(int64_t n);
-int64_t sp_ipow10(int64_t p);
-int64_t sp_int_round(int64_t v, int64_t nd);
-int64_t sp_int_ceil(int64_t v, int64_t nd);
-int64_t sp_int_floor(int64_t v, int64_t nd);
-int64_t sp_int_truncate(int64_t v, int64_t nd);
-int64_t sp_str_oct(const char *s);
+intptr_t sp_gcd(intptr_t a, intptr_t b);
+intptr_t sp_lcm(intptr_t a, intptr_t b);
+intptr_t sp_powmod(intptr_t base, intptr_t exp, intptr_t mod);
+intptr_t sp_ceildiv(intptr_t a, intptr_t b);
+intptr_t sp_int_clamp(intptr_t v, intptr_t lo, intptr_t hi);
+intptr_t sp_int_sqrt(intptr_t n);
+intptr_t sp_ipow10(intptr_t p);
+intptr_t sp_int_round(intptr_t v, intptr_t nd);
+intptr_t sp_int_ceil(intptr_t v, intptr_t nd);
+intptr_t sp_int_floor(intptr_t v, intptr_t nd);
+intptr_t sp_int_truncate(intptr_t v, intptr_t nd);
+intptr_t sp_str_oct(const char *s);
 
 #endif
