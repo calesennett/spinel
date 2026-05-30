@@ -10,3 +10,7 @@ puts "hello".delete("^l").inspect
 puts "hello".count("l")
 # count: negated charset
 puts "hello".count("^l")
+
+# a lone "^" is the literal caret, not negation
+puts "a^b^c".delete("^").inspect
+puts "a^b^c".count("^")
