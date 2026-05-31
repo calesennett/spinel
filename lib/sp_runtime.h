@@ -221,15 +221,15 @@ const char *sp_sprintf(const char *fmt, ...);
 /* String -> number parsers now live in libspinel_rt.a (lib/sp_core.c). */
 #include "sp_core.h"
 
-static sp_Range sp_range_new(mrb_int f,mrb_int l){sp_Range r;r.first=f;r.last=l;return r;}
-/* Inclusive-form `Range#include?`/`#cover?` on the boxed (SP_TAG_OBJ
-   cls_id SP_BUILTIN_RANGE) Range value. The direct sp_Range typed
-   path inlines this same check via compile_range_method_expr;
-   poly-recv dispatch needs the wrapper so the cls_id arm in
-   emit_poly_builtin_dispatch can land on a single C expression. The
-   sp_Range struct doesn't track exclude_end, so behaviour matches
-   the inclusive form -- consistent with the direct-typed emit. */
-static mrb_bool sp_range_include(sp_Range *r, mrb_int x){return r->first<=x && x<=r->last;}
+static sp_Range sp_range_new(mrb_int f,mrb_int l,mrb_int e){sp_Range r;r.first=f;r.last=l;r.excl=e;return r;}
+/* `Range#include?`/`#cover?` on the boxed (SP_TAG_OBJ cls_id
+   SP_BUILTIN_RANGE) Range value. The direct sp_Range typed path
+   inlines this same check via compile_range_method_expr; poly-recv
+   dispatch needs the wrapper so the cls_id arm in
+   emit_poly_builtin_dispatch can land on a single C expression. An
+   exclusive range stops one short of `last`, so the upper bound is
+   `last - excl` (excl is 0 or 1). */
+static mrb_bool sp_range_include(sp_Range *r, mrb_int x){return r->first<=x && x<=r->last-r->excl;}
 
 /* ---- Class object ----
    Value-type Class reference: a single class id that indexes into
@@ -2376,9 +2376,10 @@ static sp_RbVal sp_box_range(sp_Range v) {
   return sp_box_obj(p, SP_BUILTIN_RANGE);
 }
 static const char *sp_Range_inspect(sp_Range *r) {
-  /* "first..last" form. Buffer sized for two int64s plus the dots. */
+  /* "first..last" / "first...last" form. Buffer sized for two int64s
+     plus the dots. */
   char *buf = sp_str_alloc_raw(48);
-  snprintf(buf, 48, "%lld..%lld", (long long)r->first, (long long)r->last);
+  snprintf(buf, 48, r->excl ? "%lld...%lld" : "%lld..%lld", (long long)r->first, (long long)r->last);
   return buf;
 }
 /* Same heap-box rationale as sp_Range: sp_Time is 12+ bytes (tv_sec +

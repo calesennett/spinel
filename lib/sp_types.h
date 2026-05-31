@@ -70,7 +70,7 @@ typedef mrb_int sp_sym;
 #endif
 
 /* ---- Leaf value structs ---- */
-typedef struct{mrb_int first;mrb_int last;}sp_Range;
+typedef struct{mrb_int first;mrb_int last;mrb_int excl;}sp_Range;
 typedef struct{mrb_int cls_id;}sp_Class;
 typedef struct{mrb_float re;mrb_float im;}sp_Complex;
 typedef struct{mrb_int num;mrb_int den;}sp_Rational;

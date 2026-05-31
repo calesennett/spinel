@@ -5127,7 +5127,7 @@ class Compiler
     end
  # NOTE: nullable returns above, so rest handles base types only
     if t == "range"
-      return "((sp_Range){0,0})"
+      return "((sp_Range){0,0,0})"
     end
     if t == "time"
       return "((sp_Time){0,0,0})"
@@ -8761,8 +8761,8 @@ class Compiler
     emit_raw("static mrb_int sp_gcd(mrb_int a,mrb_int b){if(a<0)a=-a;if(b<0)b=-b;while(b){mrb_int t=b;b=a%b;a=t;}return a;}")
     emit_raw("static mrb_int sp_int_clamp(mrb_int v,mrb_int lo,mrb_int hi){return v<lo?lo:v>hi?hi:v;}")
     emit_raw("static const char*sp_int_chr(mrb_int n){char*s=(char*)malloc(2);s[0]=(char)n;s[1]=0;return s;}")
-    emit_raw("typedef struct{mrb_int first;mrb_int last;}sp_Range;")
-    emit_raw("static sp_Range sp_range_new(mrb_int f,mrb_int l){sp_Range r;r.first=f;r.last=l;return r;}")
+    emit_raw("typedef struct{mrb_int first;mrb_int last;mrb_int excl;}sp_Range;")
+    emit_raw("static sp_Range sp_range_new(mrb_int f,mrb_int l,mrb_int e){sp_Range r;r.first=f;r.last=l;r.excl=e;return r;}")
     if @needs_system == 1
       emit_raw("static int sp_last_status = 0;")
     end
@@ -14731,7 +14731,11 @@ class Compiler
       right_e = @nd_right[nid]
       left_c = (left_e >= 0 && @nd_type[left_e] != "NilNode") ? compile_expr(left_e) : "INT64_MIN"
       right_c = (right_e >= 0 && @nd_type[right_e] != "NilNode") ? compile_expr(right_e) : "INT64_MAX"
-      return "sp_range_new(" + left_c + ", " + right_c + ")"
+ # Carry the exclude_end flag into the runtime struct so non-literal
+ # Range values (`r = 1...5; r.max`) honour `...`. Endless ranges
+ # encode the missing end as INT64_MAX and are always inclusive.
+      excl_c = (right_e >= 0 && @nd_type[right_e] != "NilNode" && range_excl_end(nid) == 1) ? "1" : "0"
+      return "sp_range_new(" + left_c + ", " + right_c + ", " + excl_c + ")"
     end
     if t == "DefinedNode"
  # `defined?(expr)` resolves to a tag string ("local-variable",
@@ -21820,8 +21824,18 @@ class Compiler
     if mname == "first" || mname == "begin" || mname == "min"
       return rc + ".first"
     end
-    if mname == "last" || mname == "end" || mname == "max"
+    if mname == "last" || mname == "end"
       return rc + ".last"
+    end
+ # `max` differs from `last`/`end` on an exclusive range: `(1...5).max`
+ # is 4 while `(1...5).last` is 5. `last - excl` (excl is 0 or 1) gives
+ # the right answer for both `..` and `...`, including non-literal Range
+ # values held in an sp_Range. Materialize rc so a non-trivial receiver
+ # expression isn't evaluated twice.
+    if mname == "max"
+      rtmp_mx = new_temp
+      emit("  sp_Range " + rtmp_mx + " = " + rc + ";")
+      return "(" + rtmp_mx + ".last - " + rtmp_mx + ".excl)"
     end
  # String-range form: `("a".."z").include?("m")`. sp_Range only
  # holds int fields, so a string-typed RangeNode receiver can't
@@ -21846,7 +21860,8 @@ class Compiler
       tmp = new_temp
       emit("  sp_Range " + tmp + " = " + rc + ";")
       arg = compile_arg0_as_int(nid)
-      return "(" + arg + " >= " + tmp + ".first && " + arg + " <= " + tmp + ".last)"
+ # Exclusive range excludes `last`: upper bound is `last - excl`.
+      return "(" + arg + " >= " + tmp + ".first && " + arg + " <= " + tmp + ".last - " + tmp + ".excl)"
     end
     if mname == "overlap?"
  # `(a..b).overlap?(c..d)` for two numeric ranges reduces to
@@ -21860,7 +21875,9 @@ class Compiler
           other_tmp = new_temp
           emit("  sp_Range " + self_tmp + " = " + rc + ";")
           emit("  sp_Range " + other_tmp + " = " + compile_expr(a_ov[0]) + ";")
-          return "(" + self_tmp + ".first <= " + other_tmp + ".last && " + other_tmp + ".first <= " + self_tmp + ".last)"
+ # Each side's inclusive upper bound is `last - excl`, so two ranges
+ # overlap when `self.first <= other.hi && other.first <= self.hi`.
+          return "(" + self_tmp + ".first <= " + other_tmp + ".last - " + other_tmp + ".excl && " + other_tmp + ".first <= " + self_tmp + ".last - " + self_tmp + ".excl)"
         end
       end
       return "FALSE"
@@ -21884,10 +21901,10 @@ class Compiler
       end
       @needs_int_array = 1
       @needs_gc = 1
- # Honour `...` exclusive Range when the receiver is a literal
- # RangeNode (or wrapped in parens). For non-literal Range values
- # held in sp_Range structs, exclude_end is not tracked at runtime
- # and the inclusive form is used.
+ # Honour `...` exclusive Range. For a literal RangeNode the flag is
+ # read at compile time; for a non-literal Range value the runtime
+ # struct carries `excl` (0 or 1), so the inclusive upper endpoint is
+ # `last - excl`.
       if range_nid >= 0
         rright = compile_expr(@nd_right[range_nid])
         if range_excl_end(range_nid) == 1
@@ -21895,39 +21912,18 @@ class Compiler
         end
         return "sp_IntArray_from_range(" + compile_expr(@nd_left[range_nid]) + ", " + rright + ")"
       end
-      return "sp_IntArray_from_range(" + rc + ".first, " + rc + ".last)"
+      rtmp_ta = new_temp
+      emit("  sp_Range " + rtmp_ta + " = " + rc + ";")
+      return "sp_IntArray_from_range(" + rtmp_ta + ".first, " + rtmp_ta + ".last - " + rtmp_ta + ".excl)"
     end
-    if mname == "length"
-      range_nid_l = resolve_literal_range_recv(nid)
-      if range_nid_l >= 0 && range_excl_end(range_nid_l) == 1
-        return "(" + rc + ".last - " + rc + ".first)"
-      end
-      return "(" + rc + ".last - " + rc + ".first + 1)"
-    end
-    if mname == "size"
-      range_nid_s = resolve_literal_range_recv(nid)
-      if range_nid_s >= 0 && range_excl_end(range_nid_s) == 1
-        return "(" + rc + ".last - " + rc + ".first)"
-      end
-      return "(" + rc + ".last - " + rc + ".first + 1)"
-    end
-    if mname == "min"
-      return rc + ".first"
-    end
-    if mname == "max"
-      range_nid = resolve_literal_range_recv(nid)
-      if range_nid >= 0 && range_excl_end(range_nid) == 1
-        return "(" + rc + ".last - 1)"
-      end
-      return rc + ".last"
-    end
-    if mname == "count"
- # Inclusive: last - first + 1. Exclusive (literal): last - first.
-      range_nid = resolve_literal_range_recv(nid)
-      if range_nid >= 0 && range_excl_end(range_nid) == 1
-        return "(" + rc + ".last - " + rc + ".first)"
-      end
-      return "(" + rc + ".last - " + rc + ".first + 1)"
+ # `length` / `size` and the no-block/no-arg `count`: element count.
+ # Inclusive `last - first + 1`; an exclusive `...` drops one, so the
+ # uniform form is `last - first + 1 - excl` (excl is 0 or 1). The
+ # runtime `excl` flag covers both literal and non-literal receivers.
+    if mname == "length" || mname == "size" || mname == "count"
+      rtmp_sz = new_temp
+      emit("  sp_Range " + rtmp_sz + " = " + rc + ";")
+      return "(" + rtmp_sz + ".last - " + rtmp_sz + ".first + 1 - " + rtmp_sz + ".excl)"
     end
  # `(a..b).any?/all?/none?/one? { |i| ... }` — the array-shape
  # predicate emitter already iterates ranges via emit_iter_open;
@@ -21951,7 +21947,9 @@ class Compiler
         end
         return "sp_IntArray_from_range_step(" + compile_expr(@nd_left[range_nid_step]) + ", " + rright_step + ", " + step_arg + ")"
       end
-      return "sp_IntArray_from_range_step(" + rc + ".first, " + rc + ".last, " + step_arg + ")"
+      rtmp_st = new_temp
+      emit("  sp_Range " + rtmp_st + " = " + rc + ";")
+      return "sp_IntArray_from_range_step(" + rtmp_st + ".first, " + rtmp_st + ".last - " + rtmp_st + ".excl, " + step_arg + ")"
     end
     ""
   end
@@ -41834,10 +41832,10 @@ class Compiler
         if bp_t_re == "bigint"
           @needs_bigint = 1
           rtmp_re2 = new_temp
-          emit("  for (mrb_int " + rtmp_re2 + " = " + tmp2 + ".first; " + rtmp_re2 + " <= " + tmp2 + ".last; " + rtmp_re2 + "++) {")
+          emit("  for (mrb_int " + rtmp_re2 + " = " + tmp2 + ".first; " + rtmp_re2 + " <= " + tmp2 + ".last - " + tmp2 + ".excl; " + rtmp_re2 + "++) {")
           emit("    lv_" + bp1 + " = sp_bigint_new_int(" + rtmp_re2 + ");")
         else
-          emit("  for (lv_" + bp1 + " = " + tmp2 + ".first; lv_" + bp1 + " <= " + tmp2 + ".last; lv_" + bp1 + "++) {")
+          emit("  for (lv_" + bp1 + " = " + tmp2 + ".first; lv_" + bp1 + " <= " + tmp2 + ".last - " + tmp2 + ".excl; lv_" + bp1 + "++) {")
         end
         @indent = @indent + 1
         push_scope
@@ -42231,7 +42229,7 @@ class Compiler
     if recv_type == "range"
       rtmp = new_temp
       emit("  sp_Range " + rtmp + " = " + rc + ";")
-      emit("  for (mrb_int " + idx_var + " = " + rtmp + ".first; " + idx_var + " <= " + rtmp + ".last; " + idx_var + "++) {")
+      emit("  for (mrb_int " + idx_var + " = " + rtmp + ".first; " + idx_var + " <= " + rtmp + ".last - " + rtmp + ".excl; " + idx_var + "++) {")
       if needs_big_wrap == 1
         emit("    " + elem_var + " = sp_bigint_new_int(" + idx_var + ");")
       else
@@ -43500,7 +43498,9 @@ class Compiler
         rng_tmp = new_temp
         emit("  sp_Range " + rng_tmp + " = " + rc + ";")
         first_e = rng_tmp + ".first"
-        last_e = rng_tmp + ".last"
+ # Non-literal Range: the runtime struct carries exclude_end, so the
+ # inclusive upper endpoint is `last - excl` (excl is 0 or 1).
+        last_e = "(" + rng_tmp + ".last - " + rng_tmp + ".excl)"
         excl = "<="
       end
       emit("  for (mrb_int " + tmp_i + " = " + first_e + "; " + tmp_i + " " + excl + " " + last_e + "; " + tmp_i + "++) {")
