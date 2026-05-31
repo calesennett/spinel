@@ -30041,6 +30041,19 @@ class Compiler
  # non-sym lhs vs sym rhs: also always unequal
       return op == "==" ? "FALSE" : "TRUE"
     end
+ # A String and a non-String scalar are never == in Ruby (no implicit
+ # coercion: `"3" == 3` is false). Without this the string arm below
+ # passes the scalar to sp_str_eq's const char* param, or the scalar
+ # fallthrough compares an mrb_int to a char* -- both fail to compile.
+ # Cast both operands to void so their side effects still fire.
+    if (lt == "string" && (at == "int" || at == "float" || at == "bool" || at == "bigint")) ||
+       ((lt == "int" || lt == "float" || lt == "bool" || lt == "bigint") && at == "string")
+      if op == "=="
+        return "(((void)(" + lc + ")), ((void)(" + rc + ")), FALSE)"
+      else
+        return "(((void)(" + lc + ")), ((void)(" + rc + ")), TRUE)"
+      end
+    end
     if lt == "string"
       if at == "nil"
         if op == "=="
