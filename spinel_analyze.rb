@@ -3809,6 +3809,14 @@ class Compiler
     lt = ""
     if recv >= 0
       lt = infer_type(recv)
+ # A scalar-nullable operand (int? / float?) behaves like its base
+ # type in arithmetic and comparison: the value rides as a plain
+ # int / double and nil-ness is handled separately. Normalize so
+ # `float?` arithmetic yields a float (not the int fallback) and
+ # `int?` an int -- e.g. `farr.last - farr.first` is a Float.
+      if is_scalar_nullable_type(lt) == 1
+        lt = base_type(lt)
+      end
       if lt == "poly"
         if mname == "+" || mname == "-" || mname == "*" || mname == "/" || mname == "%" || mname == "**"
           return "poly"
@@ -5714,7 +5722,11 @@ class Compiler
           return "symbol"
         end
         if rt == "float_array"
-          return "float"
+ # CRuby Array#first/#last on an empty array return nil, so a
+ # float_array's first/last is nullable: float? (NaN-sentinel). For a
+ # non-empty array the value flows as a plain double; base_type strips
+ # the `?` so float? arithmetic (e.g. `a.last - a.first`) stays float.
+          return "float?"
         end
  # `<X>_ptr_array.first` / `.last` returns an `<X>` (e.g.
  # `int_array_ptr_array.first` → `int_array`). Without this,
@@ -7608,6 +7620,9 @@ class Compiler
   def is_scalar_nullable_type(t)
     bt = base_type(t)
     if bt == "int"
+      return is_nullable_type(t)
+    end
+    if bt == "float"
       return is_nullable_type(t)
     end
     0

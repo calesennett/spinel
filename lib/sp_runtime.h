@@ -955,6 +955,11 @@ static inline mrb_float sp_FloatArray_shift(sp_FloatArray*a){if(!a||a->len==0)re
 static inline mrb_int sp_FloatArray_length(sp_FloatArray*a){return a->len;}
 static inline mrb_bool sp_FloatArray_empty(sp_FloatArray*a){return a->len==0;}
 static inline mrb_float sp_FloatArray_get(sp_FloatArray*a,mrb_int i){if(!a)return 0.0;if(i<0)i+=a->len;if(i<0||i>=a->len)return 0.0;return a->data[i];}
+/* first/last as float? : nil (sentinel) when empty, else the element.
+   `[i]` stays non-nullable (0.0 for OOB) -- only first/last produce nil,
+   matching CRuby where Array#first/#last on an empty array return nil. */
+static inline mrb_float sp_FloatArray_first_opt(sp_FloatArray*a){return (!a||a->len<=0)?sp_float_nil():sp_FloatArray_get(a,0);}
+static inline mrb_float sp_FloatArray_last_opt(sp_FloatArray*a){return (!a||a->len<=0)?sp_float_nil():sp_FloatArray_get(a,a->len-1);}
 /* a[start, len] / a[start..end] for FloatArray. Same negative-start
  * and length-clamping semantics as sp_IntArray_slice. */
 static sp_FloatArray*sp_FloatArray_slice(sp_FloatArray*a,mrb_int start,mrb_int len){if(start<0)start+=a->len;if(start<0)start=0;sp_FloatArray*b=sp_FloatArray_new();if(start>=a->len||len<=0)return b;if(start+len>a->len)len=a->len-start;if(len>b->cap){sp_gc_hdr*h=(sp_gc_hdr*)((char*)b-sizeof(sp_gc_hdr));sp_gc_bytes-=sizeof(mrb_float)*b->cap;h->size-=sizeof(mrb_float)*b->cap;b->cap=len;b->data=(mrb_float*)realloc(b->data,sizeof(mrb_float)*b->cap);h->size+=sizeof(mrb_float)*b->cap;sp_gc_bytes+=sizeof(mrb_float)*b->cap;}memcpy(b->data,a->data+start,sizeof(mrb_float)*len);b->len=len;return b;}
@@ -2372,6 +2377,11 @@ static mrb_int sp_IntArray_rindex_opt(sp_IntArray *a, mrb_int v)          { mrb_
    form). Two wrappers keep call-site emit local. */
 static const char *sp_int_opt_inspect(mrb_int v) { return sp_int_is_nil(v) ? "nil" : sp_int_to_s(v); }
 static const char *sp_int_opt_to_s(mrb_int v)    { return sp_int_is_nil(v) ? "" : sp_int_to_s(v); }
+/* float? (nullable float) counterparts: a non-nil value formats exactly
+   like a plain Float (delegates to sp_float_to_s), nil renders "nil"
+   (inspect) / "" (to_s). */
+static const char *sp_float_opt_inspect(mrb_float v) { return sp_float_is_nil(v) ? "nil" : sp_float_to_s(v); }
+static const char *sp_float_opt_to_s(mrb_float v)    { return sp_float_is_nil(v) ? "" : sp_float_to_s(v); }
 /* sp_Range is a 16-byte value type that doesn't fit in sp_RbVal's union
    (max 8 bytes). When a Range crosses into a poly slot (heterogeneous
    hash / array / param / ivar), copy it onto the GC heap and box the

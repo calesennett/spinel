@@ -4854,7 +4854,35 @@ class Compiler
     if bt == "int"
       return is_nullable_type(t)
     end
+    if bt == "float"
+      return is_nullable_type(t)
+    end
     0
+  end
+
+ # Sentinel C expression for a scalar-nullable type's nil. int? uses
+ # SP_INT_NIL (INTPTR_MIN); float? uses a reserved NaN (sp_float_nil()).
+  def scalar_nil_sentinel(t)
+    if base_type(t) == "float"
+      return "sp_float_nil()"
+    end
+    "SP_INT_NIL"
+  end
+
+ # `sp_<int|float>_is_nil(<expr>)` for a scalar-nullable type.
+  def scalar_is_nil_call(t, expr)
+    if base_type(t) == "float"
+      return "sp_float_is_nil(" + expr + ")"
+    end
+    "sp_int_is_nil(" + expr + ")"
+  end
+
+ # `sp_<int|float>_opt_inspect(<expr>)` for a scalar-nullable type.
+  def scalar_opt_inspect_call(t, expr)
+    if base_type(t) == "float"
+      return "sp_float_opt_inspect(" + expr + ")"
+    end
+    "sp_int_opt_inspect(" + expr + ")"
   end
 
   def is_nullable_pointer_type(t)
@@ -5108,7 +5136,7 @@ class Compiler
  # `int?` defaults to SP_INT_NIL; future int? siblings slot in here
  # before the NULL fallback.
       if is_scalar_nullable_type(t) == 1
-        return "SP_INT_NIL"
+        return scalar_nil_sentinel(t)
       end
  # Value-type classes (`obj_<C>?` where C is a value type) lower
  # to a struct, not a pointer — `NULL` is an invalid initializer.
@@ -13563,7 +13591,7 @@ class Compiler
  # wrong (SP_INT_NIL is INT64_MIN, not 0). Route through the
  # scalar-nullable arm.
     if is_scalar_nullable_type(t) == 1
-      return "(!sp_int_is_nil(" + expr + "))"
+      return "(!" + scalar_is_nil_call(t, expr) + ")"
     end
     if is_nullable_type(t) == 1
       return "(" + expr + " != NULL)"
@@ -13601,7 +13629,7 @@ class Compiler
     end
  # See compile_cond_expr -- `int?` uses SP_INT_NIL, not NULL.
     if is_scalar_nullable_type(t) == 1
-      return "(!sp_int_is_nil(" + expr + "))"
+      return "(!" + scalar_is_nil_call(t, expr) + ")"
     end
     if is_nullable_type(t) == 1 || type_is_pointer(t) == 1
       return "(" + expr + " != NULL)"
@@ -16735,7 +16763,7 @@ class Compiler
           pop_type_narrow
         end
         @nd_callop[nid] = saved_callop_sn
-        nil_check_sn = is_scalar_nullable_type(recv_t_sn) == 1 ? "sp_int_is_nil(" + recv_tmp_sn + ")" : "(" + recv_tmp_sn + " == NULL)"
+        nil_check_sn = is_scalar_nullable_type(recv_t_sn) == 1 ? scalar_is_nil_call(recv_t_sn, recv_tmp_sn) : "(" + recv_tmp_sn + " == NULL)"
         return "({ " + recv_ct_sn + " " + recv_tmp_sn + " = " + recv_c_sn + "; " + nil_check_sn + " ? " + nil_v_sn + " : " + call_c_sn + "; })"
       end
  # Non-nullable recv — `&.` is equivalent to `.`. Fall through.
@@ -17775,9 +17803,12 @@ class Compiler
  # arms so the int? to_s wrapper short-circuits to the empty
  # string for SP_INT_NIL while inspect emits "nil".
       if mname == "inspect"
-        return "sp_int_opt_inspect(" + rc + ")"
+        return scalar_opt_inspect_call(recv_type, rc)
       end
       if mname == "to_s"
+        if base_type(recv_type) == "float"
+          return "sp_float_opt_to_s(" + rc + ")"
+        end
         return "sp_int_opt_to_s(" + rc + ")"
       end
  # `<int?> == nil` / `<int?> != nil` compare against the sentinel
@@ -17789,14 +17820,18 @@ class Compiler
         args_eq = get_args(@nd_arguments[nid])
         if args_eq.length >= 1 && @nd_type[args_eq[0]] == "NilNode"
           if mname == "=="
-            return "sp_int_is_nil(" + rc + ")"
+            return scalar_is_nil_call(recv_type, rc)
           end
-          return "(!sp_int_is_nil(" + rc + "))"
+          return "(!" + scalar_is_nil_call(recv_type, rc) + ")"
         end
       end
-      r = compile_int_method_expr(nid, mname, rc)
-      if r != ""
-        return r
+ # The int-method fallback only applies to int? -- a float? receiver
+ # must not be dispatched through the integer method table.
+      if base_type(recv_type) == "int"
+        r = compile_int_method_expr(nid, mname, rc)
+        if r != ""
+          return r
+        end
       end
     end
 
@@ -23862,11 +23897,14 @@ class Compiler
       if mname == "sum"
         return "sp_FloatArray_sum(" + rc + ", " + compile_arg0_as_float(nid) + ")"
       end
-      if mname == "first"
-        return "sp_FloatArray_get(" + rc + ", 0)"
+      if mname == "first" && (@nd_arguments[nid] < 0 || get_args(@nd_arguments[nid]).length == 0)
+ # No-arg first/last: float? (sentinel when empty), matching CRuby's
+ # nil on an empty array. The first(n)/last(n) array forms fall
+ # through to their existing handling.
+        return "sp_FloatArray_first_opt(" + rc + ")"
       end
-      if mname == "last"
-        return "sp_FloatArray_get(" + rc + ", -1)"
+      if mname == "last" && (@nd_arguments[nid] < 0 || get_args(@nd_arguments[nid]).length == 0)
+        return "sp_FloatArray_last_opt(" + rc + ")"
       end
       if mname == "intersection"
         return "sp_FloatArray_intersect(" + rc + ", " + compile_arg0(nid) + ")"
@@ -27294,7 +27332,7 @@ class Compiler
  # through to the NULL-pointer branch (which would compare mrb_int
  # to NULL and silently mean "== 0").
       if is_scalar_nullable_type(recv_type) == 1
-        return "sp_int_is_nil(" + rc + ")"
+        return scalar_is_nil_call(recv_type, rc)
       end
       if is_nullable_type(recv_type) == 1
         return "(" + rc + " == NULL)"
@@ -29768,9 +29806,9 @@ class Compiler
     if is_scalar_nullable_type(lt) == 1 && at == "nil"
       lc_opt = compile_expr(recv)
       if op == "=="
-        return "sp_int_is_nil(" + lc_opt + ")"
+        return scalar_is_nil_call(lt, lc_opt)
       end
-      return "(!sp_int_is_nil(" + lc_opt + "))"
+      return "(!" + scalar_is_nil_call(lt, lc_opt) + ")"
     end
  # Container-op `== nil` / `!= nil` shapes that the typed
  # returns can't represent at the value level (sp_IntArray_get
@@ -30162,6 +30200,12 @@ class Compiler
     nullable = is_nullable_type(at)
     raw_at = at
     at = base_type(at)
+ # float? boxing: the NaN sentinel becomes nil, a real value boxes as a
+ # Float. (int? keeps its existing path below.) Statement-expression
+ # binds once so a side-effecting source isn't evaluated twice.
+    if nullable == 1 && at == "float"
+      return "({ mrb_float _bv = " + val + "; sp_float_is_nil(_bv) ? sp_box_nil() : sp_box_float(_bv); })"
+    end
     if nullable == 1 && is_nullable_pointer_type(raw_at) == 1
       if at == "string"
         return "sp_box_nullable_str(" + val + ")"
@@ -40474,6 +40518,11 @@ class Compiler
     if at == "float"
       return "sp_float_inspect(" + val + ")"
     end
+    if at == "float?"
+ # Nullable float (e.g. an empty FloatArray#first/#last): "nil" for the
+ # NaN sentinel, the float form otherwise.
+      return "sp_float_opt_inspect(" + val + ")"
+    end
     if at == "string" || at == "string?"
       return "sp_str_inspect(" + val + ")"
     end
@@ -40718,6 +40767,15 @@ class Compiler
       emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
       return
     end
+    if at == "float?"
+ # `puts <empty FloatArray>.first` prints a blank line for the NaN
+ # sentinel, the float form otherwise. Bind to a temp so a
+ # side-effecting receiver isn't evaluated twice.
+      tmp_puts_flt_opt = new_temp
+      emit("  mrb_float " + tmp_puts_flt_opt + " = " + val + ";")
+      emit("  if (sp_float_is_nil(" + tmp_puts_flt_opt + ")) { putchar('" + bsl_n + "'); } else { const char *_fs = sp_float_to_s(" + tmp_puts_flt_opt + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
+      return
+    end
     if at == "curried"
  # A fully-applied curried proc materialises to its (int) result.
       emit("  printf(\"%lld" + bsl_n + "\", (long long)sp_lam_to_int(" + val + "));")
@@ -40901,6 +40959,10 @@ class Compiler
       else
         if at == "float"
           emit("  { const char *_fs = sp_float_to_s(" + val + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
+        elsif at == "float?"
+          tmp_pmsg_fio = new_temp
+          emit("  mrb_float " + tmp_pmsg_fio + " = " + val + ";")
+          emit("  if (sp_float_is_nil(" + tmp_pmsg_fio + ")) { putchar('" + bsl_n + "'); } else { const char *_fs = sp_float_to_s(" + tmp_pmsg_fio + "); fputs(_fs, stdout); putchar('" + bsl_n + "'); }")
         else
           if at == "string" || at == "string?"
             emit("  { const char *_ps = (const char *)(" + val + "); if (_ps) { fputs(_ps, stdout); if (!*_ps || _ps[strlen(_ps)-1] != '" + bsl_n + "') putchar('" + bsl_n + "'); } else putchar('" + bsl_n + "'); }")
@@ -45749,7 +45811,7 @@ class Compiler
       return "sp_poly_truthy(" + cond + ")"
     end
     if is_scalar_nullable_type(ct) == 1
-      return "(!sp_int_is_nil(" + cond + "))"
+      return "(!" + scalar_is_nil_call(ct, cond) + ")"
     end
     if is_nullable_type(ct) == 1
       return "(" + cond + " != NULL)"

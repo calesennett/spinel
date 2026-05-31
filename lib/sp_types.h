@@ -58,6 +58,20 @@ typedef bool mrb_bool;
 #define SP_INT_NIL ((mrb_int)INTPTR_MIN)
 #define sp_int_is_nil(v) ((v) == SP_INT_NIL)
 
+/* Nullable float (float?) sentinel: a quiet NaN with a reserved payload.
+   NaN != NaN, so nil is detected by bit pattern, not ==. The payload is
+   chosen so the canonical NaN (0x7FF8000000000000) and ordinary
+   arithmetic NaNs don't collide; a real Float element with this exact
+   bit pattern reads back as nil -- the same documented compromise
+   SP_INT_NIL makes for INTPTR_MIN. mrb_float is double (8 bytes). */
+#define SP_FLOAT_NIL_BITS ((uint64_t)0x7FF8000000000001ULL)
+static inline mrb_float sp_float_nil(void) {
+  union { uint64_t u; mrb_float d; } x; x.u = SP_FLOAT_NIL_BITS; return x.d;
+}
+static inline int sp_float_is_nil(mrb_float v) {
+  union { mrb_float d; uint64_t u; } x; x.d = v; return x.u == SP_FLOAT_NIL_BITS;
+}
+
 /* sp_sym is defined per-program in emit_sym_runtime, but poly helpers
    below need to reference it by forward declaration. */
 typedef mrb_int sp_sym;
