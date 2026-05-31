@@ -21407,7 +21407,12 @@ class Compiler
               did_gb = new_temp
               rest_gb = new_temp
               emit("  size_t " + cap_gb + " = strlen(" + rc + ") * 2 + 64;")
-              emit("  char *" + out_gb + " = sp_str_alloc_raw(" + cap_gb + ");")
+ # Plain malloc working buffer: it gets realloc'd as matches accrue
+ # (invalid on an sp_str_alloc'd pointer), and the final result is
+ # copied into a right-sized heap string below so its recorded byte
+ # length is the content length, not the allocation size (the old
+ # sp_str_alloc_raw return leaked trailing NULs -- issue #1083).
+              emit("  char *" + out_gb + " = (char *)malloc(" + cap_gb + ");")
               emit("  size_t " + olen_gb + " = 0;")
               emit("  int64_t " + pos_gb + " = 0;")
               emit("  int64_t " + slen_gb + " = (int64_t)strlen(" + rc + ");")
@@ -21460,7 +21465,13 @@ class Compiler
               emit("    if (" + olen_gb + " + " + rest_gb + " + 1 >= " + cap_gb + ") { " + cap_gb + " = " + olen_gb + " + " + rest_gb + " + 64; " + out_gb + " = (char*)realloc(" + out_gb + ", " + cap_gb + "); }")
               emit("    memcpy(" + out_gb + " + " + olen_gb + ", " + rc + " + " + pos_gb + ", " + rest_gb + "); " + olen_gb + " += " + rest_gb + ";")
               emit("    " + out_gb + "[" + olen_gb + "] = 0; }")
-              return out_gb
+ # Copy into a right-sized heap string (length == content length) and
+ # free the working buffer.
+              fin_gb = new_temp
+              emit("  char *" + fin_gb + " = sp_str_alloc(" + olen_gb + ");")
+              emit("  memcpy(" + fin_gb + ", " + out_gb + ", " + olen_gb + ");")
+              emit("  free(" + out_gb + ");")
+              return fin_gb
             end
           end
         end
