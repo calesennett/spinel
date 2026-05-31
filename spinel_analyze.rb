@@ -6812,7 +6812,7 @@ class Compiler
         if mname == "string" || mname == "read" || mname == "gets" || mname == "getc"
           return "string"
         end
-        if mname == "pos" || mname == "tell" || mname == "size" || mname == "length" || mname == "write" || mname == "putc" || mname == "getbyte" || mname == "lineno"
+        if mname == "pos" || mname == "tell" || mname == "size" || mname == "length" || mname == "write" || mname == "putc" || mname == "getbyte" || mname == "lineno" || mname == "fsync"
           return "int"
         end
         if mname == "eof?" || mname == "closed?" || mname == "sync" || mname == "isatty"

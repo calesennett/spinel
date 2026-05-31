@@ -20731,6 +20731,12 @@ class Compiler
   end
 
   def compile_stringio_method_expr(nid, mname, rc)
+ # Locals in a setjmp-bearing function (begin/rescue) are emitted as
+ # `volatile sp_StringIO *`, but the sp_StringIO_* helpers take a plain
+ # `sp_StringIO *`. Cast away volatile once here so every method below
+ # passes without -Wdiscarded-qualifiers (an error under the test
+ # harness's -Werror). Identity cast when the recv isn't volatile.
+    rc = "(sp_StringIO *)(" + rc + ")"
     if mname == "string"
       return "sp_StringIO_string(" + rc + ")"
     end
@@ -20779,7 +20785,20 @@ class Compiler
       return "0"
     end
     if mname == "putc"
-      return "sp_StringIO_putc(" + rc + ", " + compile_arg0(nid) + ")"
+      args_id_pc = @nd_arguments[nid]
+      if args_id_pc >= 0
+        a_pc = get_args(args_id_pc)
+        if a_pc.length >= 1
+ # putc with a String writes its first byte (CRuby writes the first
+ # char); pass that byte as a codepoint rather than the char* (which
+ # made an int from a pointer). An Integer arg is the codepoint.
+          if infer_type(a_pc[0]) == "string"
+            return "sp_StringIO_putc(" + rc + ", (mrb_int)(unsigned char)((" + compile_expr(a_pc[0]) + ")[0]))"
+          end
+          return "sp_StringIO_putc(" + rc + ", " + compile_expr(a_pc[0]) + ")"
+        end
+      end
+      return "sp_StringIO_putc(" + rc + ", 0)"
     end
     if mname == "rewind"
       emit("  sp_StringIO_rewind(" + rc + ");")
@@ -20811,6 +20830,10 @@ class Compiler
     end
     if mname == "isatty"
       return "sp_StringIO_isatty(" + rc + ")"
+    end
+ # StringIO#fsync is a no-op that returns 0 (CRuby behaviour).
+    if mname == "fsync"
+      return "0"
     end
     ""
   end
