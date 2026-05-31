@@ -1,8 +1,7 @@
-# Float#ceil/floor/round/truncate return type is presence-based:
-# no argument -> Integer, any ndigits argument -> Float (regardless of
-# the ndigits value). Values stay numerically correct. See
-# docs/FLOAT-ROUNDING.md. (Supersedes the CRuby value-keyed rule, which
-# spinel can't represent statically.)
+# Float#ceil/floor/round/truncate return type is value-based on a
+# literal ndigits, matching CRuby: Integer when ndigits <= 0 (or
+# absent), Float when > 0. (A non-literal ndigits stays Float.) Values
+# stay numerically correct. See docs/FLOAT-ROUNDING.md.
 
 # no-arg -> Integer
 puts 1.9.ceil.class

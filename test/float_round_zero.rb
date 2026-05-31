@@ -1,9 +1,7 @@
-# Float#round/ceil/floor/truncate return type is presence-based in
-# spinel: the no-arg form returns Integer, ANY ndigits arg (including
-# `(0)`) returns Float. This intentionally diverges from CRuby, which
-# returns Integer for ndigits <= 0 -- spinel can't key the result type
-# on a runtime value statically. Values stay numerically correct.
-# See docs/FLOAT-ROUNDING.md.
+# Float#round/ceil/floor/truncate return type matches CRuby's
+# value-based rule for a literal ndigits: no-arg and ndigits <= 0 return
+# Integer, ndigits > 0 returns Float. (A non-literal ndigits stays
+# Float.) See docs/FLOAT-ROUNDING.md.
 puts 3.5.round(0).inspect
 puts 3.5.round.inspect
 puts 3.5.round(1).inspect

@@ -22572,6 +22572,24 @@ class Compiler
     ""
   end
 
+ # Float#ceil/floor/round/truncate. cfn is the libm function name
+ # (ceil/floor/round/trunc). CRuby's result is value-based on ndigits:
+ # Integer when ndigits <= 0 (or absent), Float when > 0. We match that
+ # for a literal-integer ndigits (cast the float formula to mrb_int when
+ # <= 0); a non-literal ndigits stays Float. Mirrors the analyze arm.
+  def compile_float_round_expr(nid, cfn, rc)
+    a_fr = @nd_arguments[nid] >= 0 ? get_args(@nd_arguments[nid]) : []
+    if a_fr.length == 0
+      return "(mrb_int)" + cfn + "(" + rc + ")"
+    end
+    arg_fr = compile_arg0(nid)
+    body_fr = "({ double _f = pow(10, " + arg_fr + "); " + cfn + "((" + rc + ") * _f) / _f; })"
+    if @nd_type[a_fr[0]] == "IntegerNode" && @nd_value[a_fr[0]].to_i <= 0
+      return "(mrb_int)" + body_fr
+    end
+    return body_fr
+  end
+
   def compile_float_method_expr(nid, mname, rc)
     if mname == "is_a?" || mname == "kind_of?"
       args_id = @nd_arguments[nid]
@@ -22639,27 +22657,13 @@ class Compiler
  # side and pow(10, n) is evaluated once at runtime — the original
  # form double-evaluated both, which broke any side-effecting arg.
     if mname == "ceil"
-      if @nd_arguments[nid] >= 0
- # Any ndigits arg -> Float (presence-based; see the matching
- # infer_method_name_type arm and docs/FLOAT-ROUNDING.md).
-        arg = compile_arg0(nid)
-        return "({ double _f = pow(10, " + arg + "); ceil((" + rc + ") * _f) / _f; })"
-      end
-      return "(mrb_int)ceil(" + rc + ")"
+      return compile_float_round_expr(nid, "ceil", rc)
     end
     if mname == "floor"
-      if @nd_arguments[nid] >= 0
-        arg = compile_arg0(nid)
-        return "({ double _f = pow(10, " + arg + "); floor((" + rc + ") * _f) / _f; })"
-      end
-      return "(mrb_int)floor(" + rc + ")"
+      return compile_float_round_expr(nid, "floor", rc)
     end
     if mname == "round"
-      if @nd_arguments[nid] >= 0
-        arg = compile_arg0(nid)
-        return "({ double _f = pow(10, " + arg + "); round((" + rc + ") * _f) / _f; })"
-      end
-      return "(mrb_int)round(" + rc + ")"
+      return compile_float_round_expr(nid, "round", rc)
     end
     if mname == "abs"
       return "fabs(" + rc + ")"
@@ -22682,11 +22686,7 @@ class Compiler
       return "(isinf(" + rc + ") ? (" + rc + " < 0 ? -1 : 1) : 0)"
     end
     if mname == "truncate"
-      if @nd_arguments[nid] >= 0
-        arg = compile_arg0(nid)
-        return "({ double _f = pow(10, " + arg + "); trunc((" + rc + ") * _f) / _f; })"
-      end
-      return "(mrb_int)trunc(" + rc + ")"
+      return compile_float_round_expr(nid, "trunc", rc)
     end
     if mname == "fdiv"
       return "((" + rc + ") / (mrb_float)" + compile_arg0(nid) + ")"
