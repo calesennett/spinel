@@ -23018,6 +23018,10 @@ class Compiler
       return tmp_res
     end
     if mname == "minmax"
+ # minmax with a 2-param comparator block honours the block ordering.
+      if @nd_block[nid] >= 0 && get_block_param(nid, 1) != ""
+        return compile_array_minmax_block(nid, rc, recv_type)
+      end
       pfx = array_c_prefix(recv_type)
       et = elem_type_of_array(recv_type)
       tt = "tuple:" + et + "," + et
@@ -42502,6 +42506,74 @@ class Compiler
     pop_scope
     emit("  }")
     tmp_res
+  end
+
+ # `arr.minmax { |a, b| ... }` with a 2-param comparator block. Walks
+ # the array once keeping a running min and max; the block (compiled
+ # twice per element, once against each running best) returns the
+ # spaceship result. Mirrors compile_array_min_max_block's comparator
+ # arm but produces both ends as a tuple. Issue #1081.
+  def compile_array_minmax_block(nid, rc, recv_type)
+    bp1 = get_block_param(nid, 0)
+    bp1 = "_a" if bp1 == ""
+    bp2 = get_block_param(nid, 1)
+    bp2 = "_b" if bp2 == ""
+    et = elem_type_of_array(recv_type)
+    tt = "tuple:" + et + "," + et
+    register_tuple_type(tt)
+    @needs_gc = 1
+    name = tuple_c_name(tt)
+    pfx = array_c_prefix(recv_type)
+    tmp_min = new_temp
+    tmp_max = new_temp
+    tmp_i = new_temp
+    tmp = new_temp
+    emit("  " + c_type(et) + " " + tmp_min + " = " + c_default_val(et) + ";")
+    emit("  " + c_type(et) + " " + tmp_max + " = " + c_default_val(et) + ";")
+    emit("  for (mrb_int " + tmp_i + " = 0; " + tmp_i + " < sp_" + pfx + "_length(" + rc + "); " + tmp_i + "++) {")
+    emit("    " + c_type(et) + " lv_" + bp1 + " = sp_" + pfx + "_get(" + rc + ", " + tmp_i + ");")
+    push_scope
+    declare_var(bp1, et)
+    declare_var(bp2, et)
+    emit("    if (" + tmp_i + " == 0) { " + tmp_min + " = lv_" + bp1 + "; " + tmp_max + " = lv_" + bp1 + "; } else {")
+    emit("      " + c_type(et) + " lv_" + bp2 + " = " + tmp_min + ";")
+    blk_mm = @nd_block[nid]
+    bexpr_min = "0"
+    if @nd_body[blk_mm] >= 0
+      bs_mm = get_stmts(@nd_body[blk_mm])
+      if bs_mm.length > 0
+        k_mm = 0
+        while k_mm < bs_mm.length - 1
+          compile_stmt(bs_mm[k_mm])
+          k_mm = k_mm + 1
+        end
+        bexpr_min = compile_expr(bs_mm.last)
+      end
+    end
+    emit("      mrb_int _cmpmin = " + bexpr_min + ";")
+    emit("      if (_cmpmin < 0) " + tmp_min + " = lv_" + bp1 + ";")
+    emit("      lv_" + bp2 + " = " + tmp_max + ";")
+    bexpr_max = "0"
+    if @nd_body[blk_mm] >= 0
+      bs_mx = get_stmts(@nd_body[blk_mm])
+      if bs_mx.length > 0
+        k_mx = 0
+        while k_mx < bs_mx.length - 1
+          compile_stmt(bs_mx[k_mx])
+          k_mx = k_mx + 1
+        end
+        bexpr_max = compile_expr(bs_mx.last)
+      end
+    end
+    emit("      mrb_int _cmpmax = " + bexpr_max + ";")
+    emit("      if (_cmpmax > 0) " + tmp_max + " = lv_" + bp1 + ";")
+    emit("    }")
+    pop_scope
+    emit("  }")
+    emit("  " + name + " *" + tmp + " = (" + name + " *)sp_gc_alloc(sizeof(" + name + "), NULL, " + tuple_scan_name(tt) + ");")
+    emit("  " + tmp + "->_0 = " + tmp_min + ";")
+    emit("  " + tmp + "->_1 = " + tmp_max + ";")
+    return tmp
   end
 
   def compile_array_filter_map(nid, rc, recv_type)
