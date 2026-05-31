@@ -1565,6 +1565,20 @@ static char *resolve_requires(const char *source, const char *source_path) {
   return result;
 }
 
+/* A `require "X"` whose X has no bundled lib/X.rb may still be provided
+   natively by the Spinel runtime/codegen (e.g. the JSON module). Such a
+   require is a harmless no-op and must not warn. Bundled .rb libs (set,
+   stringio, strscan, erb, ...) are resolved by file existence and never
+   reach the not-found branch, so they don't belong here -- only the
+   C-native modules that map to a stdlib require name do. */
+static int sp_lib_is_native(const char *name) {
+  static const char *const natives[] = { "json", NULL };
+  for (int i = 0; natives[i]; i++) {
+    if (strcmp(name, natives[i]) == 0) return 1;
+  }
+  return 0;
+}
+
 /* ---- Plain require resolution ---- */
 static char *resolve_plain_requires(char *source, const char *exe_path) {
   /* Find lib/ directory relative to this executable */
@@ -1618,10 +1632,16 @@ static char *resolve_plain_requires(char *source, const char *exe_path) {
       free(canonical);
       content = read_file(lib_path);
       if (!content) {
-        fprintf(stderr,
-                "warning: require \"%s\" could not be resolved (no %s.rb in %s); the call is ignored\n",
-                lib_name, lib_name, lib_dir);
-        content = strdup("# require not resolved");
+        if (sp_lib_is_native(lib_name)) {
+          /* Provided natively by the Spinel runtime; the require is a
+             harmless no-op, so don't warn. */
+          content = strdup("# require provided by Spinel runtime");
+        } else {
+          fprintf(stderr,
+                  "warning: '%s' is not available in Spinel; the require is ignored and code using it will fail\n",
+                  lib_name);
+          content = strdup("# require not resolved");
+        }
       } else {
         char *resolved = resolve_requires(content, lib_path);
         free(content);
