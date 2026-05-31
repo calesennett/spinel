@@ -61,6 +61,10 @@ class Compiler
  # original Ruby. Off by default -> output byte-for-byte unchanged.
     @debug = (ENV["SPINEL_DEBUG"] == "1")
     @last_line_emitted = 0
+    @last_file_emitted = ""
+ # Debug multi-file map: FILE table (id -> path) populated from the AST's
+ # FILE records. Empty in single-file or non-debug builds.
+    @file_table = []
 
  # ---- AST node storage (parallel arrays by node ID) ----
  # Use "".split(",", -1) for StrArray init (v1 infers StrArray from split)
@@ -68,6 +72,7 @@ class Compiler
     @nd_name = "".split(",", -1)
     @nd_value = []
     @nd_line = []
+    @nd_file = []
     @nd_content = "".split(",", -1)
     @nd_flags = []
     @nd_operator = "".split(",", -1)
@@ -3256,17 +3261,26 @@ class Compiler
     if ln <= 0
       return
     end
-    if ln == @last_line_emitted
+ # Resolve the node's original file via the multi-file map (FILE table);
+ # fall back to the toplevel source path for single-file / id-0 nodes.
+    path = ""
+    fid = @nd_file[nid]
+    if fid != nil && fid >= 0 && fid < @file_table.length
+      path = @file_table[fid]
+    end
+    if path == nil || path == ""
+      path = @source_file_path
+    end
+    if path == nil || path == ""
+      path = "source.rb"
+    end
+ # Suppress only a consecutive duplicate of the *same* (line, file): across
+ # a file boundary the same line number must still re-emit.
+    if ln == @last_line_emitted && path == @last_file_emitted
       return
     end
     @last_line_emitted = ln
-    path = @source_file_path
-    if path == nil
-      path = "source.rb"
-    end
-    if path == ""
-      path = "source.rb"
-    end
+    @last_file_emitted = path
     @out_lines.push("#line " + ln.to_s + " \"" + path + "\"")
   end
 

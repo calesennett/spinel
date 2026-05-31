@@ -466,6 +466,8 @@ class Compiler
     @nd_type.push("")
     @nd_name.push("")
     @nd_value.push(0)
+    @nd_line.push(0)   # keep the source-map arrays parallel with the rest, so a
+    @nd_file.push(0)   # dynamically-allocated node can't drift them out of sync
     @nd_content.push("")
     @nd_flags.push(0)
     @nd_operator.push("")
@@ -529,6 +531,7 @@ class Compiler
     @nd_name = Array.new(n, "")
     @nd_value = Array.new(n, 0)
     @nd_line = Array.new(n, 0)
+    @nd_file = Array.new(n, 0)
     @nd_content = Array.new(n, "")
     @nd_flags = Array.new(n, 0)
     @nd_operator = Array.new(n, "")
@@ -673,6 +676,21 @@ class Compiler
     if field == "node_line"
       @nd_line[nid] = val
     end
+ # Debug multi-file map: id into the FILE table (0 = toplevel source).
+    if field == "node_file"
+      @nd_file[nid] = val
+    end
+  end
+
+ # Debug multi-file map: record a FILE <id> <path> table entry emitted by
+ # the parser. Grown on demand so ids can arrive in any order.
+  def set_file_entry(id, path)
+    @file_table ||= []   # self-contained: the analyze/codegen consumers init it,
+                         # but don't rely on that from this shared helper
+    while @file_table.length <= id
+      @file_table.push("")
+    end
+    @file_table[id] = path
   end
 
   def set_ref_field(nid, field, ref_id)
