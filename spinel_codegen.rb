@@ -22792,7 +22792,8 @@ class Compiler
       return "(isfinite(" + rc + ") ? TRUE : FALSE)"
     end
     if mname == "infinite?"
-      return "(isinf(" + rc + ") ? (" + rc + " < 0 ? -1 : 1) : 0)"
+ # nil for a finite value, -1 / +1 for -Inf / +Inf (nullable int).
+      return "(isinf(" + rc + ") ? (" + rc + " < 0 ? -1 : 1) : SP_INT_NIL)"
     end
     if mname == "truncate"
       return compile_float_round_expr(nid, "trunc", rc)

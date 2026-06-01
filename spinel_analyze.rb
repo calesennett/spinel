@@ -5572,7 +5572,7 @@ class Compiler
       return "bool"
     end
     if mname == "infinite?"
-      return "int"
+      return "int?"
     end
     if mname == "tally"
       if recv >= 0
