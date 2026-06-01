@@ -22108,6 +22108,49 @@ class Compiler
       emit("  sp_IntArray_push(" + atmp_mm + ", " + rtmp_mm + ".last - " + rtmp_mm + ".excl);")
       return atmp_mm
     end
+ # Integer Range#bsearch in find-minimum mode: the block returns a
+ # truthy value for the upper half. Binary-search [first, last-excl]
+ # for the smallest member where the block is truthy; return it, or
+ # SP_INT_NIL (nil) when none qualifies.
+    if mname == "bsearch" && @nd_block[nid] >= 0
+      rtmp_bs = new_temp
+      lo_bs = new_temp
+      hi_bs = new_temp
+      mid_bs = new_temp
+      res_bs = new_temp
+      cond_bs = new_temp
+      bp_bs = get_block_param(nid, 0)
+      bp_bs = "_x" if bp_bs == ""
+      emit("  sp_Range " + rtmp_bs + " = " + rc + ";")
+      emit("  mrb_int " + lo_bs + " = " + rtmp_bs + ".first;")
+      emit("  mrb_int " + hi_bs + " = " + rtmp_bs + ".last - " + rtmp_bs + ".excl + 1;")
+      emit("  mrb_int " + res_bs + " = SP_INT_NIL;")
+      emit("  while (" + lo_bs + " < " + hi_bs + ") {")
+      emit("    mrb_int " + mid_bs + " = " + lo_bs + " + (" + hi_bs + " - " + lo_bs + ") / 2;")
+      emit("    mrb_int lv_" + bp_bs + " = " + mid_bs + ";")
+      @indent = @indent + 1
+      push_scope
+      declare_var(bp_bs, "int")
+      bbody_bs = @nd_body[@nd_block[nid]]
+      bexpr_bs = "0"
+      if bbody_bs >= 0
+        bs_bs = get_stmts(bbody_bs)
+        if bs_bs.length > 0
+          k_bs = 0
+          while k_bs < bs_bs.length - 1
+            compile_stmt(bs_bs[k_bs])
+            k_bs = k_bs + 1
+          end
+          bexpr_bs = compile_expr(bs_bs.last)
+        end
+      end
+      pop_scope
+      @indent = @indent - 1
+      emit("    mrb_int " + cond_bs + " = " + bexpr_bs + ";")
+      emit("    if (" + cond_bs + ") { " + res_bs + " = " + mid_bs + "; " + hi_bs + " = " + mid_bs + "; } else { " + lo_bs + " = " + mid_bs + " + 1; }")
+      emit("  }")
+      return res_bs
+    end
  # String-range form: `("a".."z").include?("m")`. sp_Range only
  # holds int fields, so a string-typed RangeNode receiver can't
  # round-trip through it. When the receiver is a literal

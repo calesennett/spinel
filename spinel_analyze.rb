@@ -5534,6 +5534,13 @@ class Compiler
       end
       return "tuple:int,int"
     end
+ # Integer Range#bsearch returns a member of the range or nil when
+ # the block never finds one, so it is a nullable int.
+    if mname == "bsearch" && @nd_block[nid] >= 0
+      if recv >= 0 && infer_type(recv) == "range"
+        return "int?"
+      end
+    end
     if mname == "partition"
       if recv >= 0
         rt = infer_type(recv)
