@@ -4276,6 +4276,21 @@ class Compiler
             end
             return "str_poly_hash"
           end
+ # Float values have no dedicated typed-hash variant; route them
+ # through poly storage so each slot keeps its own tag rather than
+ # falling through to the str_int_hash default (which truncates the
+ # float to mrb_int on read).
+          if first_vt == "float"
+            @needs_rb_value = 1
+            if all_sym_keys == 1
+              return "sym_poly_hash"
+            end
+            if all_int_keys == 1
+              @needs_poly_poly_hash = 1
+              return "poly_poly_hash"
+            end
+            return "str_poly_hash"
+          end
  # Inner hash/array values need a poly outer so each pointer
  # can carry its own cls_id through SP_TAG_OBJ.
           if is_hash_type(first_vt) == 1 || is_array_type(first_vt) == 1
