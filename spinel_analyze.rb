@@ -4427,9 +4427,8 @@ class Compiler
         return "proc"
       end
     end
- # NilClass coercion methods. Issue #871. to_c / to_r / to_h
- # skipped: Complex / Rational unsupported, Hash needs typed
- # element judgement.
+ # NilClass coercion methods. Issue #871. to_c / to_r skipped:
+ # Complex / Rational unsupported.
     if recv >= 0
       recv_t_nil = infer_type(recv)
       if recv_t_nil == "nil"
@@ -4442,6 +4441,12 @@ class Compiler
         if mname == "to_a"
           @needs_int_array = 1
           return "int_array"
+        end
+ # nil.to_h is always the empty hash; the empty-hash literal types
+ # as str_int_hash, so match it.
+        if mname == "to_h"
+          @needs_str_int_hash = 1
+          return "str_int_hash"
         end
         if mname == "&"
           return "bool"

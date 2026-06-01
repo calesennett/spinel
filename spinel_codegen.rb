@@ -18079,6 +18079,13 @@ class Compiler
         @needs_gc = 1
         return "sp_IntArray_new()"
       end
+ # NilClass#to_h returns the empty hash ({}), typed as str_int_hash
+ # to match the empty-hash literal.
+      if mname == "to_h"
+        @needs_str_int_hash = 1
+        @needs_gc = 1
+        return "sp_StrIntHash_new()"
+      end
  # NilClass#& / NilClass#| / NilClass#^ — Ruby booleanizes the rhs.
       if mname == "&"
         return "FALSE"
