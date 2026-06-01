@@ -1802,6 +1802,10 @@ static const char*sp_IntArrayPtrArray_inspect(sp_PtrArray*a){sp_String*s=sp_Stri
    k-element ordered combinations as a PtrArray of IntArrays. */
 static void sp_int_combination_recur(sp_IntArray*src,mrb_int start,mrb_int k,sp_IntArray*acc,sp_PtrArray*out){if(k==0){sp_IntArray*cp=sp_IntArray_new();for(mrb_int i=0;i<acc->len;i++)sp_IntArray_push(cp,acc->data[acc->start+i]);sp_PtrArray_push(out,cp);return;}for(mrb_int i=start;i<=src->len-k;i++){sp_IntArray_push(acc,src->data[src->start+i]);sp_int_combination_recur(src,i+1,k-1,acc,out);acc->len--;}}
 static sp_PtrArray*sp_IntArray_combination(sp_IntArray*a,mrb_int k){sp_PtrArray*out=sp_PtrArray_new();if(!a||k<0||k>a->len)return out;sp_IntArray*acc=sp_IntArray_new();sp_int_combination_recur(a,0,k,acc,out);return out;}
+/* repeated_combination: like combination but an index may repeat, so the
+   recursion restarts at `i` rather than `i+1`. */
+static void sp_int_repeated_combination_recur(sp_IntArray*src,mrb_int start,mrb_int k,sp_IntArray*acc,sp_PtrArray*out){if(k==0){sp_IntArray*cp=sp_IntArray_new();for(mrb_int i=0;i<acc->len;i++)sp_IntArray_push(cp,acc->data[acc->start+i]);sp_PtrArray_push(out,cp);return;}for(mrb_int i=start;i<src->len;i++){sp_IntArray_push(acc,src->data[src->start+i]);sp_int_repeated_combination_recur(src,i,k-1,acc,out);acc->len--;}}
+static sp_PtrArray*sp_IntArray_repeated_combination(sp_IntArray*a,mrb_int k){sp_PtrArray*out=sp_PtrArray_new();if(!a||k<0)return out;sp_IntArray*acc=sp_IntArray_new();sp_int_repeated_combination_recur(a,0,k,acc,out);return out;}
 
 /* Cartesian product of two int arrays. Returns a PtrArray of
    2-element IntArrays. */

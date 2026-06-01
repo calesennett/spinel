@@ -4085,7 +4085,7 @@ class Compiler
         end
       end
     end
-    if mname == "combination" || mname == "permutation"
+    if mname == "combination" || mname == "permutation" || mname == "repeated_combination"
  # `int_array.combination(k)` returns a PtrArray of IntArrays.
  # Issue #742.
       if recv >= 0

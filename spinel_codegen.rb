@@ -23949,6 +23949,11 @@ class Compiler
         @needs_gc = 1
         return "sp_IntArray_combination(" + rc + ", " + compile_arg0_as_int(nid) + ")"
       end
+      if mname == "repeated_combination"
+        @needs_int_array = 1
+        @needs_gc = 1
+        return "sp_IntArray_repeated_combination(" + rc + ", " + compile_arg0_as_int(nid) + ")"
+      end
  # `arr.product(other)` for two int_arrays — 2-arg Cartesian
  # product via the runtime helper.
       if mname == "product"
