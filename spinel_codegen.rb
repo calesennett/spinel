@@ -20499,6 +20499,20 @@ class Compiler
           if lt == "string"
             return "(strcmp(" + rc + ", " + lo + ") >= 0 && strcmp(" + rc + ", " + hi + ") <= 0)"
           end
+ # Comparable#between? on a user type: `self >= min && self <= max`
+ # must dispatch through the class's `<=>`, not a raw struct compare
+ # (which gcc rejects with "invalid operands to binary >="). Mirrors
+ # the <=>-based lowering of direct </>/<=/>= comparisons. Issue #1245.
+          if is_obj_type(lt) == 1
+            cname_bt = lt[4, lt.length - 4]
+            ci_bt = find_class_idx(cname_bt)
+            if ci_bt >= 0
+              cmp_owner_bt = find_method_owner(ci_bt, "<=>")
+              if cmp_owner_bt != ""
+                return "(sp_" + cmp_owner_bt + "__cmp(" + rc + ", " + lo + ") >= 0 && sp_" + cmp_owner_bt + "__cmp(" + rc + ", " + hi + ") <= 0)"
+              end
+            end
+          end
           return "(" + rc + " >= " + lo + " && " + rc + " <= " + hi + ")"
         end
       end
