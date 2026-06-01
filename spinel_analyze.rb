@@ -6159,6 +6159,38 @@ class Compiler
       end
       return "int_array"
     end
+ # `map!` / `collect!` transform in place and return the receiver, so
+ # the result keeps the receiver's array type. A typed (non-poly) array
+ # is homogeneous, so only handle it when the block result keeps the
+ # element type; a type-changing block (int_array.map! { |x| x.to_s })
+ # falls through, matching codegen's guard.
+    if (mname == "map!" || mname == "collect!") && @nd_block[nid] >= 0
+      if recv >= 0
+        rt_mb = infer_type(recv)
+        if rt_mb == "poly_array"
+          return rt_mb
+        end
+        if is_array_type(rt_mb) == 1
+          et_mb = iter_elem_type(rt_mb)
+          bbody_mb = @nd_body[@nd_block[nid]]
+          if bbody_mb >= 0
+            bbs_mb = get_stmts(bbody_mb)
+            if bbs_mb.length > 0
+              bp_mb2 = get_block_param(nid, 0)
+              push_scope
+              if bp_mb2 != ""
+                declare_var(bp_mb2, et_mb)
+              end
+              res_t_mb = infer_type(bbs_mb.last)
+              pop_scope
+              if map_bang_elem_matches(et_mb, res_t_mb) == 1
+                return rt_mb
+              end
+            end
+          end
+        end
+      end
+    end
     if mname == "map"
       if recv >= 0
  # Declare bp inside a scope so infer_type sees the inner element type, not a shadowed outer local.
@@ -31109,6 +31141,26 @@ class Compiler
       return "int"
     end
     elem_type_of_array(recv_type)
+  end
+
+ # 1 iff a map!/collect! block result of type `result_t` can be stored
+ # back into an array whose element kind is `elem` (homogeneous typed
+ # arrays). Mirrors the codegen-side helper of the same name.
+  def map_bang_elem_matches(elem, result_t)
+    bt = base_type(result_t)
+    if elem == "int"
+      return (bt == "int") ? 1 : 0
+    end
+    if elem == "string"
+      return (bt == "string" || bt == "mutable_str") ? 1 : 0
+    end
+    if elem == "float"
+      return (bt == "float") ? 1 : 0
+    end
+    if elem == "symbol"
+      return (bt == "symbol") ? 1 : 0
+    end
+    0
   end
 
 

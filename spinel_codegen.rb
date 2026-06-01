@@ -23053,6 +23053,26 @@ class Compiler
     ""
   end
 
+ # 1 iff a map!/collect! block result of type `result_t` can be stored
+ # back into an array whose element kind is `elem`. Typed arrays are
+ # homogeneous, so the result must keep the element type.
+  def map_bang_elem_matches(elem, result_t)
+    bt = base_type(result_t)
+    if elem == "int"
+      return (bt == "int") ? 1 : 0
+    end
+    if elem == "string"
+      return (bt == "string" || bt == "mutable_str") ? 1 : 0
+    end
+    if elem == "float"
+      return (bt == "float") ? 1 : 0
+    end
+    if elem == "symbol"
+      return (bt == "symbol") ? 1 : 0
+    end
+    0
+  end
+
   def compile_array_method_expr(nid, mname, rc, recv_type)
  # Skip non-array types. Without this guard a user class with a
  # method whose name happens to overlap an Array method (e.g.
@@ -23074,6 +23094,89 @@ class Compiler
     end
     if mname == "append"
       return compile_array_method_expr(nid, "push", rc, recv_type)
+    end
+ # `map!` / `collect!` -- transform each element in place and return the
+ # mutated receiver. The block's last expression is the new value (the
+ # codebase's inline-block convention); it must match the array's
+ # element type, while poly arrays re-box each result.
+    if (mname == "map!" || mname == "collect!") && @nd_block[nid] >= 0
+      ctype_mb = ""
+      get_mb = ""
+      set_mb = ""
+      elem_mb = ""
+      if recv_type == "int_array"
+        ctype_mb = "sp_IntArray"; get_mb = "sp_IntArray_get"; set_mb = "sp_IntArray_set"; elem_mb = "int"
+      elsif recv_type == "str_array"
+        ctype_mb = "sp_StrArray"; get_mb = "sp_StrArray_get"; set_mb = "sp_StrArray_set"; elem_mb = "string"
+      elsif recv_type == "float_array"
+        ctype_mb = "sp_FloatArray"; get_mb = "sp_FloatArray_get"; set_mb = "sp_FloatArray_set"; elem_mb = "float"
+      elsif recv_type == "sym_array"
+        ctype_mb = "sp_IntArray"; get_mb = "sp_IntArray_get"; set_mb = "sp_IntArray_set"; elem_mb = "symbol"
+      elsif recv_type == "poly_array"
+        ctype_mb = "sp_PolyArray"; get_mb = "sp_PolyArray_get"; set_mb = "sp_PolyArray_set"; elem_mb = "poly"
+      end
+      if ctype_mb != ""
+        bp_mb = get_block_param(nid, 0)
+        bp_mb = "_x" if bp_mb == ""
+        bbody_mb = @nd_body[@nd_block[nid]]
+        bs_mb = bbody_mb >= 0 ? get_stmts(bbody_mb) : []
+ # Peek the block's result type. A typed (non-poly) array can only
+ # be mutated in place when the result keeps the element type --
+ # otherwise (e.g. int_array.map! { |x| x.to_s }) fall through to the
+ # unresolved path rather than emit a type-mismatched store.
+        if elem_mb != "poly" && bs_mb.length > 0
+          push_scope
+          declare_var(bp_mb, elem_mb)
+          peek_t_mb = infer_type(bs_mb.last)
+          pop_scope
+          if map_bang_elem_matches(elem_mb, peek_t_mb) == 0
+            return ""
+          end
+        end
+        @needs_gc = 1
+        recv_mb = new_temp
+        i_mb = new_temp
+        emit("  " + ctype_mb + " *" + recv_mb + " = " + rc + ";")
+        emit("  SP_GC_ROOT(" + recv_mb + ");")
+        emit("  for (mrb_int " + i_mb + " = 0; " + i_mb + " < " + recv_mb + "->len; " + i_mb + "++) {")
+        get_expr_mb = get_mb + "(" + recv_mb + ", " + i_mb + ")"
+        if elem_mb == "int"
+          emit("    mrb_int lv_" + bp_mb + " = " + get_expr_mb + ";")
+        elsif elem_mb == "symbol"
+          emit("    sp_sym lv_" + bp_mb + " = (sp_sym)" + get_expr_mb + ";")
+        elsif elem_mb == "string"
+          emit("    const char *lv_" + bp_mb + " = " + get_expr_mb + ";")
+        elsif elem_mb == "float"
+          emit("    mrb_float lv_" + bp_mb + " = " + get_expr_mb + ";")
+        else
+          emit("    sp_RbVal lv_" + bp_mb + " = " + get_expr_mb + ";")
+        end
+        @indent = @indent + 1
+        push_scope
+        declare_var(bp_mb, elem_mb)
+        rexpr_mb = "0"
+        rlast_t_mb = elem_mb
+        if bs_mb.length > 0
+          k_mb = 0
+          while k_mb < bs_mb.length - 1
+            compile_stmt(bs_mb[k_mb])
+            k_mb = k_mb + 1
+          end
+          rexpr_mb = compile_expr(bs_mb.last)
+          rlast_t_mb = infer_type(bs_mb.last)
+        end
+        store_mb = rexpr_mb
+        if elem_mb == "poly"
+          store_mb = (rlast_t_mb == "poly") ? rexpr_mb : box_value_to_poly(rlast_t_mb, rexpr_mb)
+        elsif elem_mb == "symbol"
+          store_mb = "(mrb_int)(" + rexpr_mb + ")"
+        end
+        emit("    " + set_mb + "(" + recv_mb + ", " + i_mb + ", " + store_mb + ");")
+        pop_scope
+        @indent = @indent - 1
+        emit("  }")
+        return recv_mb
+      end
     end
  # Array#dig with a single index reduces to []. Multi-arg dig that
  # walks into nested arrays/hashes isn't supported here yet — fall
