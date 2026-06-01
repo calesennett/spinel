@@ -5,6 +5,7 @@
 #   make parse        Build C parser only
 #   make bootstrap    Bootstrap the compiler backend
 #   make test         Run feature tests (requires bootstrap first)
+#   make fast-test    Force feature tests with cheaper C optimization
 #   make bench        Run benchmarks (requires bootstrap first)
 #   make clean        Remove built binaries
 
@@ -136,7 +137,7 @@ NODE_TABLE_LOADER_STAMP := build/stamps/node_table_loader.rb.stamp
 COMPILER_HELPERS_STAMP := build/stamps/compiler_helpers.rb.stamp
 PARSE_STAMP   := build/stamps/spinel_parse.c.stamp
 
-.PHONY: all parse bootstrap codegen rbs_extract test retest clean-test-results regen-expected bench optcarrot clean install uninstall deps
+.PHONY: all parse bootstrap codegen rbs_extract test retest fast-test clean-test-results regen-expected bench optcarrot clean install uninstall deps FORCE
 
 # `make all` includes spinel_rbs_extract when vendor/rbs has been
 # fetched (via `make deps`). Without vendor/rbs the extractor is
@@ -217,15 +218,22 @@ build/rbs/%.o: $(RBS_DIR)/src/%.c
 	$(CC) -c -O2 -Wno-all -I$(RBS_INC) -I$(RBS_DIR)/src $< -o $@
 
 # ---- Content stamps ----
-# Content stamps: rules depend on `build/stamps/foo.stamp` instead of
-# `foo` directly, so `touch foo` (or `git checkout` of an identical
-# version) doesn't invalidate downstream targets. cmp-or-replace
-# advances the stamp's mtime only on real content change.
+# Content stamps: downstream rules depend on `build/stamps/foo.stamp`
+# instead of `foo` directly, so `touch foo` (or `git checkout` of an
+# identical version) doesn't invalidate bootstrap/test targets.
+#
+# The stamp rule intentionally does not list `%` as a normal prerequisite:
+# if it did, a same-content but newer source would make GNU make consider
+# the stamp out-of-date on every run when cmp leaves the stamp untouched.
+# FORCE lets us cheaply re-check content each invocation, while downstream
+# targets only rebuild when cp actually advances the stamp's mtime.
 build/stamps:
 	@mkdir -p $@
 
-build/stamps/%.stamp: % | build/stamps
-	@cmp -s $< $@ 2>/dev/null || cp $< $@
+FORCE:
+
+build/stamps/%.stamp: FORCE | build/stamps
+	@cmp -s $* $@ 2>/dev/null || cp $* $@
 
 # Without .PRECIOUS make would delete these as pattern-rule
 # intermediates, recreating them with fresh mtimes next run.
@@ -432,6 +440,9 @@ test: $(TEST_TARGETS)
 
 retest: clean-test-results
 	@$(MAKE) --no-print-directory test
+
+fast-test: clean-test-results
+	@$(MAKE) --no-print-directory test OPT=-O0 LTO=0
 
 # The .ok target is the test's stamp; mtime tracking gives per-test
 # caching for free. Order-only spinel_parse$(EXE) / spinel_analyze$(EXE)
