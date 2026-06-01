@@ -105,6 +105,20 @@ endif
 # which the bootstrap miniruby can't load.
 REF_RUBY ?= ruby
 
+# Ruby used to run the bootstrap compiler (spinel_analyze.rb /
+# spinel_codegen.rb interpret the compiler on its own source). These
+# are long-running, hot-loop-heavy processes — exactly where YJIT
+# amortizes its warmup — so `YJIT=1 make` adds `--yjit` here only.
+# Opt-in because it requires a Ruby built with YJIT (3.3+ default-on,
+# 3.1/3.2 need a YJIT-enabled build). The per-test REF_RUBY is left on
+# plain `ruby`: those spawn a fresh short-lived process per file, so
+# YJIT warmup never pays off before the process exits. YJIT does not
+# change semantics, so the emitted IR / C is identical either way.
+BOOTSTRAP_RUBY ?= ruby
+ifeq ($(YJIT),1)
+  BOOTSTRAP_RUBY := $(BOOTSTRAP_RUBY) --yjit
+endif
+
 # Prism library: prefer vendor/prism (fetched via `make deps`), then
 # fall back to the Prism gem if one is installed. Override by setting
 # PRISM_DIR=/path/to/prism on the command line.
@@ -331,16 +345,16 @@ build/codegen.ast: $(CODEGEN_STAMP) $(NODE_TABLE_LOADER_STAMP) $(COMPILER_HELPER
 	./spinel_parse$(EXE) spinel_codegen.rb build/codegen.ast
 
 build/analyze.ir: build/analyze.ast $(ANALYZE_STAMP) $(NODE_TABLE_LOADER_STAMP) $(COMPILER_HELPERS_STAMP)
-	ruby spinel_analyze.rb build/analyze.ast build/analyze.ir
+	$(BOOTSTRAP_RUBY) spinel_analyze.rb build/analyze.ast build/analyze.ir
 
 build/codegen.ir: build/codegen.ast $(ANALYZE_STAMP) $(NODE_TABLE_LOADER_STAMP) $(COMPILER_HELPERS_STAMP)
-	ruby spinel_analyze.rb build/codegen.ast build/codegen.ir
+	$(BOOTSTRAP_RUBY) spinel_analyze.rb build/codegen.ast build/codegen.ir
 
 build/analyze1.c: build/analyze.ast build/analyze.ir $(CODEGEN_STAMP) $(NODE_TABLE_LOADER_STAMP) $(COMPILER_HELPERS_STAMP)
-	ruby spinel_codegen.rb build/analyze.ast build/analyze.ir build/analyze1.c
+	$(BOOTSTRAP_RUBY) spinel_codegen.rb build/analyze.ast build/analyze.ir build/analyze1.c
 
 build/codegen1.c: build/codegen.ast build/codegen.ir $(CODEGEN_STAMP) $(NODE_TABLE_LOADER_STAMP) $(COMPILER_HELPERS_STAMP)
-	ruby spinel_codegen.rb build/codegen.ast build/codegen.ir build/codegen1.c
+	$(BOOTSTRAP_RUBY) spinel_codegen.rb build/codegen.ast build/codegen.ir build/codegen1.c
 
 spinel_analyze$(EXE): build/analyze1.c $(SP_RT_LIB)
 	$(CC) $(BOOTSTRAP_CFLAGS) -Ilib build/analyze1.c $(SP_RT_LIB) $(LDFLAGS) -lm -o spinel_analyze$(EXE)
