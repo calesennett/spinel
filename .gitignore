@@ -46,3 +46,6 @@ file_write_poly_arg
 /const_init_defers_for_main_local
 /array_new_block_typed_container
 /sp_split0
+
+# Machine-local Makefile overrides
+/local.mk

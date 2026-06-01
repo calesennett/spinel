@@ -9,6 +9,15 @@
 #   make bench        Run benchmarks (requires bootstrap first)
 #   make clean        Remove built binaries
 
+# Machine-local overrides (gitignored). Lets a developer point the
+# bootstrap at an alternative Ruby -- e.g. a YJIT-enabled miniruby --
+# and set OPT/CC/etc. without editing committed defaults. Included
+# before the `?=` defaults below so its values win; a command-line
+# `make VAR=...` still overrides everything. Example local.mk:
+#   BOOTSTRAP_RUBY = /path/to/ruby/miniruby
+#   YJIT = 1
+-include local.mk
+
 CC       ?= cc
 # Auto-wrap CC with sccache or ccache when present. Skip when CC is
 # already wrapped — the substring guard catches both "ccache" and
