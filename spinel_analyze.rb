@@ -5352,6 +5352,9 @@ class Compiler
     if mname == "byteslice"
       return "string"
     end
+    if mname == "ascii_only?"
+      return "bool"
+    end
     if mname == "ljust"
       return "string"
     end

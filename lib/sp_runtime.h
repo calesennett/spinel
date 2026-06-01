@@ -1392,6 +1392,8 @@ static const char*sp_str_char_at_or_nil(const char*s,mrb_int i){mrb_int cl=sp_st
    sp_str_sub_range). Negative start counts from the byte length. Out of
    range yields the empty string, matching slice's "" rather than CRuby nil. */
 static const char*sp_str_byteslice(const char*s,mrb_int start,mrb_int len){mrb_int bl=(mrb_int)sp_str_byte_len(s);if(start<0)start+=bl;if(start<0||start>bl||len<0){return &("\xff" "")[1];}if(start+len>bl)len=bl-start;if(len<=0){return &("\xff" "")[1];}char*r=sp_str_alloc_raw(len+1);memcpy(r,s+start,len);r[len]=0;return r;}
+/* String#ascii_only?: 1 iff every byte is in the 7-bit ASCII range. */
+static int sp_str_ascii_only(const char*s){mrb_int bl=(mrb_int)sp_str_byte_len(s);for(mrb_int i=0;i<bl;i++){if((unsigned char)s[i]>=0x80)return 0;}return 1;}
 /* Char-indexed variant; the second arg used to be a hoisted byte length, now a
    hoisted codepoint count.  We don't need it for correctness, but keeping the
    ABI lets callers pass it without a wrapper. */

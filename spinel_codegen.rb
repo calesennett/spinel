@@ -22018,6 +22018,10 @@ class Compiler
       warn_unresolved_call(mname, "string")
       return "0"
     end
+ # String#ascii_only? -- true iff every byte is 7-bit ASCII.
+    if mname == "ascii_only?"
+      return "(sp_str_ascii_only(" + rc + ") ? TRUE : FALSE)"
+    end
     if mname == "center"
       args_id = @nd_arguments[nid]
       if args_id >= 0
