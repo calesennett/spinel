@@ -20721,7 +20721,13 @@ class Compiler
       mi = 0
       while mi < mnames.length
         mname = mnames[mi]
-        if mname != ""
+ # `initialize` is excluded: it is not dynamically dispatched on an
+ # existing object the way the #567 `[]=` case is -- each class's
+ # `.new` calls its own `initialize` directly. Unifying initialize
+ # params by position across the hierarchy lets a parent default
+ # (e.g. `opts = nil` -> poly) poison an unrelated override param
+ # (e.g. `id = 0`), forcing a concrete int param to poly. Issue #1263.
+        if mname != "" && mname != "initialize"
           base_pt = cls_meth_ptypes_get(ci, mi)
           fam_owners = []
           fam_midxs  = []
