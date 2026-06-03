@@ -5737,6 +5737,13 @@ class Compiler
       sci_sv = struct_recv_ci(recv)
       if sci_sv >= 0 && cls_find_method(sci_sv, mname) < 0
         if mname == "to_h"
+ # Block form transforms each (name, value) pair into an
+ # arbitrary [k, v], so the keys/values are dynamic -> a
+ # poly-keyed poly hash. Plain form keeps symbol member keys.
+          if @nd_block[nid] >= 0
+            @needs_poly_poly_hash = 1
+            return "poly_poly_hash"
+          end
           @needs_sym_poly_hash = 1
           return "sym_poly_hash"
         end
@@ -32891,6 +32898,20 @@ class Compiler
     recv_t = "int"
     if recv >= 0
       recv_t = infer_type(recv)
+    end
+ # Struct#to_h { |member_name, value| ... } yields the member symbol
+ # and its value. Members are heterogeneous, so the value param is
+ # poly. Without this the params default to int and the block body
+ # (e.g. `name.to_s`) dispatches on the wrong type.
+    if mname == "to_h" && recv >= 0
+      sci_bp = struct_recv_ci(recv)
+      if sci_bp >= 0 && cls_find_method(sci_bp, "to_h") < 0
+        if pi == 0
+          return "symbol"
+        end
+        @needs_rb_value = 1
+        return "poly"
+      end
     end
  # No-recv call to a user-defined top-level method that uses yield:
  # look up the method body's yield arg type at position pi. Without

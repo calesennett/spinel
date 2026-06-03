@@ -29410,6 +29410,9 @@ class Compiler
  # PolyArray/SymPolyHash allocations below, which are GC points.
           emit("  SP_GC_ROOT(" + rtmp_st + ");")
           if mname == "to_h"
+            if @nd_block[nid] >= 0
+              return compile_struct_to_h_block(nid, rtmp_st, inames_st, itypes_st)
+            end
             @needs_sym_poly_hash = 1
             htmp_st = new_temp
             emit("  sp_SymPolyHash *" + htmp_st + " = sp_SymPolyHash_new();")
@@ -45118,6 +45121,90 @@ class Compiler
     fmt = fmt.gsub("%RC%", rc)
     fmt = fmt.gsub("%I%", itmp)
     fmt
+  end
+
+ # `Struct#to_h { |name, value| [k, v] }` -- yield each member's
+ # (symbol, value) pair to the block, which returns a 2-element [k, v]
+ # array, and build a poly-keyed poly hash from the returned pairs.
+ # The plain (block-less) form is handled inline by the caller.
+  def compile_struct_to_h_block(nid, rtmp_st, inames_st, itypes_st)
+    @needs_poly_poly_hash = 1
+    @needs_rb_value = 1
+    @needs_gc = 1
+    bp1 = get_block_param(nid, 0)
+    bp2 = get_block_param(nid, 1)
+    if bp1 == ""
+      bp1 = "_k"
+    end
+    if bp2 == ""
+      bp2 = "_v"
+    end
+    hh = new_temp
+    emit("  sp_PolyPolyHash *" + hh + " = sp_PolyPolyHash_new();")
+    emit("  SP_GC_ROOT(" + hh + ");")
+    blk = @nd_block[nid]
+    bbody = @nd_body[blk]
+    j_st = 0
+    while j_st < inames_st.length
+      itype_st = "int"
+      if j_st < itypes_st.length
+        itype_st = itypes_st[j_st]
+      end
+      memb_st = rtmp_st + "->" + sanitize_ivar(inames_st[j_st])
+      keyname_st = inames_st[j_st]
+      if keyname_st.length > 0 && keyname_st[0] == "@"
+        keyname_st = keyname_st[1, keyname_st.length - 1]
+      end
+      emit("  {")
+      emit("    sp_sym lv_" + bp1 + " = " + compile_symbol_literal(keyname_st) + ";")
+      emit("    sp_RbVal lv_" + bp2 + " = " + box_value_to_poly(itype_st, memb_st) + ";")
+      push_scope
+      declare_var(bp1, "symbol")
+      declare_var(bp2, "poly")
+      bexpr = "0"
+      bt = "poly_array"
+      if bbody >= 0
+        bs = get_stmts(bbody)
+        if bs.length > 0
+          k = 0
+          while k < bs.length - 1
+            compile_stmt(bs[k])
+            k = k + 1
+          end
+          bt = infer_type(bs.last)
+          bexpr = compile_expr(bs.last)
+        end
+      end
+      pair_tmp = new_temp
+      emit("    " + c_type(bt) + " " + pair_tmp + " = " + bexpr + ";")
+      emit("    sp_PolyPolyHash_set(" + hh + ", " + struct_pair_elem_as_poly(pair_tmp, bt, 0) + ", " + struct_pair_elem_as_poly(pair_tmp, bt, 1) + ");")
+      pop_scope
+      emit("  }")
+      j_st = j_st + 1
+    end
+    hh
+  end
+
+ # Extract element `idx` of the block's returned 2-element array as a
+ # boxed poly value, regardless of the array's specialized variant.
+  def struct_pair_elem_as_poly(arr_expr, arr_type, idx)
+    if arr_type == "poly_array"
+      return "sp_PolyArray_get(" + arr_expr + ", " + idx.to_s + ")"
+    end
+    if arr_type == "str_array"
+      return box_value_to_poly("string", "sp_StrArray_get(" + arr_expr + ", " + idx.to_s + ")")
+    end
+    if arr_type == "int_array"
+      return box_value_to_poly("int", "sp_IntArray_get(" + arr_expr + ", " + idx.to_s + ")")
+    end
+    if arr_type == "float_array"
+      return box_value_to_poly("float", "sp_FloatArray_get(" + arr_expr + ", " + idx.to_s + ")")
+    end
+    if arr_type == "sym_array"
+      return box_value_to_poly("symbol", "((sp_sym)sp_IntArray_get(" + arr_expr + ", " + idx.to_s + "))")
+    end
+ # Already-boxed array value (poly slot): unbox to PolyArray and index.
+    "sp_PolyArray_get((sp_PolyArray *)(" + arr_expr + ").v.p, " + idx.to_s + ")"
   end
 
   def compile_hash_select_reject(nid, hash_type, rc, mname)
