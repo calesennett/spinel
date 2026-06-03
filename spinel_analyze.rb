@@ -222,7 +222,19 @@ class Compiler
  # heavily during the fixpoint and otherwise re-splits
  # @cls_meth_names[ci] on every call. Key = "<ci>:<mname>".
  # Invalidated on append_cls_meth (when @cls_meth_names mutates).
-    @cls_meth_idx_cache = {}
+ # cls_find_method_direct keys this cache by an integer composite of
+ # (ci, interned-method-name-id) rather than a "<ci>:<mname>" string,
+ # so the O(classes^2) calls on large mutually-referential class graphs
+ # allocate no key strings (#1302 -- the string key build, an int-to-s
+ # plus two joins per call, was the dominant analyzer allocation churn).
+ # Method names are interned to small ints in @mname_id (stable for the
+ # run); the cache itself is int->int. The {-1 => -1} seed pins the
+ # variant to int_int_hash (an empty {} otherwise infers as str_int_hash
+ # in the self-hosted build); -1 is never a real key (ck = ci*1e7+mid is
+ # always >= 0).
+    @cls_meth_idx_cache = {-1 => -1}
+    @mname_id = {}
+    @mname_id_next = 0
  # Same shape for cls_method_return — top String#split caller.
  # Key = "<ci>:<mname>", value = the recorded return type.
  # Invalidated on append_cls_meth + at every refresh of
@@ -10636,7 +10648,7 @@ class Compiler
         @cls_meth_bodies[ci] = cur_bodies_u.join(";")
         @cls_meth_defaults[ci] = cur_defaults_u.join("|")
         @cls_meth_ptypes_empty[ci] = cur_pempty_u.join("|")
-        @cls_meth_idx_cache = {}
+        @cls_meth_idx_cache = {-1 => -1}
         @cls_meth_return_cache = {}
       end
     end
@@ -10890,7 +10902,7 @@ class Compiler
     end
     @cls_meth_params_version = @cls_meth_params_version + 1
     @cls_meth_ptypes_version = @cls_meth_ptypes_version + 1
-    @cls_meth_idx_cache = {}
+    @cls_meth_idx_cache = {-1 => -1}
     @cls_meth_return_cache = {}
  # Append (mname, syn_name) to the chain. Chain entry shape:
  # `<mname>=<syn0>,<syn1>,...` joined by `;` across mnames.
@@ -11589,7 +11601,7 @@ class Compiler
         @cls_meth_bodies[ci] = cur_bodies.join(";")
         @cls_meth_defaults[ci] = cur_defaults.join("|")
         @cls_meth_ptypes_empty[ci] = cur_pempty.join("|")
-        @cls_meth_idx_cache = {}
+        @cls_meth_idx_cache = {-1 => -1}
         @cls_meth_return_cache = {}
         return
       end
@@ -11614,7 +11626,7 @@ class Compiler
       @cls_meth_ptypes_empty[ci] = ""
     end
  # Invalidate split caches keyed on @cls_meth_names / @cls_meth_returns.
-    @cls_meth_idx_cache = {}
+    @cls_meth_idx_cache = {-1 => -1}
     @cls_meth_return_cache = {}
   end
 
@@ -28519,8 +28531,23 @@ class Compiler
  # check. Used at method-emit time to set @current_method_block_param
  # so block_given? can resolve to (lv_<name> != NULL).
 
+ # Intern a method name to a small integer id, stable for the run.
+  def mname_to_id(mname)
+    if @mname_id.key?(mname)
+      return @mname_id[mname]
+    end
+    mid = @mname_id_next
+    @mname_id[mname] = mid
+    @mname_id_next = @mname_id_next + 1
+    mid
+  end
+
   def cls_find_method_direct(ci, mname)
-    ck = ci.to_s + ":" + mname
+ # Integer composite key (ci, interned mname) -- no per-call string
+ # allocation. key? gates the lookup so a miss returns -1, not the
+ # typed-hash missing-key 0 (#801). The 1e7 stride exceeds any program's
+ # distinct-method-name count, so (ci, mid) pairs never collide.
+    ck = ci * 10000000 + mname_to_id(mname)
     if @cls_meth_idx_cache.key?(ck)
       return @cls_meth_idx_cache[ck]
     end
