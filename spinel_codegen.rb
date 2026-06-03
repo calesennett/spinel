@@ -21859,6 +21859,12 @@ class Compiler
  # divergence is documented but rare in practice.
       return "sp_str_inspect(" + rc + ")"
     end
+ # String#undump -- reverse of dump. Raises RuntimeError on a string
+ # not wrapped in double quotes, so it needs the setjmp frame.
+    if mname == "undump"
+      @needs_setjmp = 1
+      return "sp_str_undump(" + rc + ")"
+    end
     if mname == "upcase"
       return "sp_str_upcase(" + rc + ")"
     end

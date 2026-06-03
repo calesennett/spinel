@@ -4837,6 +4837,9 @@ class Compiler
     if mname == "dump"
       return "string"
     end
+    if mname == "undump"
+      return "string"
+    end
     if mname == "scrub"
       return "string"
     end
