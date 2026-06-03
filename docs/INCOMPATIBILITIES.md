@@ -38,3 +38,39 @@ representable:
 ```ruby
 2.0 ** -1   # => 0.5
 ```
+
+## `String#grapheme_clusters`
+
+CRuby splits a string into Unicode extended grapheme clusters:
+
+```ruby
+"á".grapheme_clusters   # => ["á"]   (one cluster: a + combining accent)
+```
+
+Correct grapheme segmentation requires shipping and maintaining the Unicode
+grapheme-break property tables, which Spinel deliberately does not carry.
+`String#grapheme_clusters` and `String#each_grapheme_cluster` are therefore not
+supported. For codepoint- or byte-level iteration, use the supported
+`String#chars`, `#each_char`, `#codepoints`, or `#bytes`.
+
+## Flip-flop operator
+
+CRuby supports the flip-flop operator (a `Range` used as a condition, toggled
+between its two endpoints):
+
+```ruby
+(1..10).each { |i| puts i if (i == 3)..(i == 5) }   # prints 3, 4, 5
+```
+
+This is a rarely used feature with surprising hidden per-site state, and Spinel
+does not support it; a program using it fails to compile rather than running
+with wrong behavior. Use an explicit boolean state variable instead:
+
+```ruby
+active = false
+(1..10).each do |i|
+  active = true if i == 3
+  puts i if active
+  active = false if i == 5
+end
+```
