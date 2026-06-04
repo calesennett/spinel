@@ -1054,7 +1054,7 @@ static inline mrb_float sp_FloatArray_shift(sp_FloatArray*a){if(!a||a->len==0)re
 static inline mrb_float sp_FloatArray_delete_at(sp_FloatArray*a,mrb_int i){if(!a)return 0.0;if(a->frozen){sp_raise_frozen_array();return 0.0;}if(i<0)i+=a->len;if(i<0||i>=a->len)return 0.0;mrb_float v=a->data[i];for(mrb_int j=i;j+1<a->len;j++)a->data[j]=a->data[j+1];a->len--;return v;}
 static inline mrb_int sp_FloatArray_length(sp_FloatArray*a){return a->len;}
 static inline mrb_bool sp_FloatArray_empty(sp_FloatArray*a){return a->len==0;}
-static inline mrb_float sp_FloatArray_get(sp_FloatArray*a,mrb_int i){if(!a)return 0.0;if(i<0)i+=a->len;if(i<0||i>=a->len)return 0.0;return a->data[i];}
+static inline mrb_float sp_FloatArray_get(sp_FloatArray*a,mrb_int i){if(!a)return sp_float_nil();if(i<0)i+=a->len;if(i<0||i>=a->len)return sp_float_nil();return a->data[i];}
 /* first/last as float? : nil (sentinel) when empty, else the element.
    `[i]` stays non-nullable (0.0 for OOB) -- only first/last produce nil,
    matching CRuby where Array#first/#last on an empty array return nil. */

@@ -6694,6 +6694,22 @@ class Compiler
     end
     if mname == "[]" || (mname == "at" && recv >= 0 && is_array_type(infer_type(recv)) == 1)
       if recv >= 0
+ # Array#at returns nil on an out-of-range index. A scalar element
+ # (int/float) can only carry that nil through its nullable sentinel,
+ # so type `at` as int?/float? -- `== nil`, `.nil?` and inspect then
+ # recognise the out-of-bounds value (sp_IntArray_get already returns
+ # SP_INT_NIL). `[]` deliberately keeps the plain element type: making
+ # it nullable would cascade the sentinel through every hot array
+ # index. `at` is never used that way (zero self-host surface).
+        if mname == "at"
+          rt_at = base_type(infer_type(recv))
+          if rt_at == "int_array"
+            return "int?"
+          end
+          if rt_at == "float_array"
+            return "float?"
+          end
+        end
  # ENV["X"] returns `const char *` (sp_str_dup_external of
  # getenv). The plain receiver-type dispatch below would
  # leave ENV at the default "int" (unknown constant) and
