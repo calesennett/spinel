@@ -2227,11 +2227,27 @@ static const char *sp_re_gsub(mrb_regexp_pattern *pat, const char *str, const ch
     if (olen+before+rlen >= cap) { cap = (olen+before+rlen)*2+64; out = (char*)realloc(out, cap); }
     memcpy(out+olen, str+pos, before); olen += before;
     sp_re_expand_rep(&out, &olen, &cap, rep, rlen, str, caps, n);
-    pos = caps[1]; if (caps[0] == caps[1]) pos++;
+    if (caps[0] == caps[1]) {
+ /* Zero-width match (/^/, /$/, /\b/, an empty pattern): Ruby inserts
+    the replacement before the char at this position, keeps that char,
+    and advances past it. Copy the char and step by one so the scan
+    makes progress without dropping it or spinning on the same spot. */
+      if (caps[1] < slen) {
+        if (olen+1 >= cap) { cap = olen*2+64; out = (char*)realloc(out, cap); }
+        out[olen++] = str[caps[1]];
+      }
+      pos = caps[1] + 1;
+    } else {
+      pos = caps[1];
+    }
   }
-  size_t rest = slen - pos;
-  if (olen+rest+1 >= cap) { cap = olen+rest+64; out = (char*)realloc(out, cap); }
-  memcpy(out+olen, str+pos, rest); olen += rest;
+ /* pos can land at slen+1 after a zero-width match at the end; guard the
+    tail copy so `slen - pos` doesn't underflow size_t. */
+  if (pos < slen) {
+    size_t rest = slen - pos;
+    if (olen+rest+1 >= cap) { cap = olen+rest+64; out = (char*)realloc(out, cap); }
+    memcpy(out+olen, str+pos, rest); olen += rest;
+  }
  /* The buffer is over-allocated (cap has slack); set the string's
     stored length to the bytes actually written so #length / inspect
     don't read the trailing slack. */
@@ -2262,11 +2278,23 @@ static const char *sp_re_gsub_str_str_hash(mrb_regexp_pattern *pat, const char *
     memcpy(out + olen, str + pos, before); olen += before;
     memcpy(out + olen, rep, rlen); olen += rlen;
     if (key != keybuf) free(key);
-    pos = caps[1]; if (caps[0] == caps[1]) pos++;
+    if (caps[0] == caps[1]) {
+ /* Zero-width match: keep the source char at this position and step
+    past it (see sp_re_gsub for the rationale). */
+      if (caps[1] < slen) {
+        if (olen + 1 >= cap) { cap = olen * 2 + 64; out = (char *)realloc(out, cap); }
+        out[olen++] = str[caps[1]];
+      }
+      pos = caps[1] + 1;
+    } else {
+      pos = caps[1];
+    }
   }
-  size_t rest = slen - pos;
-  if (olen + rest >= cap) { cap = olen + rest + 1; out = (char *)realloc(out, cap); }
-  memcpy(out + olen, str + pos, rest); olen += rest;
+  if (pos < slen) {
+    size_t rest = slen - pos;
+    if (olen + rest >= cap) { cap = olen + rest + 1; out = (char *)realloc(out, cap); }
+    memcpy(out + olen, str + pos, rest); olen += rest;
+  }
   out[olen] = 0; sp_str_set_len(out, olen); return out;
 }
 
