@@ -45226,13 +45226,17 @@ class Compiler
  # the caller emits the block body and a closing '}'. idx_var holds
  # the loop counter (position or value for range); elem_var gets the
  # current element.
-  def emit_iter_open(rc, recv_type, elem_var, idx_var)
+  def emit_iter_open(rc, recv_type, elem_var, idx_var, bind_elem = 1)
  # `--int-overflow=promote` may have widened the block param's
  # declared slot to sp_Bigint *, but the underlying iterator
  # (sp_IntArray_get, range counter, ...) yields a raw mrb_int.
  # Detect the widening via find_var_type on the stripped-`lv_`
  # name and wrap the get with sp_bigint_new_int so the assign
  # is typed-clean.
+ # bind_elem == 0 skips the element read entirely: a block with no
+ # formal parameter can't reference the yielded value (`it`/`_1` are
+ # surfaced as real params), and the synthetic `_x` slot is never
+ # declared, so emitting `lv__x = ...` would be an undeclared write.
     iter_elem_t = iter_elem_type(recv_type)
     needs_big_wrap = 0
     if elem_var.start_with?("lv_") && iter_elem_t == "int"
@@ -45246,19 +45250,23 @@ class Compiler
       rtmp = new_temp
       emit("  sp_Range " + rtmp + " = " + rc + ";")
       emit("  for (mrb_int " + idx_var + " = " + rtmp + ".first; " + idx_var + " <= " + rtmp + ".last - " + rtmp + ".excl; " + idx_var + "++) {")
-      if needs_big_wrap == 1
-        emit("    " + elem_var + " = sp_bigint_new_int(" + idx_var + ");")
-      else
-        emit("    " + elem_var + " = " + idx_var + ";")
+      if bind_elem == 1
+        if needs_big_wrap == 1
+          emit("    " + elem_var + " = sp_bigint_new_int(" + idx_var + ");")
+        else
+          emit("    " + elem_var + " = " + idx_var + ";")
+        end
       end
       return
     end
     pfx = array_c_prefix(recv_type)
     emit("  for (mrb_int " + idx_var + " = 0; " + idx_var + " < sp_" + pfx + "_length(" + rc + "); " + idx_var + "++) {")
-    if needs_big_wrap == 1
-      emit("    " + elem_var + " = sp_bigint_new_int(sp_" + pfx + "_get(" + rc + ", " + idx_var + "));")
-    else
-      emit("    " + elem_var + " = sp_" + pfx + "_get(" + rc + ", " + idx_var + ");")
+    if bind_elem == 1
+      if needs_big_wrap == 1
+        emit("    " + elem_var + " = sp_bigint_new_int(sp_" + pfx + "_get(" + rc + ", " + idx_var + "));")
+      else
+        emit("    " + elem_var + " = sp_" + pfx + "_get(" + rc + ", " + idx_var + ");")
+      end
     end
   end
 
@@ -45689,8 +45697,10 @@ class Compiler
   def compile_array_predicate_block(nid, rc, recv_type, mname)
  # Implements any?/all?/none? with block by short-circuit loop
     bp1 = get_block_param(nid, 0)
+    bind1 = 1
     if bp1 == ""
       bp1 = "_x"
+      bind1 = 0
     end
     tmp_res = new_temp
     tmp_i = new_temp
@@ -45699,7 +45709,7 @@ class Compiler
       init_val = "TRUE"
     end
     emit("  mrb_bool " + tmp_res + " = " + init_val + ";")
-    emit_iter_open(rc, recv_type, "lv_" + bp1, tmp_i)
+    emit_iter_open(rc, recv_type, "lv_" + bp1, tmp_i, bind1)
     push_scope
     bp1_t_pred = find_var_type(bp1)
     if bp1_t_pred != "bigint"
