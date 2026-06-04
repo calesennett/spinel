@@ -24037,6 +24037,18 @@ class Compiler
     if mname == "append"
       return compile_array_method_expr(nid, "push", rc, recv_type)
     end
+ # Array#clear -- empty the array and return it. All typed-array
+ # structs share the `len` field; int_array/sym_array additionally
+ # carry a sliding `start` window that the statement-form arm also
+ # resets. Without this expression arm `[1,2,3].clear` fell through
+ # to the unresolved-call path and the result mis-typed as int 0.
+    if mname == "clear"
+      bt_clr = base_type(recv_type)
+      if bt_clr == "int_array" || bt_clr == "sym_array"
+        return "(" + rc + "->len = 0, " + rc + "->start = 0, " + rc + ")"
+      end
+      return "(" + rc + "->len = 0, " + rc + ")"
+    end
  # Array#object_id -- the receiver's pointer bit pattern, as for the
  # String case. Stable across GC (the array isn't relocated).
     if mname == "object_id"
