@@ -2456,6 +2456,12 @@ static mrb_int sp_str_index_opt(const char *s, const char *sub)                 
 static mrb_int sp_str_index_from_opt(const char *s, const char *sub, mrb_int start)      { mrb_int n = sp_str_index_from(s, sub, start);  return n < 0 ? SP_INT_NIL : n; }
 static mrb_int sp_str_rindex_opt(const char *s, const char *sub)                         { mrb_int n = sp_str_rindex(s, sub);             return n < 0 ? SP_INT_NIL : n; }
 static sp_RbVal sp_re_rindex_poly(mrb_regexp_pattern *pat, const char *str) { mrb_int n = sp_re_rindex(pat, str); return n < 0 ? sp_box_nil() : sp_box_int(n); }
+/* `s.index(regex)` -- first match start (byte offset, as sp_re_match reports;
+   matches the rindex regex variant, which also reports bytes). sp_re_match
+   sets $~ as a side effect, which CRuby's String#index(regex) also does.
+   Boxed Integer | nil. The plain-string path would lower the regex pattern to
+   0 and feed a bogus arg to sp_str_index_opt. */
+static sp_RbVal sp_re_index_poly(mrb_regexp_pattern *pat, const char *str) { mrb_int n = sp_re_match(pat, str); return n < 0 ? sp_box_nil() : sp_box_int(n); }
 /* CRuby-compatible =~ wrapper: SP_TAG_INT(pos) on match, SP_TAG_NIL
    on miss. Codegen routes the `=~` operator here so
    `("abc" =~ /xyz/).nil?` answers true and `puts("abc" =~ /xyz/)`

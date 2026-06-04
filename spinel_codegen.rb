@@ -22471,6 +22471,16 @@ class Compiler
       args_id_idx = @nd_arguments[nid]
       if args_id_idx >= 0
         a_idx = get_args(args_id_idx)
+        if a_idx.length >= 1
+ # `s.index(/regex/)` -- first match start, boxed Integer | nil. Mirrors
+ # the rindex regex variant; the plain-string path below would lower the
+ # pattern to 0 and feed a bogus arg to sp_str_index_opt.
+          rpat_idx = regex_pat_c_expr(a_idx[0])
+          if rpat_idx != ""
+            @needs_rb_value = 1
+            return "sp_re_index_poly(" + rpat_idx + ", " + rc + ")"
+          end
+        end
         if a_idx.length >= 2
  # `s.index(sub, start)` -- 2-arg form. Pre-fix this branch
  # silently dropped `start` and re-emitted the 1-arg call,
