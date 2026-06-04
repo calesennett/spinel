@@ -23048,6 +23048,19 @@ class Compiler
         l_nid = @nd_left[lit_rg]
         r_nid = @nd_right[lit_rg]
         if l_nid >= 0 && r_nid >= 0 && infer_type(l_nid) == "string" && infer_type(r_nid) == "string"
+ # A non-string argument is never inside a string range: CRuby returns
+ # false rather than raising. Without this guard the argument lowers to a
+ # non-pointer (e.g. `20LL`) that is fed to strcmp, which segfaults.
+          a0_rng = -1
+          if @nd_arguments[nid] >= 0
+            a0s_rng = get_args(@nd_arguments[nid])
+            if a0s_rng.length >= 1
+              a0_rng = a0s_rng[0]
+            end
+          end
+          if a0_rng >= 0 && base_type(infer_type(a0_rng)) != "string"
+            return "FALSE"
+          end
           arg_s = compile_arg0(nid)
           left_s = compile_expr(l_nid)
           right_s = compile_expr(r_nid)
