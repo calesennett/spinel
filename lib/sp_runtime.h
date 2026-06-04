@@ -2232,7 +2232,10 @@ static const char *sp_re_gsub(mrb_regexp_pattern *pat, const char *str, const ch
   size_t rest = slen - pos;
   if (olen+rest+1 >= cap) { cap = olen+rest+64; out = (char*)realloc(out, cap); }
   memcpy(out+olen, str+pos, rest); olen += rest;
-  out[olen] = 0; return out;
+ /* The buffer is over-allocated (cap has slack); set the string's
+    stored length to the bytes actually written so #length / inspect
+    don't read the trailing slack. */
+  out[olen] = 0; sp_str_set_len(out, olen); return out;
 }
 
 /* String#gsub(regex, hash) — per-match hash lookup form. CRuby's
@@ -2264,7 +2267,7 @@ static const char *sp_re_gsub_str_str_hash(mrb_regexp_pattern *pat, const char *
   size_t rest = slen - pos;
   if (olen + rest >= cap) { cap = olen + rest + 1; out = (char *)realloc(out, cap); }
   memcpy(out + olen, str + pos, rest); olen += rest;
-  out[olen] = 0; return out;
+  out[olen] = 0; sp_str_set_len(out, olen); return out;
 }
 
 /* Issue #910: sub(regex, hash) — same lookup semantics as
@@ -2327,6 +2330,7 @@ static const char *sp_re_sub(mrb_regexp_pattern *pat, const char *str, const cha
   if (olen + rest + 1 >= cap) { cap = olen + rest + 64; out = (char*)realloc(out, cap); }
   memcpy(out+olen, str+caps[1], rest);
   out[olen+rest] = 0;
+  sp_str_set_len(out, olen + rest);
   return out;
 }
 
