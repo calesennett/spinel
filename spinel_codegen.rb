@@ -26593,6 +26593,13 @@ class Compiler
             emit("  } else {")
             @indent = @indent + 1
             push_scope
+ # Bind the block param to the missing key (`fetch(k) { |key| ... }`
+ # yields the looked-up key). Without this the param kept its
+ # declared default and the block computed from a zero/garbage key.
+            bp_fb = get_block_param(nid, 0)
+            if bp_fb != ""
+              emit("  lv_" + bp_fb + " = " + key_fb + ";")
+            end
             compile_body_into(@nd_body[@nd_block[nid]], tmp_fb, fi[0])
             pop_scope
             @indent = @indent - 1
